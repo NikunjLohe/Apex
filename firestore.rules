@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function myRank() { return signedIn() ? me().rank : 0; }
+    function isSuper() { return signedIn() && me().isSuperAdmin == true; }
+    function isAdmin() { return isSuper() || myRank() >= 14; }
+    function isStaff() { return signedIn() && myRank() >= 1; }
+
+    // Users: self read; admins read all; admins write.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update, delete: if isAdmin();
+      // allow a member to update limited self fields (not rank/role/super)
+      allow update: if request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasany(['rank', 'isSuperAdmin', 'status', 'branchId']);
+    }
+
+    // Branches: staff read; admins write.
+    match /branches/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // Customers / plans / payments / receipts: any staff may read & write
+    // (branch employees onboard and collect). Tighten with branch checks later.
+    match /customers/{id} { allow read, write: if isStaff(); }
+    match /plans/{id}     { allow read, write: if isStaff(); }
+    match /payments/{id}  { allow read, write: if isStaff(); }
+    match /receipts/{id}  { allow read, write: if isStaff(); }
+    match /notifications/{id} { allow read, write: if isStaff(); }
+
+    // Atomic counters for account/receipt numbers.
+    match /counters/{name} { allow read, write: if isStaff(); }
+
+    // App config (settings) — staff read, admin write.
+    match /config/{doc} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+  }
+}
