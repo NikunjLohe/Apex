@@ -24,10 +24,10 @@ export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId
 )
 
-export const app = initializeApp(firebaseConfig)
-export const auth = getAuth(app)
-export const db = getFirestore(app)
-export const storage = getStorage(app)
-export const functions = getFunctions(app)
+export const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null
+export const auth = isFirebaseConfigured ? getAuth(app) : null
+export const db = isFirebaseConfigured ? getFirestore(app) : null
+export const storage = isFirebaseConfigured ? getStorage(app) : null
+export const functions = isFirebaseConfigured ? getFunctions(app) : null
 
 export default app
