@@ -6,6 +6,13 @@ export default class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null }
   }
   static getDerivedStateFromError(error) {
+    if (
+      error?.name === 'ChunkLoadError' ||
+      error?.message?.includes('dynamically imported module') ||
+      error?.message?.includes('is not a valid JavaScript MIME type')
+    ) {
+      window.location.reload()
+    }
     return { hasError: true, error }
   }
   componentDidCatch(error, info) {

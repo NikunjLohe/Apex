@@ -14,6 +14,13 @@ export const customerSchema = z.object({
   phone,
   altPhone: optionalPhone.optional(),
   email: z.string().email('Invalid email').or(z.literal('')).optional(),
+  fatherOrHusbandName: z.string().optional(),
+  motherName: z.string().optional(),
+  maritalStatus: z.enum(['Married', 'Unmarried']).optional(),
+  occupation: z.string().optional(),
+  annualIncome: z.string().optional(),
+  nationality: z.string().default('Indian'),
+  castOrSubcast: z.string().optional(),
   // Address
   address1: z.string().min(3, 'Address is required'),
   address2: z.string().optional(),
@@ -82,6 +89,7 @@ export const memberSchema = z.object({
   sponsorCode: z.string().optional(),
   isSuperAdmin: z.boolean().optional(),
   status: z.enum(['active', 'inactive']),
+  password: z.string().optional(),
 })
 
 export const branchSchema = z.object({

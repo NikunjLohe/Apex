@@ -19,7 +19,7 @@ export default function CustomerNew() {
   const [panFile, setPanFile] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(customerSchema),
     defaultValues: { source: 'Walk-in', gender: 'Male' },
   })
@@ -58,13 +58,25 @@ export default function CustomerNew() {
         <Section title="1 · Personal Details">
           <Grid>
             <F label="Full Name *" error={errors.name}><input className="field" {...register('name')} /></F>
+            <F label="Father's/Husband's Name" error={errors.fatherOrHusbandName}><input className="field" {...register('fatherOrHusbandName')} /></F>
+            <F label="Mother's Name" error={errors.motherName}><input className="field" {...register('motherName')} /></F>
             <F label="Date of Birth *" error={errors.dob}><input type="date" className="field" {...register('dob')} /></F>
+            
             <F label="Gender *" error={errors.gender}>
               <select className="field" {...register('gender')}><option>Male</option><option>Female</option><option>Other</option></select>
             </F>
+            <F label="Marital Status" error={errors.maritalStatus}>
+              <select className="field" {...register('maritalStatus')}><option>Married</option><option>Unmarried</option></select>
+            </F>
+            
             <F label="Phone *" error={errors.phone}><input className="field" inputMode="numeric" maxLength={10} {...register('phone')} /></F>
             <F label="Alt Phone" error={errors.altPhone}><input className="field" inputMode="numeric" maxLength={10} {...register('altPhone')} /></F>
             <F label="Email" error={errors.email}><input className="field" type="email" {...register('email')} /></F>
+            
+            <F label="Nationality" error={errors.nationality}><input className="field" {...register('nationality')} defaultValue="Indian" /></F>
+            <F label="Cast/Subcast" error={errors.castOrSubcast}><input className="field" {...register('castOrSubcast')} /></F>
+            <F label="Occupation" error={errors.occupation}><input className="field" {...register('occupation')} /></F>
+            <F label="Annual Income" error={errors.annualIncome}><input className="field" {...register('annualIncome')} /></F>
           </Grid>
         </Section>
 

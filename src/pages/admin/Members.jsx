@@ -48,11 +48,12 @@ export default function Members() {
         <div className="table-wrap">
           <div className="overflow-x-auto">
             <table className="tbl">
-              <thead><tr><th>Name</th><th>Rank</th><th>Sponsor</th><th>Branch</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th>Agent ID</th><th>Rank</th><th>Sponsor</th><th>Branch</th><th>Joined</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((m) => (
                   <tr key={m.id}>
                     <td className="font-medium text-ink-1">{m.name}<div className="text-xs text-ink-2">{m.email}</div></td>
+                    <td className="font-mono text-sm text-ink-2">{m.sponsorCode || '—'}</td>
                     <td><RankBadge rank={m.rank} size="sm" />{m.isSuperAdmin && <span className="ml-1 rounded-full bg-gold-1/15 px-2 py-0.5 text-[10px] font-bold text-gold">SUPER</span>}</td>
                     <td className="text-ink-2">{m.referredBy ? memberName(m.referredBy) : '—'}</td>
                     <td className="text-ink-2">{branchName(m.branchId)}</td>
@@ -82,6 +83,7 @@ function MemberModal({ modal, branches, members, onClose }) {
       name: m?.name || '', email: m?.email || '', phone: m?.phone || '',
       rank: m?.rank || 1, branchId: m?.branchId || '', isSuperAdmin: m?.isSuperAdmin || false,
       status: m?.status || 'active', referredBy: m?.referredBy || '', sponsorCode: m?.sponsorCode || '',
+      password: '',
     },
   })
 
@@ -91,18 +93,32 @@ function MemberModal({ modal, branches, members, onClose }) {
   const submit = async (form) => {
     setSaving(true)
     try {
-      // Auto-generate a sponsor code if left blank.
+      // Auto-generate a sponsor code (Agent ID) starting from KB100001.
       if (!form.sponsorCode) {
-        const initials = form.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 3)
-        form.sponsorCode = `${initials || 'APX'}${Math.floor(1000 + Math.random() * 9000)}`
+        let maxId = 100000
+        if (members && members.length > 0) {
+          members.forEach(member => {
+            if (member.sponsorCode && member.sponsorCode.startsWith('KB')) {
+              const num = parseInt(member.sponsorCode.replace('KB', ''), 10)
+              if (!isNaN(num) && num > maxId) {
+                maxId = num
+              }
+            }
+          })
+        }
+        form.sponsorCode = `KB${maxId + 1}`
       }
       if (isEdit) {
         await updateMember(m.id, form)
         toast.success('Member updated')
       } else {
-        const tempPassword = `Apex@${Math.floor(1000 + Math.random() * 9000)}`
+        const tempPassword = form.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
         await createMember(form, tempPassword)
-        toast.success(`Member created · temp password: ${tempPassword}`, { duration: 8000 })
+        if (form.password) {
+          toast.success('Member created successfully')
+        } else {
+          toast.success(`Member created · temp password: ${tempPassword}`, { duration: 8000 })
+        }
       }
       onClose()
     } catch (e) {
@@ -138,7 +154,10 @@ function MemberModal({ modal, branches, members, onClose }) {
           <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
         </div>
-        {!isEdit && <p className="text-xs text-ink-2">Creates a login account (temp password shown on success) and places the agent under the chosen sponsor in the MLM tree.</p>}
+        {!isEdit && (
+          <div><label className="label">Password (optional)</label><input className="field" type="password" placeholder="Auto-generate if blank" {...register('password')} /></div>
+        )}
+        {!isEdit && <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>}
       </form>
     </ConfirmDialog>
   )
