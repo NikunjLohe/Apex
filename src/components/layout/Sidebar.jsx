@@ -38,6 +38,7 @@ const GROUPS = [
     items: [
       { to: '/admin/members', label: 'Members', Icon: IUsers, cap: CAP.ADMIN },
       { to: '/admin/branches', label: 'Branches', Icon: IBuilding, cap: CAP.ADMIN },
+      { to: '/admin/import', label: 'Import Data', Icon: IDoc, cap: CAP.ADMIN },
       { to: '/admin/settings', label: 'Settings', Icon: ISettings, cap: CAP.ADMIN },
     ],
   },

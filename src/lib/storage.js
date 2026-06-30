@@ -10,6 +10,6 @@ export async function uploadFile(path, file) {
 
 /** Build a deterministic-ish storage path for a customer asset. */
 export function customerAssetPath(kind, fileName) {
-  const safe = String(fileName || 'file').replace(/[^\w.\-]/g, '_')
+  const safe = String(fileName || 'file').replace(/[^\w.-]/g, '_')
   return `customers/${kind}/${Date.now()}-${safe}`
 }
