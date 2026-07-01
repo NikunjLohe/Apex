@@ -16,8 +16,10 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
       // allow a member to update limited self fields (not rank/role/super)
       allow update: if request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasAny(['rank', 'isSuperAdmin', 'status', 'branchId']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['rank'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['isSuperAdmin'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['status'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['branchId']);
     }
 
     // Branches: staff read; admins write.
