@@ -12,11 +12,10 @@ export default function RankBadge({ rank, size = 'md', showName = false, classNa
   return (
     <span
       title={r.name}
-      className={`inline-flex items-center gap-1.5 rounded-full border border-gold-1/40 bg-gold-1/10 font-bold uppercase tracking-wide text-gold ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border border-[#BDD4C7] bg-[#EBF4EF] font-bold uppercase tracking-wide text-gold-1 ${SIZES[size]} ${className}`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-gold-2" />
-      {r.code}
-      {showName && <span className="font-medium normal-case text-ink-2">· {r.name}</span>}
+      <span className="h-1.5 w-1.5 rounded-full bg-gold-1 animate-pulse" />
+      {r.name || r.code}
     </span>
   )
 }

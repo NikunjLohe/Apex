@@ -59,8 +59,10 @@ function Item({ to, label, Icon, end, onNavigate }) {
       end={end}
       onClick={onNavigate}
       className={({ isActive }) =>
-        `flex items-center gap-3 rounded-card px-3 py-2.5 text-sm font-medium transition-colors ${
-          isActive ? 'border-l-2 border-gold-1 bg-gold-1/10 text-gold' : 'text-ink-2 hover:bg-navy-3 hover:text-ink-1'
+        `flex items-center gap-3 rounded-card py-2.5 text-sm font-medium transition-all ${
+          isActive
+            ? 'bg-[#EAE4D7] border-l-[3.5px] border-gold-1 pl-[9.5px] pr-3 text-gold-1 font-semibold'
+            : 'text-ink-2 pl-3 pr-3 hover:bg-navy-4/30 hover:text-ink-1'
         }`
       }
     >

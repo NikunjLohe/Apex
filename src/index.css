@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
   html,
   body,
@@ -19,22 +19,22 @@
     height: 9px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0f1e;
+    background: #FAF8F5;
   }
   ::-webkit-scrollbar-thumb {
-    background: #232d42;
+    background: #EBE6DC;
     border-radius: 8px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #2f3b54;
+    background: #D8D1C4;
   }
 }
 
 @layer components {
-  /* Standard card: navy3 bg, gold 0.5px border, radius 10px */
+  /* Standard card: navy3 bg, soft border, radius 10px */
   .card {
-    @apply rounded-card border border-gold-1/30 bg-navy-3 shadow-card;
-    border-width: 0.5px;
+    @apply rounded-card border border-navy-4 bg-navy-3 shadow-card;
+    border-width: 1px;
   }
 
   .btn-gold {
