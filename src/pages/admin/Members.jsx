@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { useCollection } from '../../hooks/useFirestore'
 import { memberSchema } from '../../lib/schemas'
 import { createMember, updateMember } from '../../lib/admin'
-import { RANKS } from '../../data/ranks'
+import { useRanks } from '../../contexts/RanksContext'
 import { fmtDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -74,6 +74,8 @@ export default function Members() {
 }
 
 function MemberModal({ modal, branches, members, onClose }) {
+  const { config } = useRanks()
+  const RANKS = config.RANKS
   const isEdit = modal.mode === 'edit'
   const m = modal.member
   const [saving, setSaving] = useState(false)

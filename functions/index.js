@@ -17,6 +17,7 @@ const {
   getRankByLevel,
   getNextRank,
   PROMOTION_TARGET,
+  buildDynamicTables,
 } = require('./compensation')
 
 admin.initializeApp()
@@ -34,6 +35,11 @@ async function loadOverrides() {
   return snap.exists ? snap.data() : {}
 }
 
+async function loadRanksList() {
+  const snap = await db.doc('config/ranks').get()
+  return snap.exists ? snap.data().ranks || [] : []
+}
+
 // ----------------------------------------------------------------------------
 // onMonthEnd — runs at 23:30 on the last-ish day; recalculates earnings for all
 // members for the current month and writes earnings/{uid}/monthly/{YYYY-MM}.
@@ -46,6 +52,9 @@ exports.onMonthEnd = onSchedule(
     prev.setDate(0) // last day of previous month
     const key = monthKey(prev)
     const overrides = await loadOverrides()
+    const ranksList = await loadRanksList()
+    const dynamic = ranksList.length > 0 ? buildDynamicTables(ranksList) : null
+    const rankByLevelDynamic = dynamic ? dynamic.RANKS.reduce((a, r) => ((a[r.level] = r), a), {}) : null
 
     const usersSnap = await db.collection('users').get()
     let processed = 0
@@ -57,7 +66,7 @@ exports.onMonthEnd = onSchedule(
       const u = userDoc.data()
       if ((u.status || 'active') !== 'active') continue
 
-      const rank = getRankByLevel(u.rank || 1)
+      const rank = rankByLevelDynamic ? rankByLevelDynamic[u.rank || 1] : getRankByLevel(u.rank || 1)
       if (!rank) continue
 
       const earnings = calculateEarnings({
@@ -65,6 +74,7 @@ exports.onMonthEnd = onSchedule(
         businessVolume: u.businessVolume || 0,
         rdPlan: u.rdPlan || '1Y',
         overrides,
+        ranksList,
       })
 
       const ref = db.doc(`earnings/${userDoc.id}/monthly/${key}`)
@@ -106,13 +116,21 @@ exports.onRankUpdate = onDocumentWritten(
     const before = event.data?.before?.data()
     if (!after) return null
 
-    const currentRank = getRankByLevel(after.rank || 1)
+    const ranksList = await loadRanksList()
+    const dynamic = ranksList.length > 0 ? buildDynamicTables(ranksList) : null
+
+    const rankByLevelDynamic = dynamic ? dynamic.RANKS.reduce((a, r) => ((a[r.level] = r), a), {}) : null
+    const getRankByLevelDynamic = (lvl) => rankByLevelDynamic ? rankByLevelDynamic[lvl] || null : getRankByLevel(lvl)
+    const getNextRankDynamic = (lvl) => rankByLevelDynamic ? rankByLevelDynamic[lvl + 1] || null : getNextRank(lvl)
+    const promoTargetsDynamic = dynamic ? dynamic.PROMOTION_TARGET : PROMOTION_TARGET
+
+    const currentRank = getRankByLevelDynamic(after.rank || 1)
     if (!currentRank) return null
-    const next = getNextRank(currentRank.level)
+    const next = getNextRankDynamic(currentRank.level)
     if (!next) return null // already at the top
 
     const accumulated = after.accumulatedVolume ?? after.businessVolume ?? 0
-    const target = PROMOTION_TARGET[next.id] || 0
+    const target = promoTargetsDynamic[next.id] || 0
 
     // Only act when the value actually increased to avoid loops.
     const prevAccumulated = before?.accumulatedVolume ?? before?.businessVolume ?? 0

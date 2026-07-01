@@ -1,10 +1,13 @@
-import { RANKS } from '../../data/ranks'
-import { CMD_AWARD_TARGET, CMD_AWARD_AMOUNT } from '../../data/compensation'
 import { useAuth } from '../../contexts/AuthContext'
+import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, formatCompactINR } from '../../utils/format'
 
 export default function CmdAwards() {
   const { profile } = useAuth()
+  const { config } = useRanks()
+  const RANKS = config.RANKS
+  const CMD_AWARD_TARGET = config.CMD_AWARD_TARGET
+  const CMD_AWARD_AMOUNT = config.CMD_AWARD_AMOUNT
   const myRank = profile?.rank || 1
 
   return (

@@ -1,4 +1,4 @@
-import { getRank } from '../../data/ranks'
+import { useRanks } from '../../contexts/RanksContext'
 
 const SIZES = {
   sm: 'h-6 px-2 text-[11px]',
@@ -7,6 +7,7 @@ const SIZES = {
 
 /** Gold badge showing rank code + name. */
 export default function RankBadge({ rank, size = 'md', showName = false, className = '' }) {
+  const { getRank } = useRanks()
   const r = getRank(rank)
   return (
     <span

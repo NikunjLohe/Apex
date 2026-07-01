@@ -9,6 +9,7 @@ import { useDoc } from '../../hooks/useFirestore'
 import { planSchema } from '../../lib/schemas'
 import { createPlan } from '../../lib/plans'
 import { computePlan } from '../../lib/calc'
+import { useRanks } from '../../contexts/RanksContext'
 import { ALL_PLANS, isRD } from '../../data/compensation'
 import { formatINR, fmtDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
@@ -18,6 +19,7 @@ export default function PlanEnroll() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { config } = useRanks()
   const { data: customer, loading } = useDoc(`customers/${id}`)
   const [submitting, setSubmitting] = useState(false)
 
@@ -39,11 +41,12 @@ export default function PlanEnroll() {
         monthlyAmount: Number(monthlyAmount) || 0,
         fdAmount: Number(fdAmount) || 0,
         startDate: startDate ? new Date(startDate) : new Date(),
+        ranksConfig: config,
       })
     } catch {
       return null
     }
-  }, [type, monthlyAmount, fdAmount, startDate])
+  }, [type, monthlyAmount, fdAmount, startDate, config])
 
   if (loading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={4} /></div>
   if (!customer) return <EmptyState title="Customer not found" />
@@ -56,6 +59,7 @@ export default function PlanEnroll() {
         form,
         customer,
         agent: { uid: profile?.uid, name: profile?.name, branchId: profile?.branchId },
+        ranksConfig: config,
       })
       toast.success(`Plan created · ${planAccountNumber}`, { id: tId })
       navigate(`/customers/${id}`)

@@ -1,0 +1,155 @@
+import { createContext, useContext, useEffect, useState, useMemo } from 'react'
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '../firebase'
+import { RANKS as DEFAULT_RANKS } from '../data/ranks'
+import {
+  MDA as DEFAULT_MDA,
+  MFA as DEFAULT_MFA,
+  TA as DEFAULT_TA,
+  PB_TARGET as DEFAULT_PB_TARGET,
+  PB_AMOUNT as DEFAULT_PB_AMOUNT,
+  PROMO_TARGET as DEFAULT_PROMO_TARGET,
+  CMD_AWARD_TARGET as DEFAULT_CMD_AWARD_TARGET,
+  CMD_AWARD_AMOUNT as DEFAULT_CMD_AWARD_AMOUNT,
+  FD_PENSION as DEFAULT_FD_PENSION,
+} from '../data/compensation'
+
+const RanksContext = createContext(null)
+
+// Function to construct arrays from raw Firestore data
+function buildConfigFromRanksList(ranksList) {
+  // Sort by rank number ascending
+  const sorted = [...ranksList].sort((a, b) => a.rank - b.rank)
+
+  const RANKS = sorted.map(r => ({ rank: r.rank, code: r.code, name: r.name }))
+  const MFA = sorted.map(r => Number(r.mfa) || 0)
+  const TA = sorted.map(r => Number(r.ta) || 0)
+  const PB_TARGET = sorted.map(r => Number(r.pbTarget) || 0)
+  const PB_AMOUNT = sorted.map(r => Number(r.pbAmount) || 0)
+  const PROMO_TARGET = sorted.map(r => Number(r.promoTarget) || 0)
+  const CMD_AWARD_TARGET = sorted.map(r => Number(r.cmdTarget) || 0)
+  const CMD_AWARD_AMOUNT = sorted.map(r => Number(r.cmdAmount) || 0)
+
+  // Map MDA percentages to decimals
+  const MDA = sorted.map(r => ({
+    y1: (r.mdaY1 || [0, 0, 0, 0, 0]).map(val => (Number(val) || 0) / 100),
+    y2: (r.mdaY2 || [0, 0, 0, 0, 0]).map(val => val === null ? null : (Number(val) || 0) / 100),
+  }))
+
+  // Map FD percentages to decimals
+  const FD_PENSION = sorted.map(r =>
+    (r.fdPension || [0, 0, 0, 0, 0]).map(val => (Number(val) || 0) / 100)
+  )
+
+  return {
+    RANKS,
+    MFA,
+    TA,
+    PB_TARGET,
+    PB_AMOUNT,
+    PROMO_TARGET,
+    CMD_AWARD_TARGET,
+    CMD_AWARD_AMOUNT,
+    MDA,
+    FD_PENSION,
+  }
+}
+
+export function RanksProvider({ children }) {
+  const [loading, setLoading] = useState(true)
+  const [ranksList, setRanksList] = useState([])
+
+  useEffect(() => {
+    const ref = doc(db, 'config', 'ranks')
+    return onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          setRanksList(snap.data().ranks || [])
+        } else {
+          setRanksList([])
+        }
+        setLoading(false)
+      },
+      () => {
+        setLoading(false)
+      }
+    )
+  }, [])
+
+  const config = useMemo(() => {
+    if (ranksList.length === 0) {
+      // Fallback configuration matching hardcoded tables
+      return {
+        RANKS: DEFAULT_RANKS,
+        MFA: DEFAULT_MFA,
+        TA: DEFAULT_TA,
+        PB_TARGET: DEFAULT_PB_TARGET,
+        PB_AMOUNT: DEFAULT_PB_AMOUNT,
+        PROMO_TARGET: DEFAULT_PROMO_TARGET,
+        CMD_AWARD_TARGET: DEFAULT_CMD_AWARD_TARGET,
+        CMD_AWARD_AMOUNT: DEFAULT_CMD_AWARD_AMOUNT,
+        MDA: DEFAULT_MDA,
+        FD_PENSION: DEFAULT_FD_PENSION,
+      }
+    }
+    return buildConfigFromRanksList(ranksList)
+  }, [ranksList])
+
+  const getRank = (rankNum) => {
+    const list = config.RANKS
+    const idx = (Number(rankNum) || 1) - 1
+    return list[idx] || list[list.length - 1] || { rank: rankNum, code: 'R' + rankNum, name: 'Rank ' + rankNum }
+  }
+
+  const rankCode = (rankNum) => getRank(rankNum).code
+  const rankName = (rankNum) => getRank(rankNum).name
+  const nextRank = (rankNum) => config.RANKS[Number(rankNum)] || null
+
+  const saveRanks = async (updatedList) => {
+    const ref = doc(db, 'config', 'ranks')
+    await setDoc(ref, {
+      ranks: updatedList.map(r => ({
+        rank: Number(r.rank),
+        code: r.code || '',
+        name: r.name || '',
+        mfa: Number(r.mfa) || 0,
+        ta: Number(r.ta) || 0,
+        pbTarget: Number(r.pbTarget) || 0,
+        pbAmount: Number(r.pbAmount) || 0,
+        promoTarget: Number(r.promoTarget) || 0,
+        cmdTarget: Number(r.cmdTarget) || 0,
+        cmdAmount: Number(r.cmdAmount) || 0,
+        mdaY1: r.mdaY1.map(val => Number(val) || 0),
+        mdaY2: r.mdaY2.map(val => val === null ? null : Number(val) || 0),
+        fdPension: r.fdPension.map(val => Number(val) || 0),
+      })),
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  const value = useMemo(() => ({
+    ranksList,
+    config,
+    getRank,
+    rankCode,
+    rankName,
+    nextRank,
+    loading,
+    saveRanks,
+  }), [ranksList, config, loading])
+
+  return (
+    <RanksContext.Provider value={value}>
+      {children}
+    </RanksContext.Provider>
+  )
+}
+
+export function useRanks() {
+  const context = useContext(RanksContext)
+  if (!context) {
+    throw new Error('useRanks must be used within a RanksProvider')
+  }
+  return context
+}

@@ -93,31 +93,81 @@ const PROMOTION_TARGET = {
   SVP: 21000000, EVP: 25000000, MD_MNG: 30000000,
 }
 
+function buildDynamicTables(ranksList) {
+  const RANKS = ranksList.map(r => ({ level: r.rank, id: r.code }))
+  const MDA_TABLE = {}
+  const FD_TABLE = {}
+  const MFA_TABLE = {}
+  const PB_TABLE = {}
+  const TA_TABLE = {}
+  const PROMOTION_TARGET = {}
+
+  ranksList.forEach(r => {
+    const id = r.code
+    MDA_TABLE[id] = {
+      '1Y': r.mdaY1?.[0] ?? 0,
+      '2Y': r.mdaY1?.[1] ?? 0,
+      '3Y': r.mdaY1?.[2] ?? 0,
+      '4Y': r.mdaY1?.[3] ?? 0,
+      '5Y': r.mdaY1?.[4] ?? 0,
+    }
+    FD_TABLE[id] = {
+      '1Y': r.fdPension?.[0] ?? 0,
+      '2Y': r.fdPension?.[1] ?? 0,
+      '3Y': r.fdPension?.[2] ?? 0,
+      '4Y': r.fdPension?.[3] ?? 0,
+      '5Y': r.fdPension?.[4] ?? 0,
+    }
+    MFA_TABLE[id] = r.mfa ?? 0
+    PB_TABLE[id] = { target: r.pbTarget ?? 0, amount: r.pbAmount ?? 0 }
+    TA_TABLE[id] = r.ta ?? 0
+    PROMOTION_TARGET[id] = r.promoTarget ?? 0
+  })
+
+  return { RANKS, MDA_TABLE, FD_TABLE, MFA_TABLE, PB_TABLE, TA_TABLE, PROMOTION_TARGET }
+}
+
 /**
  * Calculate one month's earnings. `overrides` may supply mda/mfa maps from
  * config/compensation to replace defaults.
  */
-function calculateEarnings({ rankId, businessVolume = 0, rdPlan = '1Y', yearsInPlan, overrides = {} }) {
+function calculateEarnings({ rankId, businessVolume = 0, rdPlan = '1Y', yearsInPlan, overrides = {}, ranksList = null }) {
   const fdKey = yearsInPlan || rdPlan
   const bv = Number(businessVolume) || 0
-  const mdaTable = (overrides.mda && overrides.mda[rankId]) || MDA_TABLE[rankId] || {}
-  const mfaVal = (overrides.mfa && overrides.mfa[rankId] != null ? overrides.mfa[rankId] : MFA_TABLE[rankId]) || 0
+
+  let mda = MDA_TABLE
+  let fd = FD_TABLE
+  let mfa = MFA_TABLE
+  let pb = PB_TABLE
+  let ta = TA_TABLE
+
+  if (ranksList && ranksList.length > 0) {
+    const dynamic = buildDynamicTables(ranksList)
+    mda = dynamic.MDA_TABLE
+    fd = dynamic.FD_TABLE
+    mfa = dynamic.MFA_TABLE
+    pb = dynamic.PB_TABLE
+    ta = dynamic.TA_TABLE
+  }
+
+  const mdaTable = (overrides.mda && overrides.mda[rankId]) || mda[rankId] || {}
+  const mfaVal = (overrides.mfa && overrides.mfa[rankId] != null ? overrides.mfa[rankId] : mfa[rankId]) || 0
 
   const mdaPercent = mdaTable[rdPlan] || 0
-  const fdPercent = (FD_TABLE[rankId] && FD_TABLE[rankId][fdKey]) || 0
-  const pbRule = PB_TABLE[rankId] || { target: 0, amount: 0 }
-  const pb = pbRule.amount > 0 && bv >= pbRule.target ? pbRule.amount : 0
-  const ta = TA_TABLE[rankId] || 0
+  const fdPercent = (fd[rankId] && fd[rankId][fdKey]) || 0
+  const pbRule = pb[rankId] || { target: 0, amount: 0 }
+  const pbVal = pbRule.amount > 0 && bv >= pbRule.target ? pbRule.amount : 0
+  const taVal = ta[rankId] || 0
 
-  const mda = bv * (mdaPercent / 100)
-  const fd = bv * (fdPercent / 100)
-  const total = mda + fd + mfaVal + pb + ta
+  const mdaAmt = bv * (mdaPercent / 100)
+  const fdAmt = bv * (fdPercent / 100)
+  const total = mdaAmt + fdAmt + mfaVal + pbVal + taVal
 
-  return { MDA: mda, FD: fd, MFA: mfaVal, PB: pb, TA: ta, totalEarnings: total }
+  return { MDA: mdaAmt, FD: fdAmt, MFA: mfaVal, PB: pbVal, TA: taVal, totalEarnings: total }
 }
 
 module.exports = {
   RD_PLANS, RANKS, getRankByLevel, getNextRank,
   MDA_TABLE, FD_TABLE, MFA_TABLE, PB_TABLE, TA_TABLE, PROMOTION_TARGET,
-  calculateEarnings,
+  calculateEarnings, buildDynamicTables,
 }

@@ -83,7 +83,7 @@ export const memberSchema = z.object({
   name: z.string().min(2, 'Name is required'),
   email: z.string().email('Invalid email'),
   phone,
-  rank: z.coerce.number().min(1).max(18),
+  rank: z.coerce.number().min(1),
   branchId: z.string().optional(),
   referredBy: z.string().optional(), // sponsor / upline uid
   sponsorCode: z.string().optional(),

@@ -8,13 +8,14 @@ import { isRD } from '../data/compensation'
  * Create a plan for a customer. Computes maturity, schedule fields, and a plan
  * account number, then bumps the customer's plansCount.
  */
-export async function createPlan({ form, customer, agent }) {
+export async function createPlan({ form, customer, agent, ranksConfig }) {
   const planAccountNumber = await generatePlanAccountNumber()
   const computed = computePlan({
     type: form.type,
     monthlyAmount: Number(form.monthlyAmount) || 0,
     fdAmount: Number(form.fdAmount) || 0,
     startDate: form.startDate ? new Date(form.startDate) : new Date(),
+    ranksConfig,
   })
 
   const ref = doc(collection(db, 'plans'))

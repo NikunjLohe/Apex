@@ -11,11 +11,13 @@ import { toDate } from '../utils/format'
 import { startOfMonth } from 'date-fns'
 
 /** MDA on a single payment based on the agent rank, plan year-band, and plan index. */
-function mdaForPayment(rankIdx, payment, plan) {
+/** MDA on a single payment based on the agent rank, plan year-band, and plan index. */
+function mdaForPayment(rankIdx, payment, plan, mdaConfig) {
   if (!plan) return 0
   const idx = planIndex(plan.type)
   const inYear1 = (payment.installmentNumber || 1) <= 12
-  const rate = inYear1 ? MDA[rankIdx]?.y1?.[idx] : MDA[rankIdx]?.y2?.[idx]
+  const mdaTable = mdaConfig || MDA
+  const rate = inYear1 ? mdaTable[rankIdx]?.y1?.[idx] : mdaTable[rankIdx]?.y2?.[idx]
   return (payment.amount || 0) * (rate || 0)
 }
 
@@ -25,8 +27,20 @@ function mdaForPayment(rankIdx, payment, plan) {
  * @param {Array}  ownPlans     plans where agentId == me
  * @param {Array}  payments     all payments by me (used for month BV + MDA)
  * @param {Array}  downlinePlans plans enrolled by my direct downline
+ * @param {Object} ranksConfig   optional dynamic ranks configuration
  */
-export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePlans = [] }) {
+export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePlans = [], ranksConfig }) {
+  const mdaTable = ranksConfig ? ranksConfig.MDA : MDA
+  const mfaTable = ranksConfig ? ranksConfig.MFA : MFA
+  const taTable = ranksConfig ? ranksConfig.TA : TA
+  const pbTargetTable = ranksConfig ? ranksConfig.PB_TARGET : PB_TARGET
+  const pbAmountTable = ranksConfig ? ranksConfig.PB_AMOUNT : PB_AMOUNT
+  const fdPensionTable = ranksConfig ? ranksConfig.FD_PENSION : FD_PENSION
+  const promoTargetTable = ranksConfig ? ranksConfig.PROMO_TARGET : PROMO_TARGET
+  const cmdAwardTargetTable = ranksConfig ? ranksConfig.CMD_AWARD_TARGET : CMD_AWARD_TARGET
+  const cmdAwardAmountTable = ranksConfig ? ranksConfig.CMD_AWARD_AMOUNT : CMD_AWARD_AMOUNT
+  const totalRanksCount = ranksConfig ? ranksConfig.RANKS.length : 18
+
   const rankIdx = (Number(rank) || 1) - 1
   const month0 = startOfMonth(new Date())
   const planById = {}
@@ -37,24 +51,24 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
   const lifetimeBV = payments.reduce((s, p) => s + (p.amount || 0), 0)
 
   // MDA this month
-  const mda = monthPayments.reduce((s, p) => s + mdaForPayment(rankIdx, p, planById[p.planId]), 0)
+  const mda = monthPayments.reduce((s, p) => s + mdaForPayment(rankIdx, p, planById[p.planId], mdaTable), 0)
 
   // MFA / TA flat
-  const mfa = MFA[rankIdx] || 0
-  const ta = TA[rankIdx] || 0
+  const mfa = mfaTable[rankIdx] || 0
+  const ta = taTable[rankIdx] || 0
 
   // Performance bonus
-  const pbTarget = PB_TARGET[rankIdx] || 0
-  const pbAmount = PB_AMOUNT[rankIdx] || 0
+  const pbTarget = pbTargetTable[rankIdx] || 0
+  const pbAmount = pbAmountTable[rankIdx] || 0
   const pbAchieved = pbTarget > 0 && monthBV >= pbTarget
   const pbProgress = pbTarget > 0 ? Math.min(100, (monthBV / pbTarget) * 100) : 0
 
   // FD / Pension accrual (approx): lifetime collected × rank's representative FD rate
-  const fdRate = FD_PENSION[rankIdx]?.[2] || 0 // 3Y slab as representative
+  const fdRate = fdPensionTable[rankIdx]?.[2] || 0 // 3Y slab as representative
   const fdAccrual = lifetimeBV * fdRate
 
   // Promotion progress (lifetime BV vs next-rank target)
-  const promoTarget = rankIdx < 17 ? PROMO_TARGET[rankIdx + 1] || 0 : 0
+  const promoTarget = rankIdx < totalRanksCount - 1 ? promoTargetTable[rankIdx + 1] || 0 : 0
   const promoProgress = promoTarget > 0 ? Math.min(100, (lifetimeBV / promoTarget) * 100) : 100
 
   // ---- CMD weighted BV ----
@@ -72,8 +86,8 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
   const mainLeg = weightPlans(ownPlans)
   const otherLegs = weightPlans(downlinePlans)
   const weightedTotal = mainLeg + otherLegs
-  const cmdTarget = CMD_AWARD_TARGET[rankIdx] || 0
-  const cmdAmount = CMD_AWARD_AMOUNT[rankIdx] || 0
+  const cmdTarget = cmdAwardTargetTable[rankIdx] || 0
+  const cmdAmount = cmdAwardAmountTable[rankIdx] || 0
   const cmdProgress = cmdTarget > 0 ? Math.min(100, (weightedTotal / cmdTarget) * 100) : 0
   // qualifying: 80% from main, 20% min from others
   const mainOk = weightedTotal > 0 && mainLeg >= weightedTotal * CMD_RULES.mainLegShare * 0.999

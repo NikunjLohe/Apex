@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { useAuth } from '../../contexts/AuthContext'
-import { rankCode } from '../../data/ranks'
+import { useRanks } from '../../contexts/RanksContext'
 import { IBell, IMenu, ILogout } from '../ui/icons'
 
 export default function Topbar({ title, onMenu }) {
   const { profile, user, logout, isSuperAdmin } = useAuth()
+  const { rankCode } = useRanks()
   const [open, setOpen] = useState(false)
   const name = profile?.name || user?.displayName || user?.email || 'User'
   const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()

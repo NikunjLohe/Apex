@@ -3,7 +3,7 @@ import { where } from 'firebase/firestore'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { computeEarnings } from '../../lib/earnings'
-import { getRank, nextRank } from '../../data/ranks'
+import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, formatCompactINR } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -35,9 +35,11 @@ export default function MyEarnings() {
     return () => { cancelled = true }
   }, [uid])
 
+  const { getRank, nextRank, config } = useRanks()
+
   const model = useMemo(
-    () => computeEarnings({ rank: profile?.rank, ownPlans: ownPlans.data, payments: payments.data, downlinePlans }),
-    [profile?.rank, ownPlans.data, payments.data, downlinePlans]
+    () => computeEarnings({ rank: profile?.rank, ownPlans: ownPlans.data, payments: payments.data, downlinePlans, ranksConfig: config }),
+    [profile?.rank, ownPlans.data, payments.data, downlinePlans, config]
   )
 
   const loading = ownPlans.loading || payments.loading

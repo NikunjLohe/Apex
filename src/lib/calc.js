@@ -12,10 +12,11 @@ import { planYears, planIndex, isRD } from '../data/compensation'
  * Maturity uses the FD_PENSION %% (per annum, applied per year) as the growth
  * rate at a baseline rank index 0 (AO) — the customer-facing savings rate.
  */
-export function computePlan({ type, monthlyAmount = 0, fdAmount = 0, startDate = new Date(), rateRankIndex = 0 }) {
+export function computePlan({ type, monthlyAmount = 0, fdAmount = 0, startDate = new Date(), rateRankIndex = 0, ranksConfig }) {
   const years = planYears(type)
   const idx = planIndex(type)
-  const rate = FD_PENSION[rateRankIndex]?.[idx] ?? 0 // per-annum rate (decimal)
+  const fdPensionTable = ranksConfig ? ranksConfig.FD_PENSION : FD_PENSION
+  const rate = fdPensionTable[rateRankIndex]?.[idx] ?? 0 // per-annum rate (decimal)
   const start = startDate instanceof Date ? startDate : new Date(startDate)
   const maturityDate = addYears(start, years)
 
