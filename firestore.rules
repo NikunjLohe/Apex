@@ -17,7 +17,7 @@ service cloud.firestore {
       // allow a member to update limited self fields (not rank/role/super)
       allow update: if request.auth.uid == uid
         && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasany(['rank', 'isSuperAdmin', 'status', 'branchId']);
+             .hasAny(['rank', 'isSuperAdmin', 'status', 'branchId']);
     }
 
     // Branches: staff read; admins write.
