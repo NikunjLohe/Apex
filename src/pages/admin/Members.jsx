@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
-import { useCollection } from '../../hooks/useFirestore'
+import { where } from 'firebase/firestore'
+import { useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { memberSchema } from '../../lib/schemas'
 import { createMember, updateMember } from '../../lib/admin'
 import { useRanks } from '../../contexts/RanksContext'
-import { fmtDate } from '../../utils/format'
+import { fmtDate, formatINR, formatCompactINR } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
-import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { IPlus, IUsers, ISearch } from '../../components/ui/icons'
+import { SkeletonTable, SkeletonStats } from '../../components/ui/LoadingSkeleton'
+import { IPlus, IUsers, ISearch, IClose, ICash, ITrophy, IShield } from '../../components/ui/icons'
+import { computeEarnings } from '../../lib/earnings'
 
 export default function Members() {
   const members = useCollection('users')
@@ -81,11 +83,19 @@ export default function Members() {
 }
 
 function MemberModal({ modal, branches, members, onClose }) {
-  const { config } = useRanks()
+  const { config, nextRank, getRank } = useRanks()
   const RANKS = config.RANKS
   const isEdit = modal.mode === 'edit'
   const m = modal.member
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('performance') // 'performance' | 'profile' | 'edit'
+
+  // Performance data states
+  const [ownPlans, setOwnPlans] = useState([])
+  const [ownPayments, setOwnPayments] = useState([])
+  const [downlinePlans, setDownlinePlans] = useState([])
+  const [statsLoading, setStatsLoading] = useState(true)
+
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(memberSchema),
     defaultValues: {
@@ -96,8 +106,61 @@ function MemberModal({ modal, branches, members, onClose }) {
     },
   })
 
+  // Fetch performance data if in edit mode
+  useEffect(() => {
+    if (!isEdit || !m?.id) {
+      setStatsLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        setStatsLoading(true)
+        const plansData = await fetchCollection('plans', [where('agentId', '==', m.id)])
+        const paymentsData = await fetchCollection('payments', [where('agentId', '==', m.id)])
+        
+        // Fetch downline plans
+        const downlineUsers = await fetchCollection('users', [where('referredBy', '==', m.id)])
+        const dlIds = downlineUsers.map((d) => d.id).slice(0, 10)
+        let dlPlansData = []
+        if (dlIds.length > 0) {
+          dlPlansData = await fetchCollection('plans', [where('agentId', 'in', dlIds)])
+        }
+        
+        if (!cancelled) {
+          setOwnPlans(plansData)
+          setOwnPayments(paymentsData)
+          setDownlinePlans(dlPlansData)
+        }
+      } catch (e) {
+        console.error('Error fetching member details:', e)
+      } finally {
+        if (!cancelled) setStatsLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isEdit, m?.id])
+
+  const model = useMemo(() => {
+    if (!isEdit || statsLoading) return null
+    return computeEarnings({
+      rank: m?.rank || 1,
+      ownPlans,
+      payments: ownPayments,
+      downlinePlans,
+      ranksConfig: config,
+    })
+  }, [isEdit, statsLoading, m?.rank, ownPlans, ownPayments, downlinePlans, config])
+
+  const sortedPayments = useMemo(() => {
+    return [...ownPayments].sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate)).slice(0, 5)
+  }, [ownPayments])
+
   // Possible sponsors = everyone except the member being edited.
   const sponsors = (members || []).filter((x) => x.id !== m?.id)
+
+  const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
+  const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
   const submit = async (form) => {
     setSaving(true)
@@ -137,73 +200,331 @@ function MemberModal({ modal, branches, members, onClose }) {
     }
   }
 
-  return (
-    <ConfirmDialog open title={isEdit ? 'Edit member' : 'Add member'} confirmLabel={isEdit ? 'Save' : 'Create'} loading={saving} onConfirm={handleSubmit(submit)} onClose={onClose}>
-      <form className="mt-3 space-y-3" onSubmit={handleSubmit(submit)}>
-        <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">Email</label><input className="field" type="email" disabled={isEdit} {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
-          <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
-          <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label">Sponsor / Upline</label>
-            <select className="field" {...register('referredBy')}>
-              <option value="">— None (top of tree) —</option>
-              {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
-            </select>
+  // Adding a member: render the standard ConfirmDialog modal
+  if (!isEdit) {
+    return (
+      <ConfirmDialog open title="Add member" confirmLabel="Create" loading={saving} onConfirm={handleSubmit(submit)} onClose={onClose}>
+        <form className="mt-3 space-y-3" onSubmit={handleSubmit(submit)}>
+          <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Email</label><input className="field" type="email" {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
+            <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
           </div>
-          <div><label className="label">Sponsor code</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-          <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
-        </div>
-        {isEdit && (
-          <div>
-            <label className="label">Account Password</label>
-            <div className="text-sm font-semibold font-mono text-ink-1 bg-navy-2 border border-navy-4 rounded-card px-3.5 py-2.5 flex items-center justify-between">
-              <span className="select-all">{m?.password || '—'}</span>
-              <span className="text-[9px] font-bold text-ink-2 uppercase tracking-wider bg-navy-4/50 px-1.5 py-0.5 rounded">Read Only</span>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+            <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Sponsor / Upline</label>
+              <select className="field" {...register('referredBy')}>
+                <option value="">— None (top of tree) —</option>
+                {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
+              </select>
             </div>
+            <div><label className="label">Sponsor code</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
           </div>
-        )}
-        {!isEdit && (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+            <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
+          </div>
           <div><label className="label">Password (optional)</label><input className="field" type="password" placeholder="Auto-generate if blank" {...register('password')} /></div>
-        )}
-        {!isEdit && <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>}
-        {isEdit && (
-          <div className="border-t border-navy-4 pt-4 mt-2.5 space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
-              Identity & Bank Details
-            </h4>
-            {m?.profileCompleted ? (
-              <div className="space-y-2 text-xs bg-navy-2 p-3 rounded-card border border-navy-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <div><span className="block text-[10px] text-ink-2">Aadhaar Card</span><span className="font-semibold text-ink-1 font-mono">{m.aadhaar}</span></div>
-                  <div><span className="block text-[10px] text-ink-2">PAN Card</span><span className="font-semibold text-ink-1 font-mono uppercase">{m.pan}</span></div>
+          <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>
+        </form>
+      </ConfirmDialog>
+    )
+  }
+
+  // Editing a member: render the large tabbed Master-Detail modal
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/85 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="card relative z-10 w-full max-w-3xl bg-navy-3 border border-navy-4 p-6 shadow-xl max-h-[92vh] overflow-y-auto flex flex-col space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between border-b border-navy-4 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-serif text-xl font-bold text-ink-1 tracking-tight">{m?.name}</h3>
+              <RankBadge rank={m?.rank} size="sm" />
+            </div>
+            <p className="text-xs text-ink-2 mt-0.5">Agent Details & Performance Profiling</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-ink-2 hover:text-ink-1">
+            <IClose size={19} />
+          </button>
+        </div>
+
+        {/* Tab Selection */}
+        <div className="flex gap-1.5 border-b border-navy-4/50 pb-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('performance')}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
+              activeTab === 'performance' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+            }`}
+          >
+            Overview & Performance
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
+              activeTab === 'profile' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+            }`}
+          >
+            Bank & Identity Details
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('edit')}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
+              activeTab === 'edit' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+            }`}
+          >
+            Edit Settings
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 min-h-[360px]">
+          {activeTab === 'performance' && (
+            statsLoading ? (
+              <div className="space-y-4 pt-4"><SkeletonStats count={4} /><SkeletonTable rows={4} cols={4} /></div>
+            ) : model ? (
+              <div className="space-y-5 pt-1">
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="border border-navy-4 bg-navy-2/40 p-3 rounded-card">
+                    <span className="text-[10px] text-ink-2 uppercase font-bold tracking-wider">Earnings (Month)</span>
+                    <p className="text-lg font-bold text-gold-1 font-serif mt-1">{formatINR(model.totalThisMonth)}</p>
+                  </div>
+                  <div className="border border-navy-4 bg-navy-2/40 p-3 rounded-card">
+                    <span className="text-[10px] text-ink-2 uppercase font-bold tracking-wider">MDA Accrual</span>
+                    <p className="text-lg font-bold text-ink-1 font-serif mt-1">{formatINR(model.mda)}</p>
+                  </div>
+                  <div className="border border-navy-4 bg-navy-2/40 p-3 rounded-card">
+                    <span className="text-[10px] text-ink-2 uppercase font-bold tracking-wider">MFA Payout</span>
+                    <p className="text-lg font-bold text-ink-1 font-serif mt-1">{formatINR(model.mfa)}</p>
+                  </div>
+                  <div className="border border-navy-4 bg-navy-2/40 p-3 rounded-card">
+                    <span className="text-[10px] text-ink-2 uppercase font-bold tracking-wider">Pension Accrued</span>
+                    <p className="text-lg font-bold text-ink-1 font-serif mt-1">{formatINR(model.fdAccrual)}</p>
+                  </div>
                 </div>
-                <div className="border-t border-navy-4/50 my-1" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div><span className="block text-[10px] text-ink-2">Account Holder</span><span className="font-semibold text-ink-1">{m.bankDetails?.accountHolderName}</span></div>
-                  <div><span className="block text-[10px] text-ink-2">Bank Name</span><span className="font-semibold text-ink-1">{m.bankDetails?.bankName}</span></div>
-                  <div><span className="block text-[10px] text-ink-2">Account Number</span><span className="font-semibold text-ink-1 font-mono">{m.bankDetails?.accountNumber}</span></div>
-                  <div><span className="block text-[10px] text-ink-2">IFSC Code</span><span className="font-semibold text-ink-1 font-mono uppercase">{m.bankDetails?.ifscCode}</span></div>
-                  <div className="col-span-2"><span className="block text-[10px] text-ink-2">Branch</span><span className="font-semibold text-ink-1">{m.bankDetails?.branch}</span></div>
+
+                {/* Progress Indicators */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="border border-navy-4 p-4 rounded-card bg-navy-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-ink-1 mb-2">
+                      <ITrophy size={16} className="text-[#8D7952]" /> Performance Bonus
+                    </div>
+                    {model.pb.target > 0 ? (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[11px] text-ink-2">
+                          <span>{formatINR(model.pb.current)} / {formatINR(model.pb.target)}</span>
+                          <span className={model.pb.achieved ? 'text-ok font-semibold' : ''}>
+                            {model.pb.achieved ? `Earned ${formatINR(model.pb.amount)}` : `Reward ${formatINR(model.pb.amount)}`}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-navy-2 rounded-full overflow-hidden">
+                          <div className={`h-full ${model.pb.achieved ? 'bg-ok' : 'bg-gold-1'}`} style={{ width: `${Math.max(0, Math.min(100, model.pb.progress))}%` }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-ink-2 italic">No performance targets active.</p>
+                    )}
+                  </div>
+
+                  <div className="border border-navy-4 p-4 rounded-card bg-navy-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-ink-1">
+                        <IShield size={16} className="text-[#8D7952]" /> CMD Award Progress
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${model.cmd.qualified ? 'bg-ok/10 text-ok' : 'bg-gold-1/10 text-gold-1'}`}>
+                        {model.cmd.qualified ? 'Qualified' : 'Active'}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] text-ink-2">
+                        <span>BV: {formatCompactINR(model.cmd.weightedTotal)} / {formatCompactINR(model.cmd.target)}</span>
+                        <span>Reward: {formatINR(model.cmd.amount)}</span>
+                      </div>
+                      <div className="h-2 bg-navy-2 rounded-full overflow-hidden">
+                        <div className="h-full bg-gold-1" style={{ width: `${Math.max(0, Math.min(100, model.cmd.progress))}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Collections (What he does) */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan mb-2.5">
+                    Recent Collections by Agent
+                  </h4>
+                  {sortedPayments.length ? (
+                    <div className="border border-navy-4 rounded-card overflow-hidden">
+                      <table className="tbl text-xs">
+                        <thead>
+                          <tr>
+                            <th className="py-2">Receipt</th>
+                            <th className="py-2">Customer</th>
+                            <th className="py-2">Amount</th>
+                            <th className="py-2">Mode</th>
+                            <th className="py-2">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedPayments.map((p) => (
+                            <tr key={p.id}>
+                              <td className="py-2 font-mono text-[10px] text-ink-2">{p.receiptNumber}</td>
+                              <td className="py-2 text-ink-1 font-medium">{p.customerName || '—'}</td>
+                              <td className="py-2 font-semibold text-ink-1">{formatINR(p.amount)}</td>
+                              <td className="py-2 uppercase font-medium text-ink-2">{p.paymentMode}</td>
+                              <td className="py-2 text-ink-2">{fmtDate(p.paidDate)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-ink-2 italic bg-navy-2/30 p-4 rounded-card border border-navy-4/50 text-center">
+                      No collections recorded by this agent.
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="text-[11px] text-ink-2 italic bg-navy-2/50 p-2.5 rounded-card border border-navy-4/50 text-center">
-                Agent has not completed their profile bank & identity details yet.
+              <p className="text-xs text-ink-2 italic pt-4">No performance metrics generated.</p>
+            )
+          )}
+
+          {activeTab === 'profile' && (
+            <div className="space-y-4 pt-1">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Credentials */}
+                <div className="border border-navy-4 p-4 rounded-card space-y-3 bg-navy-2/30">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50">
+                    System Credentials
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Agent ID</span>
+                      <span className="font-semibold text-ink-1 font-mono">{m?.sponsorCode || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Password</span>
+                      <span className="font-semibold text-ink-1 font-mono select-all bg-navy-3 px-1 rounded border border-navy-4">{m?.password || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Identity Documents */}
+                <div className="border border-navy-4 p-4 rounded-card space-y-3 bg-navy-2/30">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50">
+                    Identity Documents
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Aadhaar Number</span>
+                      <span className="font-semibold text-ink-1 font-mono">{m?.aadhaar || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-ink-2">PAN Card Number</span>
+                      <span className="font-semibold text-ink-1 font-mono uppercase">{m?.pan || '—'}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        )}
-      </form>
-    </ConfirmDialog>
+
+              {/* Bank Details */}
+              <div className="border border-navy-4 p-4 rounded-card space-y-3 bg-navy-2/30">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50">
+                  Bank Account Information
+                </h4>
+                {m?.profileCompleted ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Account Holder Name</span>
+                      <span className="font-semibold text-ink-1">{m.bankDetails?.accountHolderName || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Bank Name</span>
+                      <span className="font-semibold text-ink-1">{m.bankDetails?.bankName || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-ink-2">Account Number</span>
+                      <span className="font-semibold text-ink-1 font-mono">{m.bankDetails?.accountNumber || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-ink-2">IFSC Code</span>
+                      <span className="font-semibold text-ink-1 font-mono uppercase">{m.bankDetails?.ifscCode || '—'}</span>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="block text-[10px] text-ink-2">Branch Name</span>
+                      <span className="font-semibold text-ink-1">{m.bankDetails?.branch || '—'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-2 italic text-center py-2">Agent has not completed their onboarding registration details yet.</p>
+                )}
+              </div>
+
+              {/* Sponsorship details */}
+              <div className="border border-navy-4 p-4 rounded-card text-xs space-y-2 bg-navy-2/30">
+                <div className="grid grid-cols-3 gap-2">
+                  <div><span className="block text-[10px] text-ink-2">Sponsor / Upline</span><span className="font-medium text-ink-1">{m?.referredBy ? memberName(m.referredBy) : '—'}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">Branch Office</span><span className="font-medium text-ink-1">{branchName(m?.branchId)}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">Joined Date</span><span className="font-medium text-ink-1">{fmtDate(m?.joinDate)}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'edit' && (
+            <form id="edit-member-form" className="space-y-3.5 pt-1" onSubmit={handleSubmit(submit)}>
+              <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Email</label><input className="field" type="email" disabled {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
+                <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+                <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Sponsor / Upline</label>
+                  <select className="field" {...register('referredBy')}>
+                    <option value="">— None (top of tree) —</option>
+                    {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
+                  </select>
+                </div>
+                <div><label className="label">Sponsor code</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex justify-end gap-2 pt-3 border-t border-navy-4/50">
+          <button type="button" onClick={onClose} className="btn-ghost">
+            Close
+          </button>
+          {activeTab === 'edit' && (
+            <button
+              type="submit"
+              form="edit-member-form"
+              disabled={saving}
+              className="btn-gold px-6"
+            >
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
