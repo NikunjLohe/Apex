@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
+import { useAuth } from '../../contexts/AuthContext'
+import AgentProfileCompletionModal from '../AgentProfileCompletionModal'
 
 // Map path prefixes → page title for the topbar.
 const TITLES = [
@@ -36,11 +38,15 @@ function titleFor(pathname) {
 
 export default function Layout() {
   const location = useLocation()
+  const { profile } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
 
+  const showCompletion = profile && !profile.isSuperAdmin && !profile.profileCompleted
+
   return (
     <div className="flex min-h-screen">
+      {showCompletion && <AgentProfileCompletionModal />}
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-navy-4 lg:block">
         <Sidebar />

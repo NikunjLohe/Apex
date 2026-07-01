@@ -41,6 +41,7 @@ export async function createMember(form, tempPassword) {
     status: form.status || 'active',
     sponsorCode: form.sponsorCode || '',
     referredBy: form.referredBy || null,
+    password: tempPassword,
     joinDate: serverTimestamp(),
     createdAt: serverTimestamp(),
   })

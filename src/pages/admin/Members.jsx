@@ -53,7 +53,14 @@ export default function Members() {
                 {filtered.map((m) => (
                   <tr key={m.id}>
                     <td className="font-medium text-ink-1">{m.name}<div className="text-xs text-ink-2">{m.email}</div></td>
-                    <td className="font-mono text-sm text-ink-2">{m.sponsorCode || '—'}</td>
+                    <td className="font-mono text-sm">
+                      <div className="text-ink-1 font-semibold">{m.sponsorCode || '—'}</div>
+                      {m.password && (
+                        <div className="text-[11px] text-ink-2 mt-0.5">
+                          Pwd: <span className="select-all font-mono font-medium bg-navy-2 px-1 rounded border border-navy-4">{m.password}</span>
+                        </div>
+                      )}
+                    </td>
                     <td><RankBadge rank={m.rank} size="sm" />{m.isSuperAdmin && <span className="ml-1 rounded-full bg-gold-1/15 px-2 py-0.5 text-[10px] font-bold text-gold">SUPER</span>}</td>
                     <td className="text-ink-2">{m.referredBy ? memberName(m.referredBy) : '—'}</td>
                     <td className="text-ink-2">{branchName(m.branchId)}</td>
@@ -156,10 +163,46 @@ function MemberModal({ modal, branches, members, onClose }) {
           <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
         </div>
+        {isEdit && (
+          <div>
+            <label className="label">Account Password</label>
+            <div className="text-sm font-semibold font-mono text-ink-1 bg-navy-2 border border-navy-4 rounded-card px-3.5 py-2.5 flex items-center justify-between">
+              <span className="select-all">{m?.password || '—'}</span>
+              <span className="text-[9px] font-bold text-ink-2 uppercase tracking-wider bg-navy-4/50 px-1.5 py-0.5 rounded">Read Only</span>
+            </div>
+          </div>
+        )}
         {!isEdit && (
           <div><label className="label">Password (optional)</label><input className="field" type="password" placeholder="Auto-generate if blank" {...register('password')} /></div>
         )}
         {!isEdit && <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>}
+        {isEdit && (
+          <div className="border-t border-navy-4 pt-4 mt-2.5 space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Identity & Bank Details
+            </h4>
+            {m?.profileCompleted ? (
+              <div className="space-y-2 text-xs bg-navy-2 p-3 rounded-card border border-navy-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <div><span className="block text-[10px] text-ink-2">Aadhaar Card</span><span className="font-semibold text-ink-1 font-mono">{m.aadhaar}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">PAN Card</span><span className="font-semibold text-ink-1 font-mono uppercase">{m.pan}</span></div>
+                </div>
+                <div className="border-t border-navy-4/50 my-1" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div><span className="block text-[10px] text-ink-2">Account Holder</span><span className="font-semibold text-ink-1">{m.bankDetails?.accountHolderName}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">Bank Name</span><span className="font-semibold text-ink-1">{m.bankDetails?.bankName}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">Account Number</span><span className="font-semibold text-ink-1 font-mono">{m.bankDetails?.accountNumber}</span></div>
+                  <div><span className="block text-[10px] text-ink-2">IFSC Code</span><span className="font-semibold text-ink-1 font-mono uppercase">{m.bankDetails?.ifscCode}</span></div>
+                  <div className="col-span-2"><span className="block text-[10px] text-ink-2">Branch</span><span className="font-semibold text-ink-1">{m.bankDetails?.branch}</span></div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[11px] text-ink-2 italic bg-navy-2/50 p-2.5 rounded-card border border-navy-4/50 text-center">
+                Agent has not completed their profile bank & identity details yet.
+              </div>
+            )}
+          </div>
+        )}
       </form>
     </ConfirmDialog>
   )
