@@ -11,10 +11,16 @@ import StatusBadge from '../components/ui/StatusBadge'
 import EmptyState from '../components/ui/EmptyState'
 import { SkeletonStats, SkeletonTable } from '../components/ui/LoadingSkeleton'
 import { IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard } from '../components/ui/icons'
+import MyEarnings from './earnings/MyEarnings'
 
 export default function Dashboard() {
   const { profile, isSuperAdmin } = useAuth()
   const { can } = usePermission()
+
+  // If the user is a normal agent (rank < 10), render MyEarnings dashboard
+  if (!isSuperAdmin && (profile?.rank || 0) < 10) {
+    return <MyEarnings />
+  }
 
   // Scope data: ranks <10 see their own; managers+/superadmin see branch/all.
   const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10

@@ -24,7 +24,7 @@ export function can(rank, isSuperAdmin, capability) {
   switch (capability) {
     case CAP.ONBOARD:
     case CAP.COLLECT:
-      return r >= 1 && r <= 18
+      return r >= 10 && r <= 18
     case CAP.BRANCH_REPORTS:
     case CAP.MANAGE_DOWNLINE:
       return r >= 10
