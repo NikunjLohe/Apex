@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { where } from 'firebase/firestore'
+import { Link, useNavigate } from 'react-router-dom'
 import { useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { memberSchema } from '../../lib/schemas'
 import { createMember, updateMember } from '../../lib/admin'
@@ -21,13 +22,25 @@ export default function Members() {
   const branches = useCollection('branches')
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // { mode:'new'|'edit', member }
+  const navigate = useNavigate()
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return members.data
-      .filter((m) => !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q))
+      .filter((m) => !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q) || m.sponsorCode?.toLowerCase().includes(q))
       .sort((a, b) => (b.rank || 0) - (a.rank || 0))
   }, [members.data, search])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      const match = members.data.find(
+        (m) => m.sponsorCode?.toLowerCase() === search.trim().toLowerCase()
+      )
+      if (match) {
+        navigate(`/admin/members/${match.id}`)
+      }
+    }
+  }
 
   const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.data.find((m) => m.id === uid)?.name || '—'
@@ -37,7 +50,7 @@ export default function Members() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search members…" className="field pl-10" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10" />
         </div>
         <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm"><IPlus size={16} /> Add Member</button>
       </div>
@@ -54,9 +67,16 @@ export default function Members() {
               <tbody>
                 {filtered.map((m) => (
                   <tr key={m.id}>
-                    <td className="font-medium text-ink-1">{m.name}<div className="text-xs text-ink-2">{m.email}</div></td>
+                    <td className="font-medium text-ink-1">
+                      <Link to={`/admin/members/${m.id}`} className="hover:text-gold-1 hover:underline">
+                        {m.name}
+                      </Link>
+                      <div className="text-xs text-ink-2">{m.email}</div>
+                    </td>
                     <td className="font-mono text-sm">
-                      <div className="text-ink-1 font-semibold">{m.sponsorCode || '—'}</div>
+                      <Link to={`/admin/members/${m.id}`} className="text-ink-1 font-semibold hover:text-gold-1 hover:underline">
+                        {m.sponsorCode || '—'}
+                      </Link>
                       {m.password && (
                         <div className="text-[11px] text-ink-2 mt-0.5">
                           Pwd: <span className="select-all font-mono font-medium bg-navy-2 px-1 rounded border border-navy-4">{m.password}</span>
@@ -64,11 +84,15 @@ export default function Members() {
                       )}
                     </td>
                     <td><RankBadge rank={m.rank} size="sm" />{m.isSuperAdmin && <span className="ml-1 rounded-full bg-gold-1/15 px-2 py-0.5 text-[10px] font-bold text-gold">SUPER</span>}</td>
+
                     <td className="text-ink-2">{m.referredBy ? memberName(m.referredBy) : '—'}</td>
                     <td className="text-ink-2">{branchName(m.branchId)}</td>
                     <td className="text-ink-2">{fmtDate(m.joinDate)}</td>
                     <td><StatusBadge status={m.status || 'active'} /></td>
-                    <td><button type="button" onClick={() => setModal({ mode: 'edit', member: m })} className="text-xs font-semibold text-gold hover:underline">Edit</button></td>
+                    <td className="space-x-2">
+                      <Link to={`/admin/members/${m.id}`} className="text-xs font-semibold text-gold hover:underline">View Profile</Link>
+                      <button type="button" onClick={() => setModal({ mode: 'edit', member: m })} className="text-xs font-semibold text-gold hover:underline">Edit</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -102,7 +126,7 @@ function MemberModal({ modal, branches, members, onClose }) {
       name: m?.name || '', email: m?.email || '', phone: m?.phone || '',
       rank: m?.rank || 1, branchId: m?.branchId || '', isSuperAdmin: m?.isSuperAdmin || false,
       status: m?.status || 'active', referredBy: m?.referredBy || '', sponsorCode: m?.sponsorCode || '',
-      password: '',
+      password: '', address: m?.address || '', dob: m?.dob || '',
     },
   })
 
@@ -156,8 +180,8 @@ function MemberModal({ modal, branches, members, onClose }) {
     return [...ownPayments].sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate)).slice(0, 5)
   }, [ownPayments])
 
-  // Possible sponsors = everyone except the member being edited.
-  const sponsors = (members || []).filter((x) => x.id !== m?.id)
+  // Possible sponsors = everyone except the member being edited and AO rank 1 members.
+  const sponsors = (members || []).filter((x) => x.id !== m?.id && (Number(x.rank) || 0) > 1)
 
   const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
@@ -165,20 +189,22 @@ function MemberModal({ modal, branches, members, onClose }) {
   const submit = async (form) => {
     setSaving(true)
     try {
-      // Auto-generate a sponsor code (Agent ID) starting from KB100001.
+      // Auto-generate a unique Agent Code (Agent ID) starting from AG000001.
       if (!form.sponsorCode) {
-        let maxId = 100000
+        let maxId = 0
         if (members && members.length > 0) {
           members.forEach(member => {
-            if (member.sponsorCode && member.sponsorCode.startsWith('KB')) {
-              const num = parseInt(member.sponsorCode.replace('KB', ''), 10)
+            if (member.sponsorCode) {
+              const numStr = member.sponsorCode.replace(/^[A-Z]+/i, '')
+              const num = parseInt(numStr, 10)
               if (!isNaN(num) && num > maxId) {
                 maxId = num
               }
             }
           })
         }
-        form.sponsorCode = `KB${maxId + 1}`
+        const nextId = maxId + 1
+        form.sponsorCode = `AG${String(nextId).padStart(6, '0')}`
       }
       if (isEdit) {
         await updateMember(m.id, form)
@@ -211,10 +237,12 @@ function MemberModal({ modal, branches, members, onClose }) {
             <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+            <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
             <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
           </div>
+          <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
           <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
             <div>
               <label className="label">Sponsor / Upline</label>
               <select className="field" {...register('referredBy')}>
@@ -222,11 +250,14 @@ function MemberModal({ modal, branches, members, onClose }) {
                 {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
               </select>
             </div>
-            <div><label className="label">Sponsor code</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Sponsor code (Agent Code)</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
             <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-            <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
+          </div>
+          <div className="flex items-end gap-2 pb-1 text-sm text-ink-2">
+            <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
+            <label htmlFor="isSuperAdmin" className="text-xs font-semibold text-ink-1">Super Admin Account</label>
           </div>
           <div><label className="label">Password (optional)</label><input className="field" type="password" placeholder="Auto-generate if blank" {...register('password')} /></div>
           <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>
@@ -435,6 +466,23 @@ function MemberModal({ modal, branches, members, onClose }) {
                 </div>
               </div>
 
+              {/* Personal Details */}
+              <div className="border border-navy-4 p-4 rounded-card space-y-3 bg-navy-2/30">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50">
+                  Personal Details
+                </h4>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-ink-2">Date of Birth</span>
+                    <span className="font-semibold text-ink-1">{m?.dob || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-ink-2">Address</span>
+                    <span className="font-semibold text-ink-1 whitespace-pre-wrap">{m?.address || '—'}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Bank Details */}
               <div className="border border-navy-4 p-4 rounded-card space-y-3 bg-navy-2/30">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50">
@@ -487,10 +535,12 @@ function MemberModal({ modal, branches, members, onClose }) {
                 <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+                <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
                 <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
               </div>
+              <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
               <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
                 <div>
                   <label className="label">Sponsor / Upline</label>
                   <select className="field" {...register('referredBy')}>
@@ -498,11 +548,14 @@ function MemberModal({ modal, branches, members, onClose }) {
                     {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
                   </select>
                 </div>
-                <div><label className="label">Sponsor code</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
+                <div><label className="label">Agent Code (Sponsor Code)</label><input className="field font-mono" disabled {...register('sponsorCode')} /></div>
                 <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-                <label className="flex items-end gap-2 pb-2.5 text-sm text-ink-2"><input type="checkbox" className="accent-gold-1" {...register('isSuperAdmin')} /> Super Admin</label>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
+                <label htmlFor="isSuperAdmin" className="text-sm font-semibold text-ink-1">Super Admin Account</label>
               </div>
             </form>
           )}

@@ -16,6 +16,7 @@ export const CAP = {
   ZONE_REPORTS: 'zoneReports',
   ADMIN: 'admin', // members/branches/settings (rank 14+ or superadmin)
   SUPER_ADMIN: 'superAdmin',
+  RECRUIT: 'recruit',
 }
 
 export function can(rank, isSuperAdmin, capability) {
@@ -25,6 +26,8 @@ export function can(rank, isSuperAdmin, capability) {
     case CAP.ONBOARD:
     case CAP.COLLECT:
       return r >= 10 && r <= 18
+    case CAP.RECRUIT:
+      return r >= 2 && r <= 18
     case CAP.BRANCH_REPORTS:
     case CAP.MANAGE_DOWNLINE:
       return r >= 10

@@ -25,6 +25,7 @@ const MyEarnings = lazy(() => import('./pages/earnings/MyEarnings'))
 const MyDownline = lazy(() => import('./pages/earnings/MyDownline'))
 const CmdAwards = lazy(() => import('./pages/earnings/CmdAwards'))
 const Members = lazy(() => import('./pages/admin/Members'))
+const MemberDetail = lazy(() => import('./pages/admin/MemberDetail'))
 const Branches = lazy(() => import('./pages/admin/Branches'))
 const Overview = lazy(() => import('./pages/admin/Overview'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
@@ -95,6 +96,7 @@ export default function App() {
 
               {/* Admin */}
               <Route path="/admin/members" element={<Protected capability={CAP.ADMIN}><Members /></Protected>} />
+              <Route path="/admin/members/:id" element={<Protected capability={CAP.ADMIN}><MemberDetail /></Protected>} />
               <Route path="/admin/branches" element={<Protected capability={CAP.ADMIN}><Branches /></Protected>} />
               <Route path="/admin/import" element={<Protected capability={CAP.ADMIN}><ImportData /></Protected>} />
               <Route path="/admin/settings" element={<Protected capability={CAP.ADMIN}><Settings /></Protected>} />

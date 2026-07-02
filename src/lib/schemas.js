@@ -90,6 +90,8 @@ export const memberSchema = z.object({
   isSuperAdmin: z.boolean().optional(),
   status: z.enum(['active', 'inactive']),
   password: z.string().optional(),
+  address: z.string().optional(),
+  dob: z.string().optional(),
 })
 
 export const branchSchema = z.object({
