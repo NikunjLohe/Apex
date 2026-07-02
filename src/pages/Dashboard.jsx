@@ -11,7 +11,7 @@ import StatusBadge from '../components/ui/StatusBadge'
 import EmptyState from '../components/ui/EmptyState'
 import { SkeletonStats, SkeletonTable } from '../components/ui/LoadingSkeleton'
 import { 
-  IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard, IBuilding, INetwork, IClock 
+  IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard, IBuilding, INetwork, IClock, ISettings 
 } from '../components/ui/icons'
 import MyEarnings from './earnings/MyEarnings'
 import { useRanks } from '../contexts/RanksContext'
