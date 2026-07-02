@@ -45,7 +45,7 @@ export default function Settings() {
   const [rankModalOpen, setRankModalOpen] = useState(false)
 
   // Plan modal form states
-  const [planForm, setPlanForm] = useState({ name: '', code: '', duration: 1, status: 'active' })
+  const [planForm, setPlanForm] = useState({ name: '', code: '', duration: 1, type: 'RD', status: 'active' })
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [editingPlanId, setEditingPlanId] = useState(null)
   const [savingPlan, setSavingPlan] = useState(false)
@@ -293,7 +293,7 @@ export default function Settings() {
         await addDoc(collection(db, 'plans_master'), { ...planForm, createdAt: serverTimestamp() })
         toast.success('Plan created successfully')
       }
-      setPlanForm({ name: '', code: '', duration: 1, status: 'active' })
+      setPlanForm({ name: '', code: '', duration: 1, type: 'RD', status: 'active' })
       setEditingPlanId(null)
       setPlanModalOpen(false)
     } catch {
@@ -304,7 +304,7 @@ export default function Settings() {
   }
 
   const handleEditPlan = (p) => {
-    setPlanForm({ name: p.name, code: p.code, duration: p.duration, status: p.status })
+    setPlanForm({ name: p.name, code: p.code, duration: p.duration, type: p.type || 'RD', status: p.status })
     setEditingPlanId(p.id)
     setPlanModalOpen(true)
   }
@@ -591,7 +591,7 @@ export default function Settings() {
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
                   <IDoc size={16} /> Plan Configurations
                 </h3>
-                <button type="button" onClick={() => { setEditingPlanId(null); setPlanForm({ name: '', code: '', duration: 1, status: 'active' }); setPlanModalOpen(true) }} className="btn-gold py-1.5 px-3.5 text-xs flex items-center gap-1.5">
+                <button type="button" onClick={() => { setEditingPlanId(null); setPlanForm({ name: '', code: '', duration: 1, type: 'RD', status: 'active' }); setPlanModalOpen(true) }} className="btn-gold py-1.5 px-3.5 text-xs flex items-center gap-1.5">
                   <IPlus size={14} /> Add Plan
                 </button>
               </div>
@@ -601,6 +601,7 @@ export default function Settings() {
                     <tr>
                       <th>Plan Code</th>
                       <th>Plan Name</th>
+                      <th>Type</th>
                       <th>Duration</th>
                       <th>Status</th>
                       <th className="text-right">Actions</th>
@@ -611,6 +612,7 @@ export default function Settings() {
                       <tr key={p.id}>
                         <td className="font-mono font-semibold text-ink-1 uppercase">{p.code}</td>
                         <td className="font-semibold text-ink-1">{p.name}</td>
+                        <td className="font-bold text-gold-1 uppercase">{p.type || 'RD'}</td>
                         <td className="text-ink-2">{p.duration} {p.duration === 1 ? 'Year' : 'Years'}</td>
                         <td>
                           <StatusBadge status={p.status || 'active'} />
@@ -1020,16 +1022,23 @@ export default function Settings() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="label">Plan Type *</label>
+                  <select className="field text-xs" value={planForm.type} onChange={(e) => setPlanForm({ ...planForm, type: e.target.value })}>
+                    <option value="RD">Recurring Deposit (RD)</option>
+                    <option value="FD">Fixed Deposit (FD) / Pension</option>
+                  </select>
+                </div>
+                <div>
                   <label className="label">Duration (Years) *</label>
                   <input type="number" min={1} max={20} className="field font-mono" value={planForm.duration} onChange={(e) => setPlanForm({ ...planForm, duration: Number(e.target.value) })} />
                 </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select className="field text-xs" value={planForm.status} onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="field text-xs" value={planForm.status} onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
             </div>
 

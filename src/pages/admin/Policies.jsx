@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { where, orderBy, limit } from 'firebase/firestore'
 import { useCollection } from '../../hooks/useFirestore'
 import { fmtDate, formatINR } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -7,16 +8,29 @@ import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { ISearch, IDoc, IChevron } from '../../components/ui/icons'
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = 25
 
 export default function Policies() {
   const navigate = useNavigate()
-  const policies = useCollection('plans')
-  const users = useCollection('users')
-
+  
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [page, setPage] = useState(1)
+  const [limitCount, setLimitCount] = useState(PAGE_SIZE)
+
+  const constraints = useMemo(() => {
+    const arr = []
+    if (statusFilter !== 'all') {
+      arr.push(where('status', '==', statusFilter))
+    }
+    arr.push(orderBy('createdAt', 'desc'))
+    arr.push(limit(limitCount))
+    return arr
+  }, [statusFilter, limitCount])
+
+  const depKey = `${statusFilter}-${limitCount}`
+
+  const policies = useCollection('plans', constraints, depKey)
+  const users = useCollection('users')
 
   const agentMap = useMemo(() => {
     const map = {}
@@ -28,27 +42,16 @@ export default function Policies() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return policies.data
-      .filter((p) => {
-        if (statusFilter !== 'all' && (p.status || 'active') !== statusFilter) return false
-        if (!q) return true
-        
-        return (
-          p.policyNumber?.toLowerCase().includes(q) ||
-          p.customerName?.toLowerCase().includes(q) ||
-          p.agentName?.toLowerCase().includes(q) ||
-          p.type?.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const timeA = a.createdAt ? (a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime()) : 0
-        const timeB = b.createdAt ? (b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime()) : 0
-        return timeB - timeA
-      })
-  }, [policies.data, search, statusFilter])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    return policies.data.filter((p) => {
+      if (!q) return true
+      return (
+        p.policyNumber?.toLowerCase().includes(q) ||
+        p.customerName?.toLowerCase().includes(q) ||
+        p.agentName?.toLowerCase().includes(q) ||
+        p.type?.toLowerCase().includes(q)
+      )
+    })
+  }, [policies.data, search])
 
   const loading = policies.loading || users.loading
 
@@ -68,14 +71,14 @@ export default function Policies() {
           <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
           <input
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            onChange={(e) => { setSearch(e.target.value); setLimitCount(PAGE_SIZE) }}
             placeholder="Search Policy No, customer name, agent, product…"
             className="field pl-10"
           />
         </div>
         <select 
           value={statusFilter} 
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} 
+          onChange={(e) => { setStatusFilter(e.target.value); setLimitCount(PAGE_SIZE) }} 
           className="field w-auto text-xs font-semibold"
         >
           <option value="all">All Statuses</option>
@@ -113,8 +116,8 @@ export default function Policies() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageItems.map((p) => {
-                    const isRDPlan = p.type?.toLowerCase().startsWith('rd')
+                  {filtered.map((p) => {
+                    const isRDPlan = p.planType === 'RD' || p.type?.toLowerCase().startsWith('rd')
                     return (
                       <tr 
                         key={p.id} 
@@ -149,25 +152,14 @@ export default function Policies() {
             </div>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
+          {policies.data.length >= limitCount && (
+            <div className="flex items-center justify-center pt-2">
               <button 
                 type="button" 
-                disabled={page === 1} 
-                onClick={() => setPage((p) => p - 1)} 
-                className="btn-ghost py-1.5 disabled:opacity-40"
+                onClick={() => setLimitCount(prev => prev + PAGE_SIZE)} 
+                className="btn-gold px-6 py-2 text-xs font-semibold uppercase tracking-wider"
               >
-                Prev
-              </button>
-              <span className="text-sm text-ink-2">Page {page} of {totalPages}</span>
-              <button 
-                type="button" 
-                disabled={page === totalPages} 
-                onClick={() => setPage((p) => p + 1)} 
-                className="btn-ghost py-1.5 disabled:opacity-40"
-              >
-                Next
+                Load More Policies
               </button>
             </div>
           )}

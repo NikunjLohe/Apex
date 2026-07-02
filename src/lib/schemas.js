@@ -41,7 +41,7 @@ export const customerSchema = z.object({
 
 export const planSchema = z
   .object({
-    type: z.enum(['RD-1Y', 'RD-2Y', 'RD-3Y', 'RD-4Y', 'RD-5Y', 'FD-1Y', 'FD-2Y', 'FD-3Y', 'FD-4Y', 'FD-5Y']),
+    type: z.string().min(1, 'Select plan type'),
     monthlyAmount: z.coerce.number().optional(),
     fdAmount: z.coerce.number().optional(),
     paymentDate: z.coerce.number().min(1).max(28).optional(),

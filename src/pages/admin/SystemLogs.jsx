@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { limit } from 'firebase/firestore'
 import { useCollection } from '../../hooks/useFirestore'
 import { fmtDateTime, formatINR, toDate, fmtDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
@@ -7,12 +8,16 @@ import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IClock, IAlert, IDoc } from '../../components/ui/icons'
 
 export default function SystemLogs() {
+  const [limitCount, setLimitCount] = useState(25)
+  const constraints = useMemo(() => [limit(limitCount)], [limitCount])
+  const depKey = String(limitCount)
+
   // Load collections
-  const payments = useCollection('payments')
-  const customers = useCollection('customers')
-  const plans = useCollection('plans')
-  const imports = useCollection('imports')
-  const payouts = useCollection('payouts')
+  const payments = useCollection('payments', constraints, depKey)
+  const customers = useCollection('customers', constraints, depKey)
+  const plans = useCollection('plans', constraints, depKey)
+  const imports = useCollection('imports', constraints, depKey)
+  const payouts = useCollection('payouts', constraints, depKey)
 
   const [activeTab, setActiveTab] = useState('audit')
 
@@ -238,6 +243,15 @@ export default function SystemLogs() {
             )
           )}
 
+          <div className="flex justify-center pt-4 border-t border-navy-4/50 mt-4">
+            <button 
+              type="button" 
+              onClick={() => setLimitCount(prev => prev + 25)} 
+              className="btn-gold py-2 px-6 text-xs font-semibold uppercase tracking-wider"
+            >
+              Load More Activity Logs
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -42,6 +42,7 @@ const AllReports = lazy(() => import('./pages/admin/AllReports'))
 const SystemLogs = lazy(() => import('./pages/admin/SystemLogs'))
 const NotFound = lazy(() => import('./pages/errors/NotFound'))
 const Unauthorized = lazy(() => import('./pages/errors/Unauthorized'))
+const ChangePassword = lazy(() => import('./pages/ChangePassword'))
 
 function Loader() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
           <Routes>
             {/* Public */}
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+            <Route path="/change-password" element={<Protected ignorePasswordForce><ChangePassword /></Protected>} />
 
             {/* App (protected, with chrome) */}
             <Route element={<Protected><Layout /></Protected>}>

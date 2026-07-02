@@ -77,11 +77,6 @@ export default function Members() {
                       <Link to={`/admin/members/${m.id}`} className="text-ink-1 font-semibold hover:text-gold-1 hover:underline">
                         {m.sponsorCode || '—'}
                       </Link>
-                      {m.password && (
-                        <div className="text-[11px] text-ink-2 mt-0.5">
-                          Pwd: <span className="select-all font-mono font-medium bg-navy-2 px-1 rounded border border-navy-4">{m.password}</span>
-                        </div>
-                      )}
                     </td>
                     <td><RankBadge rank={m.rank} size="sm" />{m.isSuperAdmin && <span className="ml-1 rounded-full bg-gold-1/15 px-2 py-0.5 text-[10px] font-bold text-gold">SUPER</span>}</td>
 
@@ -553,8 +548,10 @@ Welcome to the Apex Family.`
                       <span className="font-semibold text-ink-1 font-mono">{m?.sponsorCode || '—'}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] text-ink-2">Password</span>
-                      <span className="font-semibold text-ink-1 font-mono select-all bg-navy-3 px-1 rounded border border-navy-4">{m?.password || '—'}</span>
+                      <span className="block text-[10px] text-ink-2">Security Status</span>
+                      <span className={`font-bold ${m?.mustChangePassword ? 'text-gold' : 'text-ok'}`}>
+                        {m?.mustChangePassword ? 'Change Required' : 'Verified'}
+                      </span>
                     </div>
                   </div>
                 </div>

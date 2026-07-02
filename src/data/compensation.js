@@ -105,4 +105,7 @@ export const planYears = (type) => Number(String(type).match(/(\d)Y$/)?.[1] || 1
 /** plan index 0–4 from type */
 export const planIndex = (type) => planYears(type) - 1
 /** true if RD */
-export const isRD = (type) => String(type).startsWith('RD')
+export const isRD = (type, planType) => {
+  if (planType != null) return planType === 'RD'
+  return String(type || '').toUpperCase().startsWith('RD')
+}

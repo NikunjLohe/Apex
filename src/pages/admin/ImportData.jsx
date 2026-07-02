@@ -1,15 +1,27 @@
 import { useState, useMemo, useEffect } from 'react'
 import * as xlsx from 'xlsx'
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, addDoc, serverTimestamp, increment, where, query } from 'firebase/firestore'
+import { 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  setDoc, 
+  addDoc, 
+  serverTimestamp, 
+  increment, 
+  where, 
+  query, 
+  writeBatch 
+} from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
-import { MDA as DEFAULT_MDA, FD_PENSION as DEFAULT_FD_PENSION } from '../../data/compensation'
+import { MDA as DEFAULT_MDA, FD_PENSION as DEFAULT_FD_PENSION, isRD } from '../../data/compensation'
 import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { IDoc, IPlus, IUsers, ICash, IAlert, IClock, ICheck, IClose } from '../../components/ui/icons'
+import { IDoc, IPlus, IClock, IAlert, ICheck, IClose } from '../../components/ui/icons'
 import { Link } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
 
@@ -26,35 +38,33 @@ const DEFAULT_MAPPING = {
   startDate: 'Start Date',
 }
 
-const getCommissionRate = (planCode, policyYear, agentRankCode, agentRankNum, commsConfig, ranksConfig) => {
+const getCommissionRate = (planCode, policyYear, agentRankCode, agentRankNum, commsConfig, ranksConfig, planType) => {
   const code = String(planCode).toUpperCase()
   const yr = Number(policyYear) || 1
   const rankCodeStr = String(agentRankCode || 'AO').toUpperCase()
   
   // 1. Try to read from dynamic commissions configuration master
   if (commsConfig && commsConfig[code]?.[yr]?.[rankCodeStr] !== undefined) {
-    return Number(commsConfig[code][yr][rankCodeStr]) / 100 // convert e.g. 4.0 to 0.04
+    return Number(commsConfig[code][yr][rankCodeStr]) / 100
   }
   
   // 2. Fallback to default ranks configuration arrays (MDA or FD_PENSION)
   const rankIdx = (Number(agentRankNum) || 1) - 1
-  const isRD = code.startsWith('RD')
+  const isRDPlan = isRD(planCode, planType)
   
-  // Determine plan index (0-4) based on plan code or name
   let planIdx = 0
   const match = code.match(/(\d)/)
   if (match) {
     planIdx = Math.max(0, Math.min(4, Number(match[1]) - 1))
   }
   
-  if (isRD) {
+  if (isRDPlan) {
     const isYear1 = yr === 1
     const table = ranksConfig?.MDA || DEFAULT_MDA
     const mdaObj = table[rankIdx] || { y1: [0,0,0,0,0], y2: [0,0,0,0,0] }
     const rate = isYear1 ? mdaObj.y1?.[planIdx] : mdaObj.y2?.[planIdx]
     return rate || 0
   } else {
-    // FD / Pension
     const table = ranksConfig?.FD_PENSION || DEFAULT_FD_PENSION
     const row = table[rankIdx] || [0,0,0,0,0]
     return row[planIdx] || 0
@@ -68,8 +78,6 @@ export default function ImportData() {
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [data, setData] = useState([])
   const [agentsMap, setAgentsMap] = useState({})
-  const [existingPlans, setExistingPlans] = useState(new Set())
-  const [existingCustomers, setExistingCustomers] = useState(new Map()) // customerId -> firestore doc details
   const [plansMaster, setPlansMaster] = useState([])
 
   const [loading, setLoading] = useState(false)
@@ -78,31 +86,32 @@ export default function ImportData() {
   const [fileName, setFileName] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [importSummary, setImportSummary] = useState(null)
+  
+  // Duplicate statistics for pre-import validation report
+  const [duplicatesCount, setDuplicatesCount] = useState(0)
+  const [errorsCount, setErrorsCount] = useState(0)
 
   // Fetch Excel Mapping & Master dependencies
   useEffect(() => {
     ;(async () => {
-      // 0. Fetch commissions configurations
       try {
         const commSnap = await getDoc(doc(db, 'config', 'commissions'))
         if (commSnap.exists() && commSnap.data().commissions) {
           setCommissionsConfig(commSnap.data().commissions)
         }
       } catch (err) {
-        console.warn('Commissions config skipped (will use defaults):', err)
+        console.warn('Commissions config skipped:', err)
       }
 
-      // 1. Fetch Mapping Settings
       try {
         const settingsSnap = await getDoc(doc(db, 'config', 'settings'))
         if (settingsSnap.exists() && settingsSnap.data().excelMapping) {
           setMapping(settingsSnap.data().excelMapping)
         }
       } catch (err) {
-        console.warn('Excel mapping config fetch skipped (will use defaults):', err)
+        console.warn('Excel mapping config fetch skipped:', err)
       }
 
-      // 2. Fetch Agents Mapping
       try {
         const usersSnap = await getDocs(collection(db, 'users'))
         const uMap = {}
@@ -117,33 +126,6 @@ export default function ImportData() {
         console.warn('Agent mapping fetch failed:', err)
       }
 
-      // 3. Fetch Existing Plans (for duplicates check)
-      try {
-        const plansSnap = await getDocs(collection(db, 'plans'))
-        const planNumbers = new Set()
-        plansSnap.forEach(d => {
-          const p = d.data()
-          if (p.policyNumber) planNumbers.add(String(p.policyNumber).trim().toLowerCase())
-        })
-        setExistingPlans(planNumbers)
-      } catch (err) {
-        console.warn('Policy numbers check skipped:', err)
-      }
-
-      // 4. Fetch Customers
-      try {
-        const custSnap = await getDocs(collection(db, 'customers'))
-        const cMap = new Map()
-        custSnap.forEach(d => {
-          const c = d.data()
-          if (c.customerId) cMap.set(String(c.customerId).trim().toLowerCase(), { id: d.id, ...c })
-        })
-        setExistingCustomers(cMap)
-      } catch (err) {
-        console.warn('CIF Customer details mapping skipped:', err)
-      }
-
-      // 5. Fetch Plans Master catalog
       try {
         const masterSnap = await getDocs(collection(db, 'plans_master'))
         const mPlans = []
@@ -152,19 +134,18 @@ export default function ImportData() {
         })
         setPlansMaster(mPlans)
       } catch (err) {
-        console.warn('Configured Plan catalog list lookup failed. Falling back to default plan structures:', err)
+        console.warn('Configured Plan list lookup failed:', err)
         setPlansMaster([
-          { name: 'RD 1 Year', code: 'RD1Y', duration: 1 },
-          { name: 'RD 2 Year', code: 'RD2Y', duration: 2 },
-          { name: 'RD 3 Year', code: 'RD3Y', duration: 3 },
-          { name: 'RD 4 Year', code: 'RD4Y', duration: 4 },
-          { name: 'Pension', code: 'PENS', duration: 5 },
+          { name: 'RD 1 Year', code: 'RD1Y', duration: 1, type: 'RD' },
+          { name: 'RD 2 Year', code: 'RD2Y', duration: 2, type: 'RD' },
+          { name: 'RD 3 Year', code: 'RD3Y', duration: 3, type: 'RD' },
+          { name: 'RD 4 Year', code: 'RD4Y', duration: 4, type: 'RD' },
+          { name: 'Pension', code: 'PENS', duration: 5, type: 'FD' },
         ])
       }
     })()
   }, [])
 
-  // Drag and Drop handlers
   const handleDrag = (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -190,13 +171,48 @@ export default function ImportData() {
     }
   }
 
-  // Parse file and run validations
+  // Check duplicate policy numbers & customer IDs in database (using query batches of 30)
+  const queryExistingDuplicates = async (policyNumbers, customerIds) => {
+    const existingPolicies = new Set()
+    const existingCustomerIds = new Set()
+
+    const uniquePolicies = [...new Set(policyNumbers)].filter(Boolean)
+    const uniqueCusts = [...new Set(customerIds)].filter(Boolean)
+
+    // Chunk policy queries
+    for (let i = 0; i < uniquePolicies.length; i += 30) {
+      const chunk = uniquePolicies.slice(i, i + 30)
+      const q = query(collection(db, 'plans'), where('policyNumber', 'in', chunk))
+      const snap = await getDocs(q)
+      snap.forEach(d => {
+        const val = d.data().policyNumber
+        if (val) existingPolicies.add(String(val).trim().toLowerCase())
+      })
+    }
+
+    // Chunk customer queries
+    for (let i = 0; i < uniqueCusts.length; i += 30) {
+      const chunk = uniqueCusts.slice(i, i + 30)
+      const q = query(collection(db, 'customers'), where('customerId', 'in', chunk))
+      const snap = await getDocs(q)
+      snap.forEach(d => {
+        const val = d.data().customerId
+        if (val) existingCustomerIds.add(String(val).trim().toLowerCase())
+      })
+    }
+
+    return { existingPolicies, existingCustomerIds }
+  }
+
   const processFile = (file) => {
     setFileName(file.name)
     setLoading(true)
     setImportSummary(null)
+    setDuplicatesCount(0)
+    setErrorsCount(0)
+
     const reader = new FileReader()
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target.result
         const wb = xlsx.read(bstr, { type: 'binary', cellDates: true })
@@ -204,7 +220,7 @@ export default function ImportData() {
         const ws = wb.Sheets[wsname]
         const rawRows = xlsx.utils.sheet_to_json(ws)
 
-        // Validation mapping check
+        // Columns check
         const excelCols = rawRows.length > 0 ? Object.keys(rawRows[0]) : []
         const missingMappings = []
         Object.entries(mapping).forEach(([key, colName]) => {
@@ -217,7 +233,16 @@ export default function ImportData() {
           toast.error(`Column mismatch! Expected headers not found: ${missingMappings.slice(0, 2).join(', ')}...`)
         }
 
+        // Collect all policy and customer codes to query duplicates in batch
+        const policyNumbers = rawRows.map(r => String(r[mapping.policyNumber] || '').trim())
+        const customerIds = rawRows.map(r => String(r[mapping.customerId] || '').trim())
+
+        // Asynchronous batch check from database
+        const { existingPolicies, existingCustomerIds } = await queryExistingDuplicates(policyNumbers, customerIds)
+
         const localPolicyNumbers = new Set()
+        let dups = 0
+        let errs = 0
 
         const processed = rawRows.map((row, idx) => {
           const cId = String(row[mapping.customerId] || '').trim()
@@ -241,29 +266,39 @@ export default function ImportData() {
             errors.push(`Agent Code "${agentCode}" not found`)
           }
 
-          // 2. Duplicate Policy checks
+          // 2. Duplicate Policy & Customer check
           const policyLower = policyNo.toLowerCase()
+          const custLower = cId.toLowerCase()
+
           if (!policyNo) {
             isValid = false
             errors.push('Missing Policy Number')
-          } else if (existingPlans.has(policyLower)) {
+          } else if (existingPolicies.has(policyLower)) {
             isValid = false
+            dups++
             errors.push(`Duplicate Policy: ${policyNo} already exists in database`)
           } else if (localPolicyNumbers.has(policyLower)) {
             isValid = false
+            dups++
             errors.push(`Duplicate Policy: ${policyNo} defined twice in Excel sheet`)
           } else {
             localPolicyNumbers.add(policyLower)
           }
 
-          // 3. Plan Code Master check
+          if (existingCustomerIds.has(custLower)) {
+            isValid = false
+            dups++
+            errors.push(`Duplicate Customer CIF: ${cId} already registered in database`)
+          }
+
+          // 3. Plan Master check
           const masterPlan = plansMaster.find(p => p.code.toLowerCase() === planCode || p.name.toLowerCase() === planCode)
           if (!masterPlan) {
             isValid = false
             errors.push(`Plan "${planCode}" does not match active Plan Master`)
           }
 
-          // 4. Missing required CIF/Name checks
+          // 4. Missing required CIF/Name check
           if (!cId) {
             isValid = false
             errors.push('Missing Customer ID (CIF)')
@@ -274,14 +309,14 @@ export default function ImportData() {
           }
 
           // 5. Amount validation
-          const isRDType = masterPlan && (masterPlan.code.toLowerCase().startsWith('rd') || masterPlan.name.toLowerCase().includes('rd'))
+          const isRDType = masterPlan && masterPlan.type === 'RD'
           if (isRDType && mAmount <= 0) {
             isValid = false
             errors.push('RD Plan requires positive Monthly Amount')
           }
-          if (!isRDType && tAmount <= 0) {
+          if (masterPlan && masterPlan.type === 'FD' && tAmount <= 0) {
             isValid = false
-            errors.push('Lump Sum/Pension requires positive Total Amount')
+            errors.push('FD/Pension requires positive Total Amount')
           }
 
           // 6. Date validation
@@ -297,6 +332,10 @@ export default function ImportData() {
             }
           }
 
+          if (!isValid && !errors.some(e => e.includes('Duplicate'))) {
+            errs++
+          }
+
           return {
             rowNum: idx + 2,
             customerId: cId,
@@ -306,6 +345,7 @@ export default function ImportData() {
             agentCode,
             policyNumber: policyNo,
             planCode: masterPlan?.code || planCode,
+            planType: masterPlan?.type || 'RD',
             duration: masterPlan?.duration || 1,
             monthlyAmount: mAmount,
             totalAmount: tAmount,
@@ -317,6 +357,8 @@ export default function ImportData() {
           }
         })
 
+        setDuplicatesCount(dups)
+        setErrorsCount(errs)
         setData(processed)
       } catch (err) {
         console.error('Error parsing sheet:', err)
@@ -328,51 +370,36 @@ export default function ImportData() {
     reader.readAsBinaryString(file)
   }
 
-  // Execute Import sequentially
+  // Execute Import sequentially in Firestore writeBatch chunks of 50
   const handleImport = async () => {
     if (data.length === 0) return
+    const validRows = data.filter(d => d.valid)
+    if (validRows.length === 0) {
+      toast.error('No valid rows to import')
+      return
+    }
+
     setImporting(true)
     setProgress(0)
 
     let successCount = 0
-    let duplicateCount = 0
     let failedCount = 0
     const logs = []
 
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i]
-      if (!row.valid) {
-        failedCount++
-        logs.push({
-          row: row.rowNum,
-          level: 'error',
-          message: row.errors.join('; ')
-        })
-        continue
-      }
+    const batchSize = 50
+    for (let i = 0; i < validRows.length; i += batchSize) {
+      const chunk = validRows.slice(i, i + batchSize)
+      const batch = writeBatch(db)
 
-      try {
-        const agentRef = row.agent
-        const CIF = row.customerId.toLowerCase()
-        let customerDocId = ''
+      for (const row of chunk) {
+        try {
+          const agentRef = row.agent
+          
+          // 1. Create Customer
+          const custRef = doc(collection(db, 'customers'))
+          const customerDocId = custRef.id
 
-        // 1. Create or Update Customer
-        const existingCust = existingCustomers.get(CIF)
-        if (existingCust) {
-          customerDocId = existingCust.id
-          await updateDoc(doc(db, 'customers', customerDocId), {
-            name: row.customerName,
-            phone: row.mobile || existingCust.phone,
-            address: row.address || existingCust.address,
-            plansCount: increment(1),
-            updatedAt: serverTimestamp(),
-          })
-          logs.push({ row: row.rowNum, level: 'warning', message: `Customer CIF ${row.customerId} already exists. Updated info & linked new policy.` })
-        } else {
-          // Create new customer
-          const newCustRef = doc(collection(db, 'customers'))
-          customerDocId = newCustRef.id
-          await setDoc(newCustRef, {
+          batch.set(custRef, {
             customerId: row.customerId,
             name: row.customerName,
             phone: row.mobile || '0000000000',
@@ -381,118 +408,123 @@ export default function ImportData() {
             enrolledBy: agentRef.id,
             enrolledByName: agentRef.name,
             plansCount: 1,
-            kycStatus: 'verified', // Auto-approved via bank ledger
+            kycStatus: 'verified',
             createdAt: serverTimestamp(),
           })
-          // Update local map to avoid duplicating within the same file import session
-          existingCustomers.set(CIF, { id: customerDocId, name: row.customerName, phone: row.mobile, address: row.address })
+
+          // 2. Create Policy (Plan doc)
+          const policyRef = doc(collection(db, 'plans'))
+          const isRDPlan = row.planType === 'RD'
+          const calculatedAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
+
+          batch.set(policyRef, {
+            customerId: customerDocId,
+            customerName: row.customerName,
+            customerAccount: row.customerId,
+            policyNumber: row.policyNumber,
+            agentId: agentRef.id,
+            agentName: agentRef.name,
+            branchId: agentRef.branchId || null,
+            type: row.planCode,
+            planType: row.planType,
+            monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
+            fdAmount: !isRDPlan ? row.totalAmount : 0,
+            startDate: row.startDate,
+            status: 'active',
+            commissionCalculated: true,
+            createdAt: serverTimestamp(),
+          })
+
+          // 3. Update Agent Profile business stats
+          const agentDocRef = doc(db, 'users', agentRef.id)
+          batch.update(agentDocRef, {
+            totalCustomers: increment(1),
+            activePolicies: increment(1),
+            businessVolume: increment(calculatedAmount),
+            recentImportDate: serverTimestamp(),
+          })
+
+          // 4. Calculate Commissions
+          const agentRankObj = getRank(agentRef.rank)
+          const rate = getCommissionRate(row.planCode, 1, agentRankObj.code, agentRef.rank, commissionsConfig, ranksConfig, row.planType)
+          const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
+          const commissionAmount = baseAmount * rate
+
+          const calculationDate = new Date()
+          const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
+          const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
+
+          // Create Commission Doc
+          const commRef = doc(collection(db, 'commissions'))
+          const commId = commRef.id
+          batch.set(commRef, {
+            agentId: agentRef.id,
+            agentName: agentRef.name,
+            sponsorCode: agentRef.sponsorCode || '',
+            customerId: customerDocId,
+            customerName: row.customerName,
+            customerAccount: row.customerId,
+            policyId: policyRef.id,
+            policyNumber: row.policyNumber,
+            planCode: row.planCode,
+            planType: row.planType,
+            policyYear: 1,
+            percentage: rate * 100,
+            amount: commissionAmount,
+            month: monthNum,
+            year: yearNum,
+            calculationDate: serverTimestamp(),
+            status: 'unpaid',
+          })
+
+          // Create Income Ledger entry
+          const ledgerRef = doc(collection(db, 'income_ledger'))
+          batch.set(ledgerRef, {
+            createdAt: serverTimestamp(),
+            policyNumber: row.policyNumber,
+            customerName: row.customerName,
+            agentName: agentRef.name,
+            sponsorCode: agentRef.sponsorCode || '',
+            planCode: row.planCode,
+            type: 'commission',
+            percentage: rate * 100,
+            amount: commissionAmount,
+            refId: commId,
+            status: 'unpaid',
+          })
+
+          successCount++
+        } catch (err) {
+          console.error('Failed importing row:', row, err)
+          failedCount++
+          logs.push({ row: row.rowNum, level: 'error', message: `Database write failure: ${err.message}` })
         }
-
-        // 2. Create Policy (Plan doc)
-        const policyRef = doc(collection(db, 'plans'))
-        const isRDPlan = row.planCode.toLowerCase().startsWith('rd')
-        const calculatedAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
-        
-        await setDoc(policyRef, {
-          customerId: customerDocId,
-          customerName: row.customerName,
-          customerAccount: row.customerId, // CIF number
-          policyNumber: row.policyNumber,
-          agentId: agentRef.id,
-          agentName: agentRef.name,
-          branchId: agentRef.branchId || null,
-          type: row.planCode,
-          duration: row.duration,
-          monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
-          fdAmount: !isRDPlan ? row.totalAmount : 0,
-          startDate: row.startDate,
-          status: 'active',
-          commissionCalculated: false, // Phase 4 engine flag placeholder
-          createdAt: serverTimestamp(),
-        })
-
-        // 3. Update Agent Profile business stats
-        const isNewCustomer = !existingCust
-        await updateDoc(doc(db, 'users', agentRef.id), {
-          totalCustomers: increment(isNewCustomer ? 1 : 0),
-          activePolicies: increment(1),
-          businessVolume: increment(calculatedAmount),
-          recentImportDate: serverTimestamp(),
-        })
-
-        // 4. Calculate and generate Commission & Ledger entries
-        const agentRankObj = getRank(agentRef.rank)
-        const rate = getCommissionRate(row.planCode, 1, agentRankObj.code, agentRef.rank, commissionsConfig, ranksConfig)
-        const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
-        const commissionAmount = baseAmount * rate
-
-        const calculationDate = new Date()
-        const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
-        const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
-
-        // Create Commission doc
-        const commRef = doc(collection(db, 'commissions'))
-        const commId = commRef.id
-        await setDoc(commRef, {
-          agentId: agentRef.id,
-          agentName: agentRef.name,
-          sponsorCode: agentRef.sponsorCode || '',
-          customerId: customerDocId,
-          customerName: row.customerName,
-          customerAccount: row.customerId,
-          policyId: policyRef.id,
-          policyNumber: row.policyNumber,
-          planCode: row.planCode,
-          policyYear: 1,
-          percentage: rate * 100, // store as percentage e.g. 4.0
-          amount: commissionAmount,
-          month: monthNum,
-          year: yearNum,
-          calculationDate: serverTimestamp(),
-          status: 'unpaid',
-        })
-
-        // Create Income Ledger entry
-        const ledgerRef = doc(collection(db, 'income_ledger'))
-        await setDoc(ledgerRef, {
-          createdAt: serverTimestamp(),
-          policyNumber: row.policyNumber,
-          customerName: row.customerName,
-          agentName: agentRef.name,
-          sponsorCode: agentRef.sponsorCode || '',
-          planCode: row.planCode,
-          type: 'commission',
-          percentage: rate * 100,
-          amount: commissionAmount,
-          refId: commId,
-          status: 'unpaid',
-        })
-
-        // Mark policy commissionCalculated as true
-        await updateDoc(doc(db, 'plans', policyRef.id), {
-          commissionCalculated: true,
-        })
-
-        successCount++
-      } catch (err) {
-        console.error('Failed importing row:', row, err)
-        failedCount++
-        logs.push({ row: row.rowNum, level: 'error', message: `Database write failure: ${err.message}` })
       }
-      setProgress(Math.round(((i + 1) / data.length) * 100))
+
+      try {
+        await batch.commit()
+      } catch (err) {
+        console.error('Batch commit failed:', err)
+        failedCount += chunk.length
+        chunk.forEach(r => {
+          logs.push({ row: r.rowNum, level: 'error', message: `Batch commit fail: ${err.message}` })
+        })
+      }
+
+      setProgress(Math.round(((i + chunk.length) / validRows.length) * 100))
     }
 
-    // Write Import center session log
+    // Write Import summary session log
     try {
       await addDoc(collection(db, 'imports'), {
         fileName,
         importDate: serverTimestamp(),
         totalRows: data.length,
         successRows: successCount,
-        duplicateRows: duplicateCount,
-        failedRows: failedCount,
-        logs: logs.slice(0, 100), // Cap logs array size
-        status: failedCount === data.length ? 'failed' : 'completed',
+        duplicateRows: duplicatesCount,
+        failedRows: failedCount + (data.length - validRows.length),
+        logs: logs.slice(0, 100),
+        status: successCount > 0 ? 'completed' : 'failed',
         triggeredBy: profile?.name || 'Administrator',
       })
     } catch (e) {
@@ -502,14 +534,14 @@ export default function ImportData() {
     setImportSummary({
       total: data.length,
       success: successCount,
-      failed: failedCount,
+      failed: failedCount + (data.length - validRows.length),
       logs,
     })
 
     setImporting(false)
     setData([])
     setFileName('')
-    toast.success(`Import Session Finished! Successful: ${successCount}, Failed: ${failedCount}`)
+    toast.success(`Import Session Finished! Successful: ${successCount}`)
   }
 
   const validRows = data.filter(d => d.valid).length
@@ -567,7 +599,9 @@ export default function ImportData() {
                   <IDoc size={18} className="text-gold-1" />
                   <div>
                     <p className="text-xs font-semibold text-ink-1 font-mono">{fileName}</p>
-                    <p className="text-[10px] text-ink-2 mt-0.5">{data.length} records parsed · {validRows} ready to import</p>
+                    <p className="text-[10px] text-ink-2 mt-0.5">
+                      {data.length} records parsed · {validRows} ready to import · {duplicatesCount} duplicates skipped · {errorsCount} formatting errors
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -609,7 +643,7 @@ export default function ImportData() {
         <div className="card p-8 text-center space-y-4 bg-navy-3 border-gold-1 border">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-gold mx-auto" />
           <h3 className="text-base font-bold text-ink-1 font-serif">Executing Database Import</h3>
-          <p className="text-xs text-ink-2">Processing CIF validation codes, ledger allocations, and updating agent volumes...</p>
+          <p className="text-xs text-ink-2">Processing CIF codes, ledger allocations, and updating agent volumes in chunks...</p>
           <div className="w-full bg-navy-2 rounded-full h-2.5 mt-4 max-w-md mx-auto overflow-hidden border border-navy-4">
             <div className="bg-gold h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
@@ -630,7 +664,6 @@ export default function ImportData() {
             </button>
           </div>
 
-          {/* Stats count widgets */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-navy-2/50 border border-navy-4 rounded p-4 text-center">
               <span className="text-[10px] uppercase font-bold text-ink-2 tracking-wider">Total records</span>
@@ -641,12 +674,11 @@ export default function ImportData() {
               <p className="text-2xl font-bold font-serif text-ok mt-1">{importSummary.success}</p>
             </div>
             <div className="bg-danger/5 border border-danger/20 rounded p-4 text-center">
-              <span className="text-[10px] uppercase font-bold text-danger tracking-wider">Row Failures</span>
+              <span className="text-[10px] uppercase font-bold text-danger tracking-wider">Row Failures / Skipped Dups</span>
               <p className="text-2xl font-bold font-serif text-danger mt-1">{importSummary.failed}</p>
             </div>
           </div>
 
-          {/* Detailed Row Warnings / Errors listing */}
           {importSummary.logs.length > 0 && (
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">Row Validation Logs</h4>
@@ -670,9 +702,14 @@ export default function ImportData() {
       {!importing && data.length > 0 && (
         <div className="card p-5 space-y-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5">
-              Parsed Sheet Verification Preview
-            </h3>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5">
+                Parsed Sheet Verification Preview
+              </h3>
+              <p className="text-[10px] text-ink-2 mt-0.5">
+                Skipping {duplicatesCount} duplicate database records. Ready to write {validRows} rows.
+              </p>
+            </div>
             <button 
               onClick={handleImport}
               disabled={validRows === 0} 

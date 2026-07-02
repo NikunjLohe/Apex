@@ -5,12 +5,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
-import { useDoc } from '../../hooks/useFirestore'
+import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { planSchema } from '../../lib/schemas'
 import { createPlan } from '../../lib/plans'
 import { computePlan } from '../../lib/calc'
 import { useRanks } from '../../contexts/RanksContext'
-import { ALL_PLANS, isRD } from '../../data/compensation'
+import { isRD } from '../../data/compensation'
 import { formatINR, fmtDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
@@ -21,18 +21,35 @@ export default function PlanEnroll() {
   const { profile } = useAuth()
   const { config } = useRanks()
   const { data: customer, loading } = useDoc(`customers/${id}`)
+  const plansMaster = useCollection('plans_master')
   const [submitting, setSubmitting] = useState(false)
+
+  const activePlans = useMemo(() => {
+    return (plansMaster.data || []).filter(p => p.status !== 'inactive')
+  }, [plansMaster.data])
+
+  const defaultPlanCode = useMemo(() => {
+    return activePlans[0]?.code || 'RD-3Y'
+  }, [activePlans])
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm({
     resolver: zodResolver(planSchema),
-    defaultValues: { type: 'RD-3Y', startDate: format(new Date(), 'yyyy-MM-dd'), paymentDate: 1 },
+    defaultValues: { type: defaultPlanCode, startDate: format(new Date(), 'yyyy-MM-dd'), paymentDate: 1 },
   })
 
   const type = watch('type')
   const monthlyAmount = watch('monthlyAmount')
   const fdAmount = watch('fdAmount')
   const startDate = watch('startDate')
-  const rd = isRD(type)
+
+  const selectedPlanObj = useMemo(() => {
+    return activePlans.find(p => p.code === type)
+  }, [activePlans, type])
+
+  const rd = useMemo(() => {
+    if (!selectedPlanObj) return String(type).toUpperCase().startsWith('RD')
+    return selectedPlanObj.type === 'RD'
+  }, [selectedPlanObj, type])
 
   const preview = useMemo(() => {
     try {
@@ -48,15 +65,20 @@ export default function PlanEnroll() {
     }
   }, [type, monthlyAmount, fdAmount, startDate, config])
 
-  if (loading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={4} /></div>
+  if (loading || plansMaster.loading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={4} /></div>
   if (!customer) return <EmptyState title="Customer not found" />
 
   const onSubmit = async (form) => {
     setSubmitting(true)
     const tId = toast.loading('Creating plan…')
     try {
+      const selectedPlan = activePlans.find(p => p.code === form.type)
+      const enrichedForm = {
+        ...form,
+        planType: selectedPlan?.type || 'RD'
+      }
       const { planAccountNumber } = await createPlan({
-        form,
+        form: enrichedForm,
         customer,
         agent: { uid: profile?.uid, name: profile?.name, branchId: profile?.branchId },
         ranksConfig: config,
@@ -81,12 +103,12 @@ export default function PlanEnroll() {
         <div className="card space-y-4 p-5">
           <div>
             <label className="label">Plan Type *</label>
-            <select className="field" {...register('type')}>
-              <optgroup label="Recurring Deposit">
-                {ALL_PLANS.filter((p) => p.startsWith('RD')).map((p) => <option key={p} value={p}>{p}</option>)}
+            <select className="field text-xs" {...register('type')}>
+              <optgroup label="Recurring Deposit (RD)">
+                {activePlans.filter(p => p.type === 'RD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
-              <optgroup label="Fixed Deposit">
-                {ALL_PLANS.filter((p) => p.startsWith('FD')).map((p) => <option key={p} value={p}>{p}</option>)}
+              <optgroup label="Fixed Deposit (FD)">
+                {activePlans.filter(p => p.type === 'FD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
             </select>
           </div>
