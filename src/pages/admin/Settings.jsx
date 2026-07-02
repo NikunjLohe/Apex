@@ -66,6 +66,10 @@ export default function Settings() {
       headOffice: settingsData?.headOffice || '',
       supportPhone: settingsData?.supportPhone || '',
       receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
+      enableAgentAlerts: settingsData?.enableAgentAlerts ?? true,
+      enablePayoutAlerts: settingsData?.enablePayoutAlerts ?? true,
+      enablePromoAlerts: settingsData?.enablePromoAlerts ?? true,
+      enableImportAlerts: settingsData?.enableImportAlerts ?? true,
     })
     if (settingsData?.excelMapping) {
       setExcelMapping(settingsData.excelMapping)
@@ -384,8 +388,67 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Side column: Placeholders */}
+            {/* Side column: Notifications Settings & Placeholders */}
             <div className="space-y-5">
+              <div className="card p-5 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
+                  <ISettings size={14} /> Notification Settings
+                </h4>
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-ink-1 block">New Agent Onboarding Alerts</span>
+                      <span className="text-[10px] text-ink-2">Push notifications when new recruits sign up.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-navy-4 text-gold focus:ring-0"
+                      checked={systemForm.enableAgentAlerts ?? true}
+                      onChange={(e) => setSystemForm({ ...systemForm, enableAgentAlerts: e.target.checked })} 
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-ink-1 block">Payout Engine Confirmations</span>
+                      <span className="text-[10px] text-ink-2">Alert agents automatically on payouts generation.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-navy-4 text-gold focus:ring-0"
+                      checked={systemForm.enablePayoutAlerts ?? true}
+                      onChange={(e) => setSystemForm({ ...systemForm, enablePayoutAlerts: e.target.checked })} 
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-ink-1 block">Promotion Decisions Alerts</span>
+                      <span className="text-[10px] text-ink-2">Alerts agents on rank advancement results.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-navy-4 text-gold focus:ring-0"
+                      checked={systemForm.enablePromoAlerts ?? true}
+                      onChange={(e) => setSystemForm({ ...systemForm, enablePromoAlerts: e.target.checked })} 
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-ink-1 block">Excel Upload Summaries</span>
+                      <span className="text-[10px] text-ink-2">Post notifications when bank excel import finishes.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-navy-4 text-gold focus:ring-0"
+                      checked={systemForm.enableImportAlerts ?? true}
+                      onChange={(e) => setSystemForm({ ...systemForm, enableImportAlerts: e.target.checked })} 
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="card p-5 space-y-3.5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
                   <ISettings size={14} /> Future Settings Modules

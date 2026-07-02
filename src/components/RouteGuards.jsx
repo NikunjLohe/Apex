@@ -21,7 +21,7 @@ export function Protected({ children, capability }) {
 
   if (authLoading || (isAuthenticated && profileLoading && !profile)) return <FullLoader />
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
-  if (capability && !can(capability)) return <Navigate to="/dashboard" replace />
+  if (capability && !can(capability)) return <Navigate to="/unauthorized" replace />
   return children
 }
 

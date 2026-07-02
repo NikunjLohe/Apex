@@ -40,6 +40,8 @@ const Policies = lazy(() => import('./pages/admin/Policies'))
 const PolicyDetail = lazy(() => import('./pages/admin/PolicyDetail'))
 const AllReports = lazy(() => import('./pages/admin/AllReports'))
 const SystemLogs = lazy(() => import('./pages/admin/SystemLogs'))
+const NotFound = lazy(() => import('./pages/errors/NotFound'))
+const Unauthorized = lazy(() => import('./pages/errors/Unauthorized'))
 
 function Loader() {
   return (
@@ -121,10 +123,11 @@ export default function App() {
               <Route path="/admin/overview" element={<Protected capability={CAP.SUPER_ADMIN}><Overview /></Protected>} />
               <Route path="/admin/all-reports" element={<Protected capability={CAP.SUPER_ADMIN}><AllReports /></Protected>} />
               <Route path="/admin/logs" element={<Protected capability={CAP.SUPER_ADMIN}><SystemLogs /></Protected>} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
             </Route>
 
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

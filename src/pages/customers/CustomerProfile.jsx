@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { where } from 'firebase/firestore'
 import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
+import { useAuth } from '../../contexts/AuthContext'
 import { setKycStatus, updateCustomer } from '../../lib/customers'
 import { formatINR, fmtDate, fmtDateTime, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -30,8 +31,15 @@ export default function CustomerProfile() {
     [payments.data]
   )
 
+  const { profile, isSuperAdmin } = useAuth()
+  const isAgent = !isSuperAdmin && (profile?.rank || 0) < 10
+
   if (loading) return <div className="mx-auto max-w-4xl"><SkeletonForm fields={5} /></div>
   if (!customer) return <EmptyState title="Customer not found" message="This customer may have been removed." />
+  
+  if (isAgent && customer.enrolledBy !== profile?.uid) {
+    return <EmptyState title="Access Denied" message="You are not authorized to view this customer's details." />
+  }
 
   const confirmKyc = async () => {
     try {
