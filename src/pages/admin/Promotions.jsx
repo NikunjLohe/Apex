@@ -27,8 +27,9 @@ export default function Promotions() {
   // Fetch recommendations and history
   const fetchCycleData = async () => {
     setLoading(true)
+    
+    // 1. Fetch recommendations
     try {
-      // Fetch recommendations
       const recSnap = await getDocs(
         query(collection(db, 'promotion_recommendations'), where('cycle', '==', selectedCycle))
       )
@@ -37,8 +38,13 @@ export default function Promotions() {
         recs.push({ id: d.id, ...d.data() })
       })
       setRecommendations(recs)
+    } catch (err) {
+      console.warn('Could not load promotion recommendations (database rules might need updating):', err)
+      setRecommendations([])
+    }
 
-      // Fetch history
+    // 2. Fetch history
+    try {
       const histSnap = await getDocs(
         query(collection(db, 'promotions_history'), where('promotionCycle', '==', selectedCycle))
       )
@@ -48,11 +54,11 @@ export default function Promotions() {
       })
       setHistoryList(hist)
     } catch (err) {
-      console.error(err)
-      toast.error('Failed to load promotion data')
-    } finally {
-      setLoading(false)
+      console.warn('Could not load promotions history (database rules might need updating):', err)
+      setHistoryList([])
     }
+
+    setLoading(false)
   }
 
   useEffect(() => {
