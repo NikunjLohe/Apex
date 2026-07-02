@@ -43,16 +43,13 @@ export default function Settings() {
   const [promotionsState, setPromotionsState] = useState({})
   const [savingPromotions, setSavingPromotions] = useState(false)
 
-  // Load Initial Settings
   useEffect(() => {
-    if (settingsData) {
-      setSystemForm({
-        companyName: settingsData.companyName || 'APEX Savings',
-        headOffice: settingsData.headOffice || '',
-        supportPhone: settingsData.supportPhone || '',
-        receiptFooter: settingsData.receiptFooter || 'This is a computer-generated receipt · APEX',
-      })
-    }
+    setSystemForm({
+      companyName: settingsData?.companyName || 'APEX Savings',
+      headOffice: settingsData?.headOffice || '',
+      supportPhone: settingsData?.supportPhone || '',
+      receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
+    })
   }, [settingsData])
 
   // Load initial commissions
