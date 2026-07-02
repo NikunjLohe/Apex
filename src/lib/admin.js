@@ -57,10 +57,28 @@ export function updateMember(uid, data) {
   })
 }
 
-export async function createBranch(form) {
+export async function createBranch(form, existingBranches = []) {
   const ref = doc(collection(db, 'branches'))
-  await setDoc(ref, { ...form, createdAt: serverTimestamp() })
-  return { id: ref.id }
+  let maxId = 0
+  existingBranches.forEach(b => {
+    if (b.branchCode) {
+      const numStr = b.branchCode.replace(/^[A-Z]+/i, '')
+      const num = parseInt(numStr, 10)
+      if (!isNaN(num) && num > maxId) {
+        maxId = num
+      }
+    }
+  })
+  const nextId = maxId + 1
+  const branchCode = `BR${String(nextId).padStart(6, '0')}`
+
+  await setDoc(ref, {
+    ...form,
+    branchCode,
+    status: form.status || 'active',
+    createdAt: serverTimestamp(),
+  })
+  return { id: ref.id, branchCode }
 }
 
 export function updateBranch(id, data) {

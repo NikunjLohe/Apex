@@ -21,7 +21,14 @@ function buildConfigFromRanksList(ranksList) {
   // Sort by rank number ascending
   const sorted = [...ranksList].sort((a, b) => a.rank - b.rank)
 
-  const RANKS = sorted.map(r => ({ rank: r.rank, code: r.code, name: r.name }))
+  const RANKS = sorted.map(r => ({
+    rank: r.rank,
+    code: r.code,
+    name: r.name,
+    recruitPermission: r.recruitPermission !== undefined ? Boolean(r.recruitPermission) : (Number(r.rank) > 1),
+    promoDesc: r.promoDesc || '',
+    status: r.status || 'active',
+  }))
   const MFA = sorted.map(r => Number(r.mfa) || 0)
   const TA = sorted.map(r => Number(r.ta) || 0)
   const PB_TARGET = sorted.map(r => Number(r.pbTarget) || 0)
@@ -81,7 +88,12 @@ export function RanksProvider({ children }) {
     if (ranksList.length === 0) {
       // Fallback configuration matching hardcoded tables
       return {
-        RANKS: DEFAULT_RANKS,
+        RANKS: DEFAULT_RANKS.map(r => ({
+          ...r,
+          recruitPermission: Number(r.rank) > 1,
+          promoDesc: '',
+          status: 'active',
+        })),
         MFA: DEFAULT_MFA,
         TA: DEFAULT_TA,
         PB_TARGET: DEFAULT_PB_TARGET,
@@ -123,6 +135,9 @@ export function RanksProvider({ children }) {
         mdaY1: r.mdaY1.map(val => Number(val) || 0),
         mdaY2: r.mdaY2.map(val => val === null ? null : Number(val) || 0),
         fdPension: r.fdPension.map(val => Number(val) || 0),
+        recruitPermission: r.recruitPermission !== undefined ? Boolean(r.recruitPermission) : (Number(r.rank) > 1),
+        promoDesc: r.promoDesc || '',
+        status: r.status || 'active',
       })),
       updatedAt: serverTimestamp(),
     })

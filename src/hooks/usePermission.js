@@ -7,6 +7,7 @@
 // ============================================================================
 import { useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useRanks } from '../contexts/RanksContext'
 
 export const CAP = {
   ONBOARD: 'onboard',
@@ -27,7 +28,7 @@ export function can(rank, isSuperAdmin, capability) {
     case CAP.COLLECT:
       return r >= 10 && r <= 18
     case CAP.RECRUIT:
-      return r >= 2 && r <= 18
+      return r >= 2 && r <= 18 // Fallback default
     case CAP.BRANCH_REPORTS:
     case CAP.MANAGE_DOWNLINE:
       return r >= 10
@@ -44,14 +45,25 @@ export function can(rank, isSuperAdmin, capability) {
 
 export function usePermission() {
   const { rank, isSuperAdmin } = useAuth()
+  const { config } = useRanks()
   return useMemo(
     () => ({
       rank,
       isSuperAdmin,
-      can: (capability) => can(rank, isSuperAdmin, capability),
+      can: (capability) => {
+        if (isSuperAdmin) return true
+        if (capability === CAP.RECRUIT) {
+          const rankObj = config?.RANKS?.find((r) => r.rank === Number(rank))
+          if (rankObj && rankObj.recruitPermission !== undefined) {
+            return Boolean(rankObj.recruitPermission)
+          }
+          return Number(rank) >= 2 // fallback default
+        }
+        return can(rank, isSuperAdmin, capability)
+      },
       CAP,
     }),
-    [rank, isSuperAdmin]
+    [rank, isSuperAdmin, config]
   )
 }
 

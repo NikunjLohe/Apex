@@ -1,54 +1,148 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, collection, addDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { useDoc } from '../../hooks/useFirestore'
+import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR } from '../../utils/format'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
-import { IPlus, IEdit, IClose } from '../../components/ui/icons'
+import { IPlus, IEdit, IClose, IDoc, ICash, ITrophy, ISettings, IBuilding } from '../../components/ui/icons'
 
 export default function Settings() {
   const { isSuperAdmin } = useAuth()
   const { data: settingsData, loading: settingsLoading } = useDoc('config/settings')
   const { ranksList, config, saveRanks, loading: ranksLoading } = useRanks()
-  const [form, setForm] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [editingRank, setEditingRank] = useState(null) // rank object or null
-  const [modalOpen, setModalOpen] = useState(false)
+  const plansMaster = useCollection('plans_master')
+  const { data: commissionsData, loading: commissionsLoading } = useDoc('config/commissions')
+  const { data: promotionsData, loading: promotionsLoading } = useDoc('config/promotions')
 
+  const [activeTab, setActiveTab] = useState('system') // 'system' | 'ranks' | 'plans' | 'commissions' | 'promotions'
+
+  // System & Company settings form state
+  const [systemForm, setSystemForm] = useState(null)
+  const [savingSystem, setSavingSystem] = useState(false)
+
+  // Rank modal form states
+  const [editingRank, setEditingRank] = useState(null)
+  const [rankModalOpen, setRankModalOpen] = useState(false)
+
+  // Plan modal form states
+  const [planForm, setPlanForm] = useState({ name: '', code: '', duration: 1, status: 'active' })
+  const [planModalOpen, setPlanModalOpen] = useState(false)
+  const [editingPlanId, setEditingPlanId] = useState(null)
+  const [savingPlan, setSavingPlan] = useState(false)
+
+  // Commission matrix state
+  const [selectedPlanCode, setSelectedPlanCode] = useState('')
+  const [selectedYear, setSelectedYear] = useState(1)
+  const [commissionsState, setCommissionsState] = useState({})
+  const [savingCommissions, setSavingCommissions] = useState(false)
+
+  // Promotion rules state
+  const [promotionsState, setPromotionsState] = useState({})
+  const [savingPromotions, setSavingPromotions] = useState(false)
+
+  // Load Initial Settings
   useEffect(() => {
-    setForm({
-      companyName: settingsData?.companyName || 'APEX Savings',
-      headOffice: settingsData?.headOffice || '',
-      supportPhone: settingsData?.supportPhone || '',
-      receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
-    })
+    if (settingsData) {
+      setSystemForm({
+        companyName: settingsData.companyName || 'APEX Savings',
+        headOffice: settingsData.headOffice || '',
+        supportPhone: settingsData.supportPhone || '',
+        receiptFooter: settingsData.receiptFooter || 'This is a computer-generated receipt · APEX',
+      })
+    }
   }, [settingsData])
 
-  if (settingsLoading || ranksLoading || !form) {
+  // Load initial commissions
+  useEffect(() => {
+    if (commissionsData?.commissions) {
+      setCommissionsState(commissionsData.commissions)
+    }
+  }, [commissionsData])
+
+  // Load initial promotion rules
+  useEffect(() => {
+    if (promotionsData?.rules) {
+      setPromotionsState(promotionsData.rules)
+    }
+  }, [promotionsData])
+
+  const RANKS = config.RANKS
+
+  // Sorted list of ranks
+  const currentRanks = useMemo(() => {
+    return ranksList.length > 0 ? ranksList : RANKS.map((r, i) => ({
+      rank: r.rank,
+      code: r.code,
+      name: r.name,
+      mfa: config.MFA[i] || 0,
+      ta: config.TA[i] || 0,
+      pbTarget: config.PB_TARGET[i] || 0,
+      pbAmount: config.PB_AMOUNT[i] || 0,
+      promoTarget: config.PROMO_TARGET[i] || 0,
+      cmdTarget: config.CMD_AWARD_TARGET[i] || 0,
+      cmdAmount: config.CMD_AWARD_AMOUNT[i] || 0,
+      mdaY1: config.MDA[i]?.y1?.map(val => val * 100) || [0, 0, 0, 0, 0],
+      mdaY2: config.MDA[i]?.y2?.map(val => val === null ? null : val * 100) || [null, 0, 0, 0, 0],
+      fdPension: config.FD_PENSION[i]?.map(val => val * 100) || [0, 0, 0, 0, 0],
+      recruitPermission: Number(r.rank) > 1,
+      promoDesc: r.promoDesc || '',
+      status: r.status || 'active',
+    }))
+  }, [ranksList, RANKS, config])
+
+  // Default dropdown selections on load
+  useEffect(() => {
+    if (plansMaster.data && plansMaster.data.length > 0 && !selectedPlanCode) {
+      setSelectedPlanCode(plansMaster.data[0].code)
+    }
+  }, [plansMaster.data, selectedPlanCode])
+
+  const selectedPlanObj = useMemo(() => {
+    return plansMaster.data.find(p => p.code === selectedPlanCode)
+  }, [plansMaster.data, selectedPlanCode])
+
+  // Initialize master plans if collection is empty
+  useEffect(() => {
+    if (!plansMaster.loading && plansMaster.data.length === 0) {
+      const defaults = [
+        { name: 'RD 1 Year', code: 'RD1Y', duration: 1, status: 'active' },
+        { name: 'RD 2 Year', code: 'RD2Y', duration: 2, status: 'active' },
+        { name: 'RD 3 Year', code: 'RD3Y', duration: 3, status: 'active' },
+        { name: 'RD 4 Year', code: 'RD4Y', duration: 4, status: 'active' },
+        { name: 'Pension', code: 'PENS', duration: 5, status: 'active' },
+      ]
+      defaults.forEach(async (p) => {
+        await addDoc(collection(db, 'plans_master'), p)
+      })
+    }
+  }, [plansMaster.loading, plansMaster.data])
+
+  if (settingsLoading || ranksLoading || commissionsLoading || promotionsLoading || plansMaster.loading || !systemForm) {
     return (
-      <div className="mx-auto max-w-3xl">
-        <SkeletonForm fields={4} />
+      <div className="mx-auto max-w-4xl space-y-4">
+        <SkeletonForm fields={6} />
       </div>
     )
   }
 
-  const saveSettings = async () => {
-    setSaving(true)
+  // Save System settings
+  const handleSaveSystem = async () => {
+    setSavingSystem(true)
     try {
-      await setDoc(doc(db, 'config', 'settings'), { ...form, updatedAt: serverTimestamp() }, { merge: true })
-      toast.success('Settings saved')
+      await setDoc(doc(db, 'config', 'settings'), { ...systemForm, updatedAt: serverTimestamp() }, { merge: true })
+      toast.success('System Settings saved')
     } catch {
-      toast.error('Could not save settings')
+      toast.error('Could not save system settings')
     } finally {
-      setSaving(false)
+      setSavingSystem(false)
     }
   }
 
+  // Handle Ranks Modal
   const handleEditRank = (rankObj) => {
-    // Deep clone the rank object so we don't mutate local state
     setEditingRank({
       rank: rankObj.rank,
       code: rankObj.code || '',
@@ -63,13 +157,15 @@ export default function Settings() {
       mdaY1: [...(rankObj.mdaY1 || [0, 0, 0, 0, 0])],
       mdaY2: [...(rankObj.mdaY2 || [null, 0, 0, 0, 0])],
       fdPension: [...(rankObj.fdPension || [0, 0, 0, 0, 0])],
+      recruitPermission: rankObj.recruitPermission !== undefined ? Boolean(rankObj.recruitPermission) : (Number(rankObj.rank) > 1),
+      promoDesc: rankObj.promoDesc || '',
+      status: rankObj.status || 'active',
     })
-    setModalOpen(true)
+    setRankModalOpen(true)
   }
 
   const handleAddRank = () => {
-    const nextRankNum = ranksList.length > 0 ? Math.max(...ranksList.map(r => r.rank)) + 1 : 1
-    // Load default values based on common rank parameters
+    const nextRankNum = currentRanks.length > 0 ? Math.max(...currentRanks.map(r => r.rank)) + 1 : 1
     setEditingRank({
       rank: nextRankNum,
       code: '',
@@ -84,8 +180,11 @@ export default function Settings() {
       mdaY1: [0, 0, 0, 0, 0],
       mdaY2: [null, 0, 0, 0, 0],
       fdPension: [0, 0, 0, 0, 0],
+      recruitPermission: true,
+      promoDesc: '',
+      status: 'active',
     })
-    setModalOpen(true)
+    setRankModalOpen(true)
   }
 
   const handleSaveRank = async () => {
@@ -93,181 +192,507 @@ export default function Settings() {
       toast.error('Rank Code and Name are required')
       return
     }
-
     const toastId = toast.loading('Saving rank...')
     try {
-      let updatedList = [...ranksList]
+      let updatedList = [...currentRanks]
       const existingIdx = updatedList.findIndex(r => r.rank === editingRank.rank)
       if (existingIdx > -1) {
         updatedList[existingIdx] = editingRank
       } else {
         updatedList.push(editingRank)
       }
-
-      // Sort by rank level
       updatedList.sort((a, b) => a.rank - b.rank)
-
       await saveRanks(updatedList)
       toast.success('Ranks configuration updated', { id: toastId })
-      setModalOpen(false)
+      setRankModalOpen(false)
       setEditingRank(null)
     } catch (e) {
       toast.error(e.message || 'Could not save rank', { id: toastId })
     }
   }
 
-  const handleDeleteRank = async (rankNum) => {
-    if (!confirm('Are you sure you want to delete this rank level? Users assigned to this rank may be affected.')) {
+  // Save Plan master
+  const handleSavePlan = async (e) => {
+    e.preventDefault()
+    if (!planForm.name || !planForm.code) {
+      toast.error('Plan Name and Code are required')
       return
     }
-
-    const toastId = toast.loading('Deleting rank...')
+    setSavingPlan(true)
     try {
-      const updatedList = ranksList.filter(r => r.rank !== rankNum)
-      await saveRanks(updatedList)
-      toast.success('Rank level deleted', { id: toastId })
-    } catch (e) {
-      toast.error(e.message || 'Could not delete rank', { id: toastId })
+      if (editingPlanId) {
+        await updateDoc(doc(db, 'plans_master', editingPlanId), { ...planForm, updatedAt: serverTimestamp() })
+        toast.success('Plan updated successfully')
+      } else {
+        await addDoc(collection(db, 'plans_master'), { ...planForm, createdAt: serverTimestamp() })
+        toast.success('Plan created successfully')
+      }
+      setPlanForm({ name: '', code: '', duration: 1, status: 'active' })
+      setEditingPlanId(null)
+      setPlanModalOpen(false)
+    } catch {
+      toast.error('Could not save plan')
+    } finally {
+      setSavingPlan(false)
     }
   }
 
-  // If ranksList is empty, map the default fallback lists to display them
-  const currentRanks = ranksList.length > 0 ? ranksList : config.RANKS.map((r, i) => ({
-    rank: r.rank,
-    code: r.code,
-    name: r.name,
-    mfa: config.MFA[i],
-    ta: config.TA[i],
-    pbTarget: config.PB_TARGET[i],
-    pbAmount: config.PB_AMOUNT[i],
-    promoTarget: config.PROMO_TARGET[i],
-    cmdTarget: config.CMD_AWARD_TARGET[i],
-    cmdAmount: config.CMD_AWARD_AMOUNT[i],
-    mdaY1: config.MDA[i].y1.map(val => val * 100),
-    mdaY2: config.MDA[i].y2.map(val => val === null ? null : val * 100),
-    fdPension: config.FD_PENSION[i].map(val => val * 100),
-  }))
+  const handleEditPlan = (p) => {
+    setPlanForm({ name: p.name, code: p.code, duration: p.duration, status: p.status })
+    setEditingPlanId(p.id)
+    setPlanModalOpen(true)
+  }
+
+  // Save Commissions
+  const handleSaveCommissions = async () => {
+    setSavingCommissions(true)
+    try {
+      await setDoc(doc(db, 'config', 'commissions'), { commissions: commissionsState, updatedAt: serverTimestamp() })
+      toast.success('Commissions configuration saved')
+    } catch {
+      toast.error('Could not save commissions')
+    } finally {
+      setSavingCommissions(false)
+    }
+  }
+
+  const handleCommissionChange = (rankCode, val) => {
+    setCommissionsState(prev => ({
+      ...prev,
+      [selectedPlanCode]: {
+        ...(prev[selectedPlanCode] || {}),
+        [selectedYear]: {
+          ...((prev[selectedPlanCode] || {})[selectedYear] || {}),
+          [rankCode]: Number(val) || 0
+        }
+      }
+    }))
+  }
+
+  // Save Promotions
+  const handleSavePromotions = async () => {
+    setSavingPromotions(true)
+    try {
+      await setDoc(doc(db, 'config', 'promotions'), { rules: promotionsState, updatedAt: serverTimestamp() })
+      toast.success('Promotion configurations saved')
+    } catch {
+      toast.error('Could not save promotion configurations')
+    } finally {
+      setSavingPromotions(false)
+    }
+  }
+
+  const handlePromoRuleChange = (rankCode, field, val) => {
+    setPromotionsState(prev => ({
+      ...prev,
+      [rankCode]: {
+        ...(prev[rankCode] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }),
+        [field]: field === 'requiredPromotedRank' ? val : (Number(val) || 0)
+      }
+    }))
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      {/* Company Settings Card */}
-      <div className="card space-y-4 p-5">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-gold">Company Settings</h3>
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Top Title and Tab Menu */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-navy-4/50 pb-4">
         <div>
-          <label className="label">Company name</label>
-          <input className="field" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
+          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Master Configurations</h2>
+          <p className="text-xs text-ink-2">Manage settings, rank compensations, products, commissions, and promotions.</p>
         </div>
-        <div>
-          <label className="label">Head office address</label>
-          <input className="field" value={form.headOffice} onChange={(e) => setForm({ ...form, headOffice: e.target.value })} />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">Support phone</label>
-            <input className="field" value={form.supportPhone} onChange={(e) => setForm({ ...form, supportPhone: e.target.value })} />
-          </div>
-          <div>
-            <label className="label">Receipt footer</label>
-            <input className="field" value={form.receiptFooter} onChange={(e) => setForm({ ...form, receiptFooter: e.target.value })} />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button type="button" onClick={saveSettings} disabled={!isSuperAdmin && false || saving} className="btn-gold">
-            {saving ? 'Saving…' : 'Save settings'}
-          </button>
+        <div className="flex flex-wrap gap-1 bg-navy-2 p-1.5 rounded-card border border-navy-4/50 text-xs">
+          <button type="button" onClick={() => setActiveTab('system')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'system' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>System Settings</button>
+          <button type="button" onClick={() => setActiveTab('ranks')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'ranks' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Rank Master</button>
+          <button type="button" onClick={() => setActiveTab('plans')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'plans' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Plan Master</button>
+          <button type="button" onClick={() => setActiveTab('commissions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'commissions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Commission Master</button>
+          <button type="button" onClick={() => setActiveTab('promotions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'promotions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Promotion Master</button>
         </div>
       </div>
 
-      {/* Ranks Management Card */}
-      <div className="card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gold">Ranks & Compensation Slabs</h3>
-          <button type="button" onClick={handleAddRank} className="btn-gold text-xs py-1.5 px-3 flex items-center gap-1">
-            <IPlus size={14} /> Add Rank
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Lvl</th>
-                <th>Rank</th>
-                <th>MFA</th>
-                <th>TA</th>
-                <th>PB Target / Reward</th>
-                <th>Promo Target</th>
-                <th>CMD Target / Reward</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentRanks.map((r) => (
-                <tr key={r.rank}>
-                  <td className="font-mono text-ink-2">{r.rank}</td>
-                  <td>
-                    <span className="font-semibold text-ink-1">{r.code}</span>
-                    <span className="ml-2 text-xs text-ink-2">{r.name}</span>
-                  </td>
-                  <td className="text-ink-1">{formatINR(r.mfa)}</td>
-                  <td className="text-ink-1">{formatINR(r.ta)}</td>
-                  <td className="text-xs text-ink-2">
-                    {r.pbTarget > 0 ? (
-                      <>
-                        <span className="text-ink-1 font-medium">{formatINR(r.pbTarget)}</span>
-                        <div className="text-[10px] text-gold">Get {formatINR(r.pbAmount)}</div>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="text-ink-1 font-medium">{formatINR(r.promoTarget)}</td>
-                  <td className="text-xs text-ink-2">
-                    <span className="text-ink-1 font-medium">{formatINR(r.cmdTarget)}</span>
-                    <div className="text-[10px] text-gold">Get {formatINR(r.cmdAmount)}</div>
-                  </td>
-                  <td className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" onClick={() => handleEditRank(r)} className="text-gold hover:underline p-1" title="Edit">
-                        <IEdit size={16} />
-                      </button>
-                      <button type="button" onClick={() => handleDeleteRank(r.rank)} className="text-danger hover:underline p-1 text-xs" title="Delete">
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Tabs Contents */}
+      <div className="space-y-6">
+        
+        {/* Tab 1: System Settings */}
+        {activeTab === 'system' && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="card p-5 space-y-4 lg:col-span-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1 border-b border-navy-4/50 flex items-center gap-2">
+                <IBuilding size={16} /> Company Credentials Settings
+              </h3>
+              <div className="space-y-3.5">
+                <div>
+                  <label className="label">Company name</label>
+                  <input className="field" value={systemForm.companyName} onChange={(e) => setSystemForm({ ...systemForm, companyName: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Head office address</label>
+                  <input className="field" value={systemForm.headOffice} onChange={(e) => setSystemForm({ ...systemForm, headOffice: e.target.value })} />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label">Support phone</label>
+                    <input className="field" value={systemForm.supportPhone} onChange={(e) => setSystemForm({ ...systemForm, supportPhone: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="label">Receipt footer</label>
+                    <input className="field" value={systemForm.receiptFooter} onChange={(e) => setSystemForm({ ...systemForm, receiptFooter: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end pt-2 border-t border-navy-4/20">
+                <button type="button" onClick={handleSaveSystem} disabled={!isSuperAdmin && false || savingSystem} className="btn-gold px-6">
+                  {savingSystem ? 'Saving…' : 'Save Settings'}
+                </button>
+              </div>
+            </div>
+
+            {/* Side column: Placeholders */}
+            <div className="space-y-5">
+              <div className="card p-5 space-y-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
+                  <ISettings size={14} /> Future Settings Modules
+                </h4>
+                <div className="space-y-3 text-xs text-ink-2">
+                  <div className="border border-dashed border-navy-4 bg-navy-2/30 p-3 rounded-card">
+                    <p className="font-semibold text-ink-1 mb-1">Excel Template Rules</p>
+                    <p className="text-[10px]">Define columns and verification keys for uploading daily bank Excel formats.</p>
+                  </div>
+                  <div className="border border-dashed border-navy-4 bg-navy-2/30 p-3 rounded-card">
+                    <p className="font-semibold text-ink-1 mb-1">System Import Controls</p>
+                    <p className="text-[10px]">Verify duplicates, handle missing agent records, and map branches automatically.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Rank Master */}
+        {activeTab === 'ranks' && (
+          <div className="card p-5 space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-navy-4/50">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <ITrophy size={16} /> Rank Master Configuration
+              </h3>
+              <button type="button" onClick={handleAddRank} className="btn-gold py-1.5 px-3.5 text-xs flex items-center gap-1.5">
+                <IPlus size={14} /> Add Rank Level
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="tbl text-xs">
+                <thead>
+                  <tr>
+                    <th>Lvl</th>
+                    <th>Rank Code</th>
+                    <th>Name</th>
+                    <th>Recruit</th>
+                    <th>MFA</th>
+                    <th>TA</th>
+                    <th>PB Target / Reward</th>
+                    <th>CMD Target / Reward</th>
+                    <th>Status</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentRanks.map((r) => (
+                    <tr key={r.rank}>
+                      <td className="font-mono text-ink-2">{r.rank}</td>
+                      <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
+                      <td className="text-ink-2 font-medium">{r.name}</td>
+                      <td>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold uppercase ${r.recruitPermission ? 'bg-ok/10 text-ok' : 'bg-navy-4 text-ink-2'}`}>
+                          {r.recruitPermission ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td className="text-ink-1">{formatINR(r.mfa)}</td>
+                      <td className="text-ink-1">{formatINR(r.ta)}</td>
+                      <td className="text-[10px] text-ink-2">
+                        {r.pbTarget > 0 ? (
+                          <>
+                            <div className="font-semibold text-ink-1">{formatINR(r.pbTarget)}</div>
+                            <div className="text-[9px] text-gold-1">Get {formatINR(r.pbAmount)}</div>
+                          </>
+                        ) : '—'}
+                      </td>
+                      <td className="text-[10px] text-ink-2">
+                        {r.cmdTarget > 0 ? (
+                          <>
+                            <div className="font-semibold text-ink-1">{formatINR(r.cmdTarget)}</div>
+                            <div className="text-[9px] text-gold-1">Get {formatINR(r.cmdAmount)}</div>
+                          </>
+                        ) : '—'}
+                      </td>
+                      <td>
+                        <StatusBadge status={r.status || 'active'} />
+                      </td>
+                      <td className="text-right">
+                        <button type="button" onClick={() => handleEditRank(r)} className="text-gold font-bold hover:underline" title="Edit">
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Plan Master */}
+        {activeTab === 'plans' && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="card p-5 space-y-4 lg:col-span-2">
+              <div className="flex justify-between items-center pb-2 border-b border-navy-4/50">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <IDoc size={16} /> Plan Configurations
+                </h3>
+                <button type="button" onClick={() => { setEditingPlanId(null); setPlanForm({ name: '', code: '', duration: 1, status: 'active' }); setPlanModalOpen(true) }} className="btn-gold py-1.5 px-3.5 text-xs flex items-center gap-1.5">
+                  <IPlus size={14} /> Add Plan
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Plan Code</th>
+                      <th>Plan Name</th>
+                      <th>Duration</th>
+                      <th>Status</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plansMaster.data.map((p) => (
+                      <tr key={p.id}>
+                        <td className="font-mono font-semibold text-ink-1 uppercase">{p.code}</td>
+                        <td className="font-semibold text-ink-1">{p.name}</td>
+                        <td className="text-ink-2">{p.duration} {p.duration === 1 ? 'Year' : 'Years'}</td>
+                        <td>
+                          <StatusBadge status={p.status || 'active'} />
+                        </td>
+                        <td className="text-right space-x-3">
+                          <button type="button" onClick={() => handleEditPlan(p)} className="text-gold font-bold hover:underline">Edit</button>
+                          <button 
+                            type="button" 
+                            onClick={async () => {
+                              const next = p.status === 'inactive' ? 'active' : 'inactive'
+                              await updateDoc(doc(db, 'plans_master', p.id), { status: next })
+                              toast.success('Plan status updated')
+                            }} 
+                            className={`font-bold hover:underline ${p.status === 'inactive' ? 'text-ok' : 'text-danger'}`}
+                          >
+                            {p.status === 'inactive' ? 'Activate' : 'Deactivate'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="card p-5 space-y-3.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+                Plan Master Overview
+              </h4>
+              <p className="text-xs text-ink-2 leading-relaxed">
+                Plan Masters map the available savings products agents can sell. 
+                Durations (in policy years) dictate how many annual collection cycles a plan requires. 
+                Commission matrices and calculation rules lookup this master list to allocate payments.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Commission Master */}
+        {activeTab === 'commissions' && (
+          <div className="card p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-navy-4/50">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <ICash size={16} /> Commission Structure Matrix Config
+                </h3>
+                <p className="text-[11px] text-ink-2 mt-0.5">Define percentage commission structures by plan, policy year, and rank tier.</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={handleSaveCommissions} disabled={savingCommissions} className="btn-gold py-1.5 px-4 text-xs">
+                  {savingCommissions ? 'Saving...' : 'Save Matrix'}
+                </button>
+              </div>
+            </div>
+
+            {plansMaster.data.length ? (
+              <div className="space-y-4">
+                {/* Configuration Dropdowns */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-navy-2/30 p-4 rounded-card border border-navy-4/50">
+                  <div>
+                    <label className="label">1. Select Target Plan *</label>
+                    <select className="field text-xs" value={selectedPlanCode} onChange={(e) => { setSelectedPlanCode(e.target.value); setSelectedYear(1) }}>
+                      {plansMaster.data.map(p => <option key={p.id} value={p.code}>{p.name} ({p.code})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">2. Select Policy Year *</label>
+                    <select className="field text-xs" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+                      {Array.from({ length: selectedPlanObj?.duration || 1 }, (_, i) => i + 1).map(yr => (
+                        <option key={yr} value={yr}>Policy Year {yr}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Commissions Grid */}
+                <div className="border border-navy-4 rounded-card overflow-hidden">
+                  <table className="tbl text-xs">
+                    <thead>
+                      <tr>
+                        <th>Rank Code</th>
+                        <th>Rank Name</th>
+                        <th className="w-48 text-center">Commission Percentage (%)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentRanks.map((r) => {
+                        const rate = commissionsState[selectedPlanCode]?.[selectedYear]?.[r.code] || 0
+                        return (
+                          <tr key={r.rank}>
+                            <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
+                            <td className="text-ink-2 font-medium">{r.name}</td>
+                            <td className="p-1 flex justify-center">
+                              <div className="relative w-36">
+                                <input 
+                                  type="number" 
+                                  step="0.1" 
+                                  className="field font-mono py-1 text-center w-full pr-7" 
+                                  value={rate || ''} 
+                                  placeholder="0.0" 
+                                  onChange={(e) => handleCommissionChange(r.code, e.target.value)} 
+                                />
+                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[10px] font-bold">%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic text-center py-4">Configure Plans in Plan Master before managing commissions.</p>
+            )}
+          </div>
+        )}
+
+        {/* Tab 5: Promotion Master */}
+        {activeTab === 'promotions' && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-navy-4/50">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <ITrophy size={16} /> Promotion Transition Configurations
+                </h3>
+                <p className="text-[11px] text-ink-2 mt-0.5">Configure targets (Lifetime BV) and downline promotion structures for rank advancements.</p>
+              </div>
+              <button type="button" onClick={handleSavePromotions} disabled={savingPromotions} className="btn-gold py-1.5 px-4 text-xs">
+                {savingPromotions ? 'Saving...' : 'Save Promotion Rules'}
+              </button>
+            </div>
+
+            <div className="border border-navy-4 rounded-card overflow-hidden">
+              <table className="tbl text-xs">
+                <thead>
+                  <tr>
+                    <th>Transition Rank Target</th>
+                    <th>Target Lifetime BV (₹)</th>
+                    <th className="text-center">Required Promoted Downline Rank</th>
+                    <th className="text-center">Required Promoted Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentRanks.filter(r => r.rank > 1).map((r) => {
+                    const rule = promotionsState[r.code] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
+                    return (
+                      <tr key={r.rank}>
+                        <td className="font-semibold text-ink-1 uppercase">
+                          {currentRanks.find(x => x.rank === r.rank - 1)?.code || 'AO'} &rarr; {r.code}
+                          <div className="text-[10px] text-ink-2 font-normal mt-0.5">{r.name}</div>
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1.5 max-w-[160px]" 
+                            value={rule.businessTarget || ''} 
+                            placeholder="e.g. 50000" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'businessTarget', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <select 
+                            className="field py-1 max-w-[160px] mx-auto block" 
+                            value={rule.requiredPromotedRank || ''}
+                            onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedRank', e.target.value)}
+                          >
+                            <option value="">— None —</option>
+                            {currentRanks.filter(x => x.rank < r.rank).map(x => (
+                              <option key={x.rank} value={x.code}>{x.code}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-1 text-center">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1.5 max-w-[100px] mx-auto block text-center" 
+                            value={rule.requiredPromotedCount || ''} 
+                            placeholder="0"
+                            onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedCount', e.target.value)} 
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* Edit/Add Rank Modal */}
-      {modalOpen && editingRank && (
+      {/* Ranks Add/Edit Modal */}
+      {rankModalOpen && editingRank && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-navy-1/80 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
+          <div className="absolute inset-0 bg-navy-1/80 backdrop-blur-sm" onClick={() => setRankModalOpen(false)} />
           <div className="card relative z-10 w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4">
             <div className="flex items-center justify-between border-b border-navy-4 pb-3">
-              <h3 className="text-lg font-bold text-ink-1">
+              <h3 className="text-lg font-bold text-ink-1 font-serif">
                 {ranksList.some(r => r.rank === editingRank.rank) ? `Edit Rank Level ${editingRank.rank}` : `Add New Rank Level ${editingRank.rank}`}
               </h3>
-              <button type="button" onClick={() => setModalOpen(false)} className="text-ink-2 hover:text-ink-1">
+              <button type="button" onClick={() => setRankModalOpen(false)} className="text-ink-2 hover:text-ink-1">
                 <IClose size={20} />
               </button>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="label">Rank Code *</label>
-                <input className="field font-mono" placeholder="e.g. AO, AM" value={editingRank.code} onChange={(e) => setEditingRank({ ...editingRank, code: e.target.value.toUpperCase() })} />
+                <input className="field font-mono uppercase" placeholder="e.g. AO, AM" value={editingRank.code} onChange={(e) => setEditingRank({ ...editingRank, code: e.target.value.toUpperCase() })} />
               </div>
               <div>
                 <label className="label">Rank Name *</label>
                 <input className="field" placeholder="e.g. Administrative Officer" value={editingRank.name} onChange={(e) => setEditingRank({ ...editingRank, name: e.target.value })} />
               </div>
+              <div>
+                <label className="label">Status</label>
+                <select className="field text-xs" value={editingRank.status} onChange={(e) => setEditingRank({ ...editingRank, status: e.target.value })}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <label className="label">Monthly Field Allowance (MFA)</label>
                 <input type="number" className="field" value={editingRank.mfa} onChange={(e) => setEditingRank({ ...editingRank, mfa: Number(e.target.value) })} />
@@ -275,6 +700,16 @@ export default function Settings() {
               <div>
                 <label className="label">Travel Allowance (TA)</label>
                 <input type="number" className="field" value={editingRank.ta} onChange={(e) => setEditingRank({ ...editingRank, ta: Number(e.target.value) })} />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input 
+                  type="checkbox" 
+                  id="recruitPerm" 
+                  className="accent-gold-1 h-4 w-4" 
+                  checked={editingRank.recruitPermission} 
+                  onChange={(e) => setEditingRank({ ...editingRank, recruitPermission: e.target.checked })} 
+                />
+                <label htmlFor="recruitPerm" className="text-xs font-semibold text-ink-1">Recruitment Permission</label>
               </div>
             </div>
 
@@ -304,9 +739,14 @@ export default function Settings() {
               </div>
             </div>
 
+            <div>
+              <label className="label">Promotion Criteria / Description</label>
+              <textarea className="field h-16 resize-none text-xs" placeholder="Criteria rules description..." value={editingRank.promoDesc} onChange={(e) => setEditingRank({ ...editingRank, promoDesc: e.target.value })} />
+            </div>
+
             {/* MDA and FD Slabs */}
             <div className="space-y-3 pt-2">
-              <h4 className="font-semibold text-gold text-sm uppercase tracking-wide">Compensation Percentage Slabs (RD / FD)</h4>
+              <h4 className="font-semibold text-gold-tan text-sm uppercase tracking-wide">Compensation Percentage Slabs (RD / FD)</h4>
               <div className="overflow-x-auto rounded-card border border-navy-4 bg-navy-2 p-3">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -366,12 +806,61 @@ export default function Settings() {
             </div>
 
             <div className="flex justify-end gap-2 border-t border-navy-4 pt-3 mt-4">
-              <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost py-2">Cancel</button>
-              <button type="button" onClick={handleSaveRank} className="btn-gold py-2">Save Rank</button>
+              <button type="button" onClick={() => setRankModalOpen(false)} className="btn-ghost py-2">Cancel</button>
+              <button type="button" onClick={handleSaveRank} className="btn-gold py-2 px-6">Save Rank</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Plan Add/Edit Modal */}
+      {planModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-navy-1/80 backdrop-blur-sm" onClick={() => setPlanModalOpen(false)} />
+          <form className="card relative z-10 w-full max-w-md p-6 space-y-4" onSubmit={handleSavePlan}>
+            <div className="flex items-center justify-between border-b border-navy-4 pb-3">
+              <h3 className="text-lg font-bold text-ink-1 font-serif">
+                {editingPlanId ? 'Edit Financial Plan' : 'Add New Financial Plan'}
+              </h3>
+              <button type="button" onClick={() => setPlanModalOpen(false)} className="text-ink-2 hover:text-ink-1">
+                <IClose size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="label">Plan Name *</label>
+                <input className="field" placeholder="e.g. RD 3 Year" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Plan Code *</label>
+                <input className="field font-mono uppercase" placeholder="e.g. RD3Y" value={planForm.code} onChange={(e) => setPlanForm({ ...planForm, code: e.target.value.toUpperCase() })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Duration (Years) *</label>
+                  <input type="number" min={1} max={20} className="field font-mono" value={planForm.duration} onChange={(e) => setPlanForm({ ...planForm, duration: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label className="label">Status</label>
+                  <select className="field text-xs" value={planForm.status} onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-navy-4 pt-3 mt-4">
+              <button type="button" onClick={() => setPlanModalOpen(false)} className="btn-ghost py-2">Cancel</button>
+              <button type="submit" disabled={savingPlan} className="btn-gold py-2 px-6">
+                {savingPlan ? 'Saving...' : 'Save Plan'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
     </div>
   )
 }

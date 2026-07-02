@@ -100,4 +100,15 @@ export const branchSchema = z.object({
   city: z.string().min(2, 'City is required'),
   state: z.string().min(2, 'State is required'),
   managerId: z.string().optional(),
+  branchCode: z.string().optional(),
+  contactNumber: optionalPhone.optional(),
+  email: z.string().email('Invalid email').or(z.literal('')).optional(),
+  status: z.enum(['active', 'inactive']).default('active'),
+})
+
+export const planMasterSchema = z.object({
+  name: z.string().min(2, 'Plan name is required'),
+  code: z.string().min(2, 'Plan code is required'),
+  duration: z.coerce.number().min(1, 'Duration must be at least 1 year'),
+  status: z.enum(['active', 'inactive']).default('active'),
 })
