@@ -92,6 +92,7 @@ export const memberSchema = z.object({
   password: z.string().optional(),
   address: z.string().optional(),
   dob: z.string().optional(),
+  sponsorCodeInput: z.string().optional(),
 })
 
 export const branchSchema = z.object({

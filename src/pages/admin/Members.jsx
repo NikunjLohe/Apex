@@ -113,12 +113,18 @@ function MemberModal({ modal, branches, members, onClose }) {
   const m = modal.member
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('performance') // 'performance' | 'profile' | 'edit'
+  const [createdAgent, setCreatedAgent] = useState(null)
 
   // Performance data states
   const [ownPlans, setOwnPlans] = useState([])
   const [ownPayments, setOwnPayments] = useState([])
   const [downlinePlans, setDownlinePlans] = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
+
+  const initialSponsorCode = useMemo(() => {
+    if (!m?.referredBy || !members) return ''
+    return members.find(u => u.id === m.referredBy)?.sponsorCode || ''
+  }, [m?.referredBy, members])
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(memberSchema),
@@ -127,6 +133,7 @@ function MemberModal({ modal, branches, members, onClose }) {
       rank: m?.rank || 1, branchId: m?.branchId || '', isSuperAdmin: m?.isSuperAdmin || false,
       status: m?.status || 'active', referredBy: m?.referredBy || '', sponsorCode: m?.sponsorCode || '',
       password: '', address: m?.address || '', dob: m?.dob || '',
+      sponsorCodeInput: initialSponsorCode,
     },
   })
 
@@ -180,15 +187,36 @@ function MemberModal({ modal, branches, members, onClose }) {
     return [...ownPayments].sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate)).slice(0, 5)
   }, [ownPayments])
 
-  // Possible sponsors = everyone except the member being edited and AO rank 1 members.
-  const sponsors = (members || []).filter((x) => x.id !== m?.id && (Number(x.rank) || 0) > 1)
-
   const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
+
+  // Filter inactive ranks from select dropdowns, unless it is already the member's rank
+  const activeRanks = useMemo(() => {
+    return RANKS.filter(r => r.status !== 'inactive' || r.rank === m?.rank)
+  }, [RANKS, m?.rank])
 
   const submit = async (form) => {
     setSaving(true)
     try {
+      // Validate Sponsor ID (referredBy Code)
+      const sponsorCodeInput = form.sponsorCodeInput?.trim()
+      if (sponsorCodeInput) {
+        if (isEdit && sponsorCodeInput === m.sponsorCode) {
+          toast.error('Agent cannot sponsor themselves')
+          setSaving(false)
+          return
+        }
+        const sponsorObj = (members || []).find(u => u.sponsorCode === sponsorCodeInput)
+        if (!sponsorObj) {
+          toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
+          setSaving(false)
+          return
+        }
+        form.referredBy = sponsorObj.id
+      } else {
+        form.referredBy = null
+      }
+
       // Auto-generate a unique Agent Code (Agent ID) starting from AG000001.
       if (!form.sponsorCode) {
         let maxId = 0
@@ -206,24 +234,106 @@ function MemberModal({ modal, branches, members, onClose }) {
         const nextId = maxId + 1
         form.sponsorCode = `AG${String(nextId).padStart(6, '0')}`
       }
+
+      const cleanForm = { ...form }
+      delete cleanForm.sponsorCodeInput
+
       if (isEdit) {
-        await updateMember(m.id, form)
+        await updateMember(m.id, cleanForm)
         toast.success('Member updated')
+        onClose()
       } else {
         const tempPassword = form.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
-        await createMember(form, tempPassword)
-        if (form.password) {
-          toast.success('Member created successfully')
-        } else {
-          toast.success(`Member created · temp password: ${tempPassword}`, { duration: 8000 })
-        }
+        const { uid } = await createMember(cleanForm, tempPassword)
+        setCreatedAgent({
+          id: uid,
+          name: form.name,
+          sponsorCode: form.sponsorCode,
+          password: tempPassword,
+          phone: form.phone
+        })
       }
-      onClose()
     } catch (e) {
       toast.error(e.code === 'auth/email-already-in-use' ? 'Email already in use' : e.message || 'Could not save member')
     } finally {
-      setSaving(false)
+      if (!createdAgent) {
+        setSaving(false)
+      }
     }
+  }
+
+  // Credentials success modal popup
+  if (createdAgent) {
+    return (
+      <ConfirmDialog
+        open
+        title="Agent Onboarded Successfully"
+        confirmLabel="Send WhatsApp Welcome"
+        cancelLabel="Copy Credentials"
+        onConfirm={() => {
+          const loginUrl = window.location.origin
+          const message = `Welcome to Apex!
+
+Dear ${createdAgent.name},
+
+Your account has been created successfully.
+
+Agent Code:
+${createdAgent.sponsorCode}
+
+Password:
+${createdAgent.password}
+
+Login URL:
+${loginUrl}
+
+Please change your password after your first login.
+
+Welcome to the Apex Family.`
+          const encoded = encodeURIComponent(message)
+          const cleanPhone = createdAgent.phone.replace(/\D/g, '')
+          const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
+          window.open(`https://wa.me/${formattedPhone}?text=${encoded}`, '_blank')
+        }}
+        onCancel={() => {
+          const loginUrl = window.location.origin
+          const credentialsText = `Agent Code: ${createdAgent.sponsorCode}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
+          navigator.clipboard.writeText(credentialsText)
+          toast.success('Credentials copied to clipboard')
+        }}
+        onClose={() => {
+          setCreatedAgent(null)
+          onClose()
+        }}
+      >
+        <div className="space-y-4 text-xs leading-relaxed py-2">
+          <p className="text-ok font-bold">✓ Agent has been created and registered in Firebase Authentication database.</p>
+          <div className="bg-navy-2 border border-navy-4 p-4 rounded-card space-y-2">
+            <div>
+              <span className="block text-[10px] text-ink-2 font-mono">AGENT NAME</span>
+              <span className="text-ink-1 font-semibold">{createdAgent.name}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] text-ink-2 font-mono">AGENT CODE (SPONSOR ID)</span>
+              <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] text-ink-2 font-mono">TEMPORARY PASSWORD</span>
+              <span className="text-ink-1 font-bold font-mono select-all bg-navy-3 px-2 py-0.5 rounded border border-navy-4">{createdAgent.password}</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Link 
+              to={`/admin/members/${createdAgent.id}`} 
+              onClick={() => setCreatedAgent(null)} 
+              className="btn-ghost flex-1 py-2 text-center text-xs border border-navy-4 hover:border-gold-1/30 rounded inline-block"
+            >
+              View Agent Profile
+            </Link>
+          </div>
+        </div>
+      </ConfirmDialog>
+    )
   }
 
   // Adding a member: render the standard ConfirmDialog modal
@@ -242,13 +352,14 @@ function MemberModal({ modal, branches, members, onClose }) {
           </div>
           <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
             <div>
-              <label className="label">Sponsor / Upline</label>
-              <select className="field" {...register('referredBy')}>
-                <option value="">— None (top of tree) —</option>
-                {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
-              </select>
+              <label className="label">Sponsor ID (Agent Code)</label>
+              <input 
+                className="field font-mono uppercase" 
+                placeholder="e.g. AG000001 (leave blank for top)" 
+                {...register('sponsorCodeInput')} 
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -392,25 +503,25 @@ function MemberModal({ modal, branches, members, onClose }) {
                     Recent Collections by Agent
                   </h4>
                   {sortedPayments.length ? (
-                    <div className="border border-navy-4 rounded-card overflow-hidden">
+                    <div className="table-wrap">
                       <table className="tbl text-xs">
                         <thead>
                           <tr>
-                            <th className="py-2">Receipt</th>
-                            <th className="py-2">Customer</th>
-                            <th className="py-2">Amount</th>
-                            <th className="py-2">Mode</th>
-                            <th className="py-2">Date</th>
+                            <th>Receipt</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Mode</th>
+                            <th>Date</th>
                           </tr>
                         </thead>
                         <tbody>
                           {sortedPayments.map((p) => (
                             <tr key={p.id}>
-                              <td className="py-2 font-mono text-[10px] text-ink-2">{p.receiptNumber}</td>
-                              <td className="py-2 text-ink-1 font-medium">{p.customerName || '—'}</td>
-                              <td className="py-2 font-semibold text-ink-1">{formatINR(p.amount)}</td>
-                              <td className="py-2 uppercase font-medium text-ink-2">{p.paymentMode}</td>
-                              <td className="py-2 text-ink-2">{fmtDate(p.paidDate)}</td>
+                              <td className="font-mono text-[10px] text-ink-2">{p.receiptNumber}</td>
+                              <td className="text-ink-1 font-medium">{p.customerName || '—'}</td>
+                              <td className="font-semibold text-ink-1">{formatINR(p.amount)}</td>
+                              <td className="uppercase font-medium text-ink-2">{p.paymentMode}</td>
+                              <td className="text-ink-2">{fmtDate(p.paidDate)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -540,13 +651,14 @@ function MemberModal({ modal, branches, members, onClose }) {
               </div>
               <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Rank</label><select className="field" {...register('rank')}>{RANKS.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+                <div><label className="label">Rank</label><select className="field" {...register('rank')}>{activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
                 <div>
-                  <label className="label">Sponsor / Upline</label>
-                  <select className="field" {...register('referredBy')}>
-                    <option value="">— None (top of tree) —</option>
-                    {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.rank ? `R${s.rank}` : '—'})</option>)}
-                  </select>
+                  <label className="label">Sponsor ID (Agent Code)</label>
+                  <input 
+                    className="field font-mono uppercase" 
+                    placeholder="e.g. AG000001 (leave blank for top)" 
+                    {...register('sponsorCodeInput')} 
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

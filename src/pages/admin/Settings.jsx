@@ -252,6 +252,31 @@ export default function Settings() {
     }
   }
 
+  const handleMoveRank = async (index, direction) => {
+    let updatedList = [...currentRanks]
+    if (direction === 'up' && index > 0) {
+      const temp = updatedList[index].rank
+      updatedList[index].rank = updatedList[index - 1].rank
+      updatedList[index - 1].rank = temp
+    } else if (direction === 'down' && index < updatedList.length - 1) {
+      const temp = updatedList[index].rank
+      updatedList[index].rank = updatedList[index + 1].rank
+      updatedList[index + 1].rank = temp
+    } else {
+      return
+    }
+    updatedList.sort((a, b) => a.rank - b.rank)
+    // Normalize rank indices sequentially
+    const normalized = updatedList.map((r, idx) => ({ ...r, rank: idx + 1 }))
+    const toastId = toast.loading('Reordering ranks...')
+    try {
+      await saveRanks(normalized)
+      toast.success('Ranks reordered successfully', { id: toastId })
+    } catch (e) {
+      toast.error(e.message || 'Failed to reorder ranks', { id: toastId })
+    }
+  }
+
   // Save Plan master
   const handleSavePlan = async (e) => {
     e.preventDefault()
@@ -496,7 +521,7 @@ export default function Settings() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentRanks.map((r) => (
+                  {currentRanks.map((r, idx) => (
                     <tr key={r.rank}>
                       <td className="font-mono text-ink-2">{r.rank}</td>
                       <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
@@ -527,7 +552,25 @@ export default function Settings() {
                       <td>
                         <StatusBadge status={r.status || 'active'} />
                       </td>
-                      <td className="text-right">
+                      <td className="text-right space-x-2">
+                        <button 
+                          type="button" 
+                          disabled={idx === 0} 
+                          onClick={() => handleMoveRank(idx, 'up')} 
+                          className="text-ink-2 hover:text-gold font-bold disabled:opacity-30 disabled:pointer-events-none" 
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>
+                        <button 
+                          type="button" 
+                          disabled={idx === currentRanks.length - 1} 
+                          onClick={() => handleMoveRank(idx, 'down')} 
+                          className="text-ink-2 hover:text-gold font-bold disabled:opacity-30 disabled:pointer-events-none" 
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>
                         <button type="button" onClick={() => handleEditRank(r)} className="text-gold font-bold hover:underline" title="Edit">
                           Edit
                         </button>
@@ -717,7 +760,7 @@ export default function Settings() {
                     return (
                       <tr key={r.rank}>
                         <td className="font-semibold text-ink-1 uppercase">
-                          {currentRanks.find(x => x.rank === r.rank - 1)?.code || 'AO'} &rarr; {r.code}
+                          {currentRanks.find(x => x.rank === r.rank - 1)?.code || currentRanks[0]?.code || 'AO'} &rarr; {r.code}
                           <div className="text-[10px] text-ink-2 font-normal mt-0.5">{r.name}</div>
                         </td>
                         <td className="p-1">
