@@ -35,6 +35,8 @@ service cloud.firestore {
     match /payments/{id}  { allow read, write: if isStaff(); }
     match /receipts/{id}  { allow read, write: if isStaff(); }
     match /notifications/{id} { allow read, write: if isStaff(); }
+    match /plans_master/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /imports/{id}      { allow read, write: if isAdmin(); }
 
     // Atomic counters for account/receipt numbers.
     match /counters/{name} { allow read, write: if isStaff(); }

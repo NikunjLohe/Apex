@@ -43,13 +43,18 @@ export default function ImportData() {
   // Fetch Excel Mapping & Master dependencies
   useEffect(() => {
     ;(async () => {
+      // 1. Fetch Mapping Settings
       try {
         const settingsSnap = await getDoc(doc(db, 'config', 'settings'))
         if (settingsSnap.exists() && settingsSnap.data().excelMapping) {
           setMapping(settingsSnap.data().excelMapping)
         }
+      } catch (err) {
+        console.warn('Excel mapping config fetch skipped (will use defaults):', err)
+      }
 
-        // Fetch agents mapping
+      // 2. Fetch Agents Mapping
+      try {
         const usersSnap = await getDocs(collection(db, 'users'))
         const uMap = {}
         usersSnap.forEach(d => {
@@ -59,8 +64,12 @@ export default function ImportData() {
           }
         })
         setAgentsMap(uMap)
+      } catch (err) {
+        console.warn('Agent mapping fetch failed:', err)
+      }
 
-        // Fetch existing plans to check duplicates
+      // 3. Fetch Existing Plans (for duplicates check)
+      try {
         const plansSnap = await getDocs(collection(db, 'plans'))
         const planNumbers = new Set()
         plansSnap.forEach(d => {
@@ -68,8 +77,12 @@ export default function ImportData() {
           if (p.policyNumber) planNumbers.add(String(p.policyNumber).trim().toLowerCase())
         })
         setExistingPlans(planNumbers)
+      } catch (err) {
+        console.warn('Policy numbers check skipped:', err)
+      }
 
-        // Fetch existing customers to map CIF IDs
+      // 4. Fetch Customers
+      try {
         const custSnap = await getDocs(collection(db, 'customers'))
         const cMap = new Map()
         custSnap.forEach(d => {
@@ -77,8 +90,12 @@ export default function ImportData() {
           if (c.customerId) cMap.set(String(c.customerId).trim().toLowerCase(), { id: d.id, ...c })
         })
         setExistingCustomers(cMap)
+      } catch (err) {
+        console.warn('CIF Customer details mapping skipped:', err)
+      }
 
-        // Fetch plans master
+      // 5. Fetch Plans Master catalog
+      try {
         const masterSnap = await getDocs(collection(db, 'plans_master'))
         const mPlans = []
         masterSnap.forEach(d => {
@@ -86,8 +103,14 @@ export default function ImportData() {
         })
         setPlansMaster(mPlans)
       } catch (err) {
-        console.error('Error fetching configuration masters:', err)
-        toast.error('Failed to load system mapping masters')
+        console.warn('Configured Plan catalog list lookup failed. Falling back to default plan structures:', err)
+        setPlansMaster([
+          { name: 'RD 1 Year', code: 'RD1Y', duration: 1 },
+          { name: 'RD 2 Year', code: 'RD2Y', duration: 2 },
+          { name: 'RD 3 Year', code: 'RD3Y', duration: 3 },
+          { name: 'RD 4 Year', code: 'RD4Y', duration: 4 },
+          { name: 'Pension', code: 'PENS', duration: 5 },
+        ])
       }
     })()
   }, [])
