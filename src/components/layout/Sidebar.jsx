@@ -41,6 +41,7 @@ const GROUPS = [
       { to: '/admin/policies', label: 'Policies', Icon: IDoc, cap: CAP.ADMIN },
       { to: '/admin/import', label: 'Import Center', Icon: IDoc, cap: CAP.ADMIN },
       { to: '/admin/payouts', label: 'Payout Engine', Icon: ICash, cap: CAP.ADMIN },
+      { to: '/admin/promotions', label: 'Promotion Engine', Icon: ITrophy, cap: CAP.ADMIN },
       { to: '/admin/settings', label: 'Settings', Icon: ISettings, cap: CAP.ADMIN },
     ],
   },
