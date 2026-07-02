@@ -3,6 +3,8 @@ import * as xlsx from 'xlsx'
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, addDoc, serverTimestamp, increment, where, query } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useRanks } from '../../contexts/RanksContext'
+import { MDA as DEFAULT_MDA, FD_PENSION as DEFAULT_FD_PENSION } from '../../data/compensation'
 import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -24,8 +26,45 @@ const DEFAULT_MAPPING = {
   startDate: 'Start Date',
 }
 
+const getCommissionRate = (planCode, policyYear, agentRankCode, agentRankNum, commsConfig, ranksConfig) => {
+  const code = String(planCode).toUpperCase()
+  const yr = Number(policyYear) || 1
+  const rankCodeStr = String(agentRankCode || 'AO').toUpperCase()
+  
+  // 1. Try to read from dynamic commissions configuration master
+  if (commsConfig && commsConfig[code]?.[yr]?.[rankCodeStr] !== undefined) {
+    return Number(commsConfig[code][yr][rankCodeStr]) / 100 // convert e.g. 4.0 to 0.04
+  }
+  
+  // 2. Fallback to default ranks configuration arrays (MDA or FD_PENSION)
+  const rankIdx = (Number(agentRankNum) || 1) - 1
+  const isRD = code.startsWith('RD')
+  
+  // Determine plan index (0-4) based on plan code or name
+  let planIdx = 0
+  const match = code.match(/(\d)/)
+  if (match) {
+    planIdx = Math.max(0, Math.min(4, Number(match[1]) - 1))
+  }
+  
+  if (isRD) {
+    const isYear1 = yr === 1
+    const table = ranksConfig?.MDA || DEFAULT_MDA
+    const mdaObj = table[rankIdx] || { y1: [0,0,0,0,0], y2: [0,0,0,0,0] }
+    const rate = isYear1 ? mdaObj.y1?.[planIdx] : mdaObj.y2?.[planIdx]
+    return rate || 0
+  } else {
+    // FD / Pension
+    const table = ranksConfig?.FD_PENSION || DEFAULT_FD_PENSION
+    const row = table[rankIdx] || [0,0,0,0,0]
+    return row[planIdx] || 0
+  }
+}
+
 export default function ImportData() {
   const { profile } = useAuth()
+  const { getRank, config: ranksConfig } = useRanks()
+  const [commissionsConfig, setCommissionsConfig] = useState(null)
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [data, setData] = useState([])
   const [agentsMap, setAgentsMap] = useState({})
@@ -43,6 +82,16 @@ export default function ImportData() {
   // Fetch Excel Mapping & Master dependencies
   useEffect(() => {
     ;(async () => {
+      // 0. Fetch commissions configurations
+      try {
+        const commSnap = await getDoc(doc(db, 'config', 'commissions'))
+        if (commSnap.exists() && commSnap.data().commissions) {
+          setCommissionsConfig(commSnap.data().commissions)
+        }
+      } catch (err) {
+        console.warn('Commissions config skipped (will use defaults):', err)
+      }
+
       // 1. Fetch Mapping Settings
       try {
         const settingsSnap = await getDoc(doc(db, 'config', 'settings'))
@@ -60,7 +109,7 @@ export default function ImportData() {
         usersSnap.forEach(d => {
           const u = d.data()
           if (u.sponsorCode) {
-            uMap[u.sponsorCode.trim().toLowerCase()] = { id: d.id, name: u.name, branchId: u.branchId, rank: u.rank }
+            uMap[u.sponsorCode.trim().toLowerCase()] = { id: d.id, name: u.name, branchId: u.branchId, rank: u.rank, sponsorCode: u.sponsorCode }
           }
         })
         setAgentsMap(uMap)
@@ -369,6 +418,59 @@ export default function ImportData() {
           activePolicies: increment(1),
           businessVolume: increment(calculatedAmount),
           recentImportDate: serverTimestamp(),
+        })
+
+        // 4. Calculate and generate Commission & Ledger entries
+        const agentRankObj = getRank(agentRef.rank)
+        const rate = getCommissionRate(row.planCode, 1, agentRankObj.code, agentRef.rank, commissionsConfig, ranksConfig)
+        const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
+        const commissionAmount = baseAmount * rate
+
+        const calculationDate = new Date()
+        const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
+        const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
+
+        // Create Commission doc
+        const commRef = doc(collection(db, 'commissions'))
+        const commId = commRef.id
+        await setDoc(commRef, {
+          agentId: agentRef.id,
+          agentName: agentRef.name,
+          sponsorCode: agentRef.sponsorCode || '',
+          customerId: customerDocId,
+          customerName: row.customerName,
+          customerAccount: row.customerId,
+          policyId: policyRef.id,
+          policyNumber: row.policyNumber,
+          planCode: row.planCode,
+          policyYear: 1,
+          percentage: rate * 100, // store as percentage e.g. 4.0
+          amount: commissionAmount,
+          month: monthNum,
+          year: yearNum,
+          calculationDate: serverTimestamp(),
+          status: 'unpaid',
+        })
+
+        // Create Income Ledger entry
+        const ledgerRef = doc(collection(db, 'income_ledger'))
+        await setDoc(ledgerRef, {
+          createdAt: serverTimestamp(),
+          policyNumber: row.policyNumber,
+          customerName: row.customerName,
+          agentName: agentRef.name,
+          sponsorCode: agentRef.sponsorCode || '',
+          planCode: row.planCode,
+          type: 'commission',
+          percentage: rate * 100,
+          amount: commissionAmount,
+          refId: commId,
+          status: 'unpaid',
+        })
+
+        // Mark policy commissionCalculated as true
+        await updateDoc(doc(db, 'plans', policyRef.id), {
+          commissionCalculated: true,
         })
 
         successCount++

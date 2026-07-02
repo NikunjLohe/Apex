@@ -90,11 +90,12 @@ export default function Settings() {
 
   // Sorted list of ranks
   const currentRanks = useMemo(() => {
-    return ranksList.length > 0 ? ranksList : RANKS.map((r, i) => ({
+    const list = ranksList.length > 0 ? ranksList : RANKS.map((r, i) => ({
       rank: r.rank,
       code: r.code,
       name: r.name,
       mfa: config.MFA[i] || 0,
+      mfaTarget: config.MFA_TARGET[i] || 0,
       ta: config.TA[i] || 0,
       pbTarget: config.PB_TARGET[i] || 0,
       pbAmount: config.PB_AMOUNT[i] || 0,
@@ -107,6 +108,10 @@ export default function Settings() {
       recruitPermission: Number(r.rank) > 1,
       promoDesc: r.promoDesc || '',
       status: r.status || 'active',
+    }))
+    return list.map((r, i) => ({
+      ...r,
+      mfaTarget: r.mfaTarget || config.MFA_TARGET[i] || 0,
     }))
   }, [ranksList, RANKS, config])
 
@@ -178,6 +183,7 @@ export default function Settings() {
       code: rankObj.code || '',
       name: rankObj.name || '',
       mfa: rankObj.mfa || 0,
+      mfaTarget: rankObj.mfaTarget || 0,
       ta: rankObj.ta || 0,
       pbTarget: rankObj.pbTarget || 0,
       pbAmount: rankObj.pbAmount || 0,
@@ -201,6 +207,7 @@ export default function Settings() {
       code: '',
       name: '',
       mfa: 0,
+      mfaTarget: 0,
       ta: 0,
       pbTarget: 0,
       pbAmount: 0,
@@ -757,10 +764,14 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <div>
-                <label className="label">Monthly Field Allowance (MFA)</label>
+                <label className="label">MFA Amount</label>
                 <input type="number" className="field" value={editingRank.mfa} onChange={(e) => setEditingRank({ ...editingRank, mfa: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className="label">MFA Target (Monthly BV)</label>
+                <input type="number" className="field" value={editingRank.mfaTarget || ''} onChange={(e) => setEditingRank({ ...editingRank, mfaTarget: Number(e.target.value) })} />
               </div>
               <div>
                 <label className="label">Travel Allowance (TA)</label>
@@ -774,7 +785,7 @@ export default function Settings() {
                   checked={editingRank.recruitPermission} 
                   onChange={(e) => setEditingRank({ ...editingRank, recruitPermission: e.target.checked })} 
                 />
-                <label htmlFor="recruitPerm" className="text-xs font-semibold text-ink-1">Recruitment Permission</label>
+                <label htmlFor="recruitPerm" className="text-xs font-semibold text-ink-1">Recruitment</label>
               </div>
             </div>
 

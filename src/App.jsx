@@ -32,6 +32,7 @@ const Overview = lazy(() => import('./pages/admin/Overview'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const ImportData = lazy(() => import('./pages/admin/ImportData'))
 const ImportHistory = lazy(() => import('./pages/admin/ImportHistory'))
+const Payouts = lazy(() => import('./pages/admin/Payouts'))
 const Customers = lazy(() => import('./pages/admin/Customers'))
 const CustomerDetail = lazy(() => import('./pages/admin/CustomerDetail'))
 const Policies = lazy(() => import('./pages/admin/Policies'))
@@ -107,6 +108,7 @@ export default function App() {
               <Route path="/admin/branches/:id" element={<Protected capability={CAP.ADMIN}><BranchDetail /></Protected>} />
               <Route path="/admin/import" element={<Protected capability={CAP.ADMIN}><ImportData /></Protected>} />
               <Route path="/admin/import/history" element={<Protected capability={CAP.ADMIN}><ImportHistory /></Protected>} />
+              <Route path="/admin/payouts" element={<Protected capability={CAP.ADMIN}><Payouts /></Protected>} />
               <Route path="/admin/customers" element={<Protected capability={CAP.ADMIN}><Customers /></Protected>} />
               <Route path="/admin/customers/:id" element={<Protected capability={CAP.ADMIN}><CustomerDetail /></Protected>} />
               <Route path="/admin/policies" element={<Protected capability={CAP.ADMIN}><Policies /></Protected>} />

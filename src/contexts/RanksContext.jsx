@@ -5,6 +5,7 @@ import { RANKS as DEFAULT_RANKS } from '../data/ranks'
 import {
   MDA as DEFAULT_MDA,
   MFA as DEFAULT_MFA,
+  MFA_TARGET as DEFAULT_MFA_TARGET,
   TA as DEFAULT_TA,
   PB_TARGET as DEFAULT_PB_TARGET,
   PB_AMOUNT as DEFAULT_PB_AMOUNT,
@@ -30,6 +31,7 @@ function buildConfigFromRanksList(ranksList) {
     status: r.status || 'active',
   }))
   const MFA = sorted.map(r => Number(r.mfa) || 0)
+  const MFA_TARGET = sorted.map(r => Number(r.mfaTarget) || 0)
   const TA = sorted.map(r => Number(r.ta) || 0)
   const PB_TARGET = sorted.map(r => Number(r.pbTarget) || 0)
   const PB_AMOUNT = sorted.map(r => Number(r.pbAmount) || 0)
@@ -51,6 +53,7 @@ function buildConfigFromRanksList(ranksList) {
   return {
     RANKS,
     MFA,
+    MFA_TARGET,
     TA,
     PB_TARGET,
     PB_AMOUNT,
@@ -95,6 +98,7 @@ export function RanksProvider({ children }) {
           status: 'active',
         })),
         MFA: DEFAULT_MFA,
+        MFA_TARGET: DEFAULT_MFA_TARGET,
         TA: DEFAULT_TA,
         PB_TARGET: DEFAULT_PB_TARGET,
         PB_AMOUNT: DEFAULT_PB_AMOUNT,
@@ -126,6 +130,7 @@ export function RanksProvider({ children }) {
         code: r.code || '',
         name: r.name || '',
         mfa: Number(r.mfa) || 0,
+        mfaTarget: Number(r.mfaTarget) || 0,
         ta: Number(r.ta) || 0,
         pbTarget: Number(r.pbTarget) || 0,
         pbAmount: Number(r.pbAmount) || 0,

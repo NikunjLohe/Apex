@@ -33,8 +33,9 @@ export default function Dashboard() {
   const users = useCollection('users')
   const branches = useCollection('branches')
   const imports = useCollection('imports')
+  const payouts = useCollection('payouts')
 
-  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading
+  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading || payouts.loading
 
   // Admin and Super Admin Stats calculation
   const stats = useMemo(() => {
@@ -112,6 +113,45 @@ export default function Dashboard() {
       })
       .slice(0, 5)
 
+    // Phase 4 calculations
+    const currMonth = new Date().getMonth() + 1
+    const currYear = new Date().getFullYear()
+
+    const monthlyCommission = payouts.data
+      .filter(p => p.month === currMonth && p.year === currYear)
+      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
+
+    const pendingPayouts = payouts.data
+      .filter(p => p.status !== 'paid')
+      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
+
+    const paidPayouts = payouts.data
+      .filter(p => p.status === 'paid')
+      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
+
+    // Highest earning agents: group payouts by agent sponsorCode and sum totalPayable
+    const agentEarnings = {}
+    payouts.data.forEach((p) => {
+      const key = p.sponsorCode || '—'
+      if (!agentEarnings[key]) {
+        agentEarnings[key] = { name: p.agentName, code: p.sponsorCode, total: 0 }
+      }
+      agentEarnings[key].total += p.totalPayable || 0
+    })
+
+    const highestEarning = Object.values(agentEarnings)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
+    // Recent financial activity (latest 5 payouts generated)
+    const recentFinancial = [...payouts.data]
+      .sort((a, b) => {
+        const timeA = a.generatedDate?.seconds ? a.generatedDate.seconds * 1000 : 0
+        const timeB = b.generatedDate?.seconds ? b.generatedDate.seconds * 1000 : 0
+        return timeB - timeA
+      })
+      .slice(0, 5)
+
     return {
       customers: customers.data.length,
       activePlans: activePlans.length,
@@ -132,8 +172,14 @@ export default function Dashboard() {
       pendingImportErrors,
       recentImports,
       recentPolicies,
+      // Phase 4 stats
+      monthlyCommission,
+      pendingPayouts,
+      paidPayouts,
+      highestEarning,
+      recentFinancial,
     }
-  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, loading])
+  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, payouts.data, loading])
 
   // KPI configurations
   const cards = useMemo(() => {
@@ -198,11 +244,11 @@ export default function Dashboard() {
           </h2>
         </div>
         <div className="flex gap-2.5">
-          <Link to="/admin/import" className="btn-gold py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-            <IDoc size={16} /> Import Center
+          <Link to="/admin/payouts" className="btn-gold py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
+            <ICash size={16} /> Payout Engine
           </Link>
-          <Link to="/admin/customers" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-            <IUsers size={16} /> Customers List
+          <Link to="/admin/import" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
+            <IDoc size={16} /> Import Center
           </Link>
         </div>
       </div>
@@ -236,26 +282,51 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Phase 3 Today's Upload stats widgets */}
+      {/* Phase 4 Financial KPIs widgets */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <div className="card p-4 border-l-2 border-l-gold-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Today's Imported Policies</span>
-          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.todayImportedPolicies}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Monthly Commission</span>
+          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{formatINR(stats.monthlyCommission)}</span>
         </div>
         <div className="card p-4 border-l-2 border-l-ok">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Today's Imported Customers</span>
-          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.todayImportedCustomers}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Paid Payouts</span>
+          <span className="text-xl font-bold font-serif text-ok mt-1 block">{formatINR(stats.paidPayouts)}</span>
         </div>
-        <Link to="/admin/import/history" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Import Errors</span>
-          <span className="text-xl font-bold font-serif text-danger mt-1 block">{stats.pendingImportErrors}</span>
+        <Link to="/admin/payouts" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Payouts</span>
+          <span className="text-xl font-bold font-serif text-danger mt-1 block">{formatINR(stats.pendingPayouts)}</span>
         </Link>
       </div>
 
       {/* Admin Grid Sections */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left Column: Recent Upload History log */}
+        
+        {/* Left Column: Recent Upload History & Rank distribution */}
         <div className="space-y-6">
+          {/* Highest Earning Agents list */}
+          <div className="card p-5 space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
+              <INetwork size={16} /> Highest Earning Agents
+            </h3>
+            {stats.highestEarning.length ? (
+              <div className="space-y-3">
+                {stats.highestEarning.map((agent) => (
+                  <div key={agent.code} className="flex justify-between items-center text-xs">
+                    <div>
+                      <span className="font-semibold text-ink-1 block">{agent.name}</span>
+                      <span className="text-[10px] text-ink-2 font-mono">{agent.code}</span>
+                    </div>
+                    <span className="font-mono font-bold text-gold bg-navy-2 px-2 py-0.5 rounded border border-navy-4">
+                      {formatINR(agent.total)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic py-2 text-center">No payouts calculated yet.</p>
+            )}
+          </div>
+
           {/* Recent Imports list */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
@@ -287,31 +358,57 @@ export default function Dashboard() {
               <p className="text-xs text-ink-2 italic text-center py-4">No import sessions executed yet.</p>
             )}
           </div>
-
-          {/* Agents by Rank */}
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <INetwork size={16} /> Agents by Rank
-            </h3>
-            {stats.rankDistribution.length ? (
-              <div className="space-y-3">
-                {stats.rankDistribution.map((dist) => (
-                  <div key={dist.rank} className="flex justify-between items-center text-xs">
-                    <RankBadge rank={dist.rank} size="sm" showName />
-                    <span className="font-mono font-bold text-ink-1 bg-navy-2 px-2 py-0.5 rounded border border-navy-4">
-                      {dist.count} {dist.count === 1 ? 'agent' : 'agents'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-ink-2 italic py-2 text-center">No agents registered in system.</p>
-            )}
-          </div>
         </div>
 
         {/* Right Column: Tables and logs */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Recent Financial Activity ledger */}
+          <div className="card p-5 space-y-4">
+            <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <ICash size={16} /> Recent Payouts Activity
+              </h3>
+              <Link to="/admin/payouts" className="text-xs font-bold text-gold hover:underline">
+                Payouts &rarr;
+              </Link>
+            </div>
+            {stats.recentFinancial.length ? (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Agent Name</th>
+                      <th>Month</th>
+                      <th>Policies</th>
+                      <th>Total Commission</th>
+                      <th>Net Payable</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recentFinancial.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <span className="font-semibold text-ink-1 block">{p.agentName}</span>
+                          <span className="text-[10px] text-ink-2 font-mono">{p.sponsorCode}</span>
+                        </td>
+                        <td className="font-medium text-ink-2">{p.month}/{p.year}</td>
+                        <td className="font-mono text-ink-1 font-bold">{p.policiesCount}</td>
+                        <td className="text-ink-1">{formatINR(p.totalCommission)}</td>
+                        <td className="font-bold text-gold">{formatINR(p.totalPayable)}</td>
+                        <td>
+                          <StatusBadge status={p.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic text-center py-4">No payouts activity logged yet.</p>
+            )}
+          </div>
+
           {/* Recent Policies table */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
@@ -362,50 +459,6 @@ export default function Dashboard() {
               </div>
             ) : (
               <p className="text-xs text-ink-2 italic text-center py-4">No policies loaded yet.</p>
-            )}
-          </div>
-
-          {/* Recently Joined Agents */}
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <IClock size={16} /> Recently Joined Agents
-            </h3>
-            {stats.recentlyJoined.length ? (
-              <div className="table-wrap">
-                <table className="tbl text-xs">
-                  <thead>
-                    <tr>
-                      <th>Agent ID</th>
-                      <th>Name</th>
-                      <th>Rank</th>
-                      <th>Contact</th>
-                      <th>Joined</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.recentlyJoined.map((m) => (
-                      <tr key={m.id}>
-                        <td className="font-mono font-semibold text-ink-1">
-                          <Link to={`/admin/members/${m.id}`} className="hover:text-gold-1 hover:underline">
-                            {m.sponsorCode || '—'}
-                          </Link>
-                        </td>
-                        <td className="font-semibold text-ink-1">
-                          <Link to={`/admin/members/${m.id}`} className="hover:text-gold-1 hover:underline">
-                            {m.name}
-                          </Link>
-                          <div className="text-[10px] text-ink-2">{m.email}</div>
-                        </td>
-                        <td><RankBadge rank={m.rank} size="sm" /></td>
-                        <td className="text-ink-2 font-mono">{m.phone || '—'}</td>
-                        <td className="text-ink-2">{m.joinDate ? fmtDate(m.joinDate) : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-xs text-ink-2 italic py-2 text-center">No agents registered recently.</p>
             )}
           </div>
         </div>
