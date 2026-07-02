@@ -1,20 +1,21 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { startOfMonth, startOfDay } from 'date-fns'
+import { startOfMonth, startOfDay, subMonths, format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermission, CAP } from '../hooks/usePermission'
 import { useCollection } from '../hooks/useFirestore'
-import { formatINR, formatCompactINR, fmtDate, fmtDateTime, toDate } from '../utils/format'
+import { formatINR, formatCompactINR, fmtDate, toDate } from '../utils/format'
 import RankBadge from '../components/ui/RankBadge'
 import StatusBadge from '../components/ui/StatusBadge'
 import EmptyState from '../components/ui/EmptyState'
 import { SkeletonStats, SkeletonTable } from '../components/ui/LoadingSkeleton'
 import { 
-  IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard, IBuilding, INetwork, IClock, ISettings 
+  IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard, IBuilding, INetwork, IClock, ITrophy 
 } from '../components/ui/icons'
 import MyEarnings from './earnings/MyEarnings'
 import { useRanks } from '../contexts/RanksContext'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
 export default function Dashboard() {
   const { profile, isSuperAdmin } = useAuth()
@@ -34,8 +35,9 @@ export default function Dashboard() {
   const branches = useCollection('branches')
   const imports = useCollection('imports')
   const payouts = useCollection('payouts')
+  const promotions = useCollection('promotions_history')
 
-  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading || payouts.loading
+  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading || payouts.loading || promotions.loading
 
   // Admin and Super Admin Stats calculation
   const stats = useMemo(() => {
@@ -55,171 +57,145 @@ export default function Dashboard() {
       const due = toDate(p.nextDueDate)
       return due && due < today0
     })
-    const maturingThisMonth = plans.data.filter((p) => {
-      const m = toDate(p.maturityDate)
-      return m && m >= month0 && m <= new Date(month0.getFullYear(), month0.getMonth() + 1, 0)
+    
+    // Total Business Volume (sum of RD monthly amounts * 12 + FD lump sums)
+    const totalBusiness = plans.data.reduce((sum, p) => {
+      const isRD = p.type?.toLowerCase().startsWith('rd')
+      return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+    }, 0)
+
+    // Monthly MTD Business Volume
+    const monthlyBusiness = plans.data
+      .filter(p => toDate(p.startDate) >= month0)
+      .reduce((sum, p) => {
+        const isRD = p.type?.toLowerCase().startsWith('rd')
+        return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+      }, 0)
+
+    const activeAgents = users.data.filter(u => u.status === 'active').length
+
+    // Dynamic Monthly Growth Chart Data (last 6 months)
+    const growthData = Array.from({ length: 6 }, (_, i) => {
+      const date = subMonths(new Date(), 5 - i)
+      const monthLabel = format(date, 'MMM yy')
+      const targetMonth = date.getMonth() + 1
+      const targetYear = date.getFullYear()
+      
+      const sales = plans.data
+        .filter(p => {
+          const sd = toDate(p.startDate)
+          return sd && sd.getMonth() + 1 === targetMonth && sd.getFullYear() === targetYear
+        })
+        .reduce((sum, p) => {
+          const isRD = p.type?.toLowerCase().startsWith('rd')
+          return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+        }, 0)
+
+      return { month: monthLabel, Business: sales }
     })
 
-    // Branch metadata
-    const activeBranches = branches.data.filter(b => b.status !== 'inactive').length
-    const inactiveBranches = branches.data.filter(b => b.status === 'inactive').length
+    // Branch Performance Metrics
+    const branchPerformance = branches.data.map(b => {
+      const bPlans = plans.data.filter(p => p.branchId === b.id)
+      const sales = bPlans.reduce((sum, p) => {
+        const isRD = p.type?.toLowerCase().startsWith('rd')
+        return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+      }, 0)
+      return { name: b.name, Sales: sales }
+    }).sort((a, b) => b.Sales - a.Sales).slice(0, 5)
 
-    // Rank counts
-    const rankCounts = {}
-    users.data.forEach((u) => {
-      const r = u.rank || 1
-      rankCounts[r] = (rankCounts[r] || 0) + 1
-    })
-
-    // Sorted agents distribution by rank
-    const rankDistribution = Object.entries(rankCounts)
-      .map(([rk, count]) => ({ rank: Number(rk), count }))
-      .sort((a, b) => b.rank - a.rank)
-
-    // Recently joined agents (5 newest)
-    const recentlyJoined = [...users.data]
-      .sort((a, b) => {
-        const timeA = a.joinDate ? (a.joinDate.seconds ? a.joinDate.seconds * 1000 : new Date(a.joinDate).getTime()) : 0
-        const timeB = b.joinDate ? (b.joinDate.seconds ? b.joinDate.seconds * 1000 : new Date(b.joinDate).getTime()) : 0
-        return timeB - timeA
-      })
+    // Top Performing Agents
+    const topAgentsList = users.data
+      .map(u => ({
+        id: u.id,
+        name: u.name,
+        code: u.sponsorCode || '—',
+        rank: u.rank || 1,
+        volume: u.businessVolume || 0
+      }))
+      .sort((a, b) => b.volume - a.volume)
       .slice(0, 5)
 
     // Phase 3 calculations
-    // Today's imported policies
     const todayImportedPolicies = plans.data.filter((p) => toDate(p.createdAt) >= today0).length
-
-    // Today's imported customers
     const todayImportedCustomers = customers.data.filter((c) => toDate(c.createdAt) >= today0).length
-
-    // Total failed import rows
     const pendingImportErrors = imports.data.reduce((sum, imp) => sum + (imp.failedRows || 0), 0)
 
-    // Recent imports (last 3 upload sessions)
     const recentImports = [...imports.data]
-      .sort((a, b) => {
-        const timeA = a.importDate ? (a.importDate.seconds ? a.importDate.seconds * 1000 : new Date(a.importDate).getTime()) : 0
-        const timeB = b.importDate ? (b.importDate.seconds ? b.importDate.seconds * 1000 : new Date(b.importDate).getTime()) : 0
-        return timeB - timeA
-      })
+      .sort((a, b) => (toDate(b.importDate) || 0) - (toDate(a.importDate) || 0))
       .slice(0, 3)
 
-    // Recent policies (last 5)
     const recentPolicies = [...plans.data]
-      .sort((a, b) => {
-        const timeA = a.createdAt ? (a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime()) : 0
-        const timeB = b.createdAt ? (b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime()) : 0
-        return timeB - timeA
-      })
+      .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
       .slice(0, 5)
 
     // Phase 4 calculations
-    const currMonth = new Date().getMonth() + 1
-    const currYear = new Date().getFullYear()
-
-    const monthlyCommission = payouts.data
-      .filter(p => p.month === currMonth && p.year === currYear)
-      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
-
+    const totalCommission = payouts.data.reduce((sum, p) => sum + (p.totalCommission || 0), 0)
     const pendingPayouts = payouts.data
       .filter(p => p.status !== 'paid')
       .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
 
-    const paidPayouts = payouts.data
-      .filter(p => p.status === 'paid')
-      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
-
-    // Highest earning agents: group payouts by agent sponsorCode and sum totalPayable
-    const agentEarnings = {}
-    payouts.data.forEach((p) => {
-      const key = p.sponsorCode || '—'
-      if (!agentEarnings[key]) {
-        agentEarnings[key] = { name: p.agentName, code: p.sponsorCode, total: 0 }
-      }
-      agentEarnings[key].total += p.totalPayable || 0
-    })
-
-    const highestEarning = Object.values(agentEarnings)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
-
-    // Recent financial activity (latest 5 payouts generated)
+    // Recent activities feed
     const recentFinancial = [...payouts.data]
-      .sort((a, b) => {
-        const timeA = a.generatedDate?.seconds ? a.generatedDate.seconds * 1000 : 0
-        const timeB = b.generatedDate?.seconds ? b.generatedDate.seconds * 1000 : 0
-        return timeB - timeA
-      })
+      .sort((a, b) => (toDate(b.generatedDate) || 0) - (toDate(a.generatedDate) || 0))
       .slice(0, 5)
 
     return {
-      customers: customers.data.length,
+      totalBusiness,
+      monthlyBusiness,
+      activeAgents,
       activePlans: activePlans.length,
       todayCollection,
       monthCollection,
+      totalCommission,
+      pendingPayouts,
       defaulters: defaulters.length,
-      maturingThisMonth: maturingThisMonth.length,
-      recent: [...payments.data].sort((a, b) => (toDate(b.paidDate) || 0) - (toDate(a.paidDate) || 0)).slice(0, 5),
+      recentlyJoined: users.data.slice(0, 5),
       totalAgents: users.data.length,
       totalBranches: branches.data.length,
-      activeBranches,
-      inactiveBranches,
-      rankDistribution,
-      recentlyJoined,
-      // Phase 3 stats
       todayImportedPolicies,
       todayImportedCustomers,
       pendingImportErrors,
       recentImports,
       recentPolicies,
-      // Phase 4 stats
-      monthlyCommission,
-      pendingPayouts,
-      paidPayouts,
-      highestEarning,
+      growthData,
+      branchPerformance,
+      topAgentsList,
       recentFinancial,
+      promotionsCount: promotions.data.length,
     }
-  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, payouts.data, loading])
+  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, payouts.data, promotions.data, loading])
 
-  // KPI configurations
+  // KPI Configurations
   const cards = useMemo(() => {
     if (loading) return []
     return [
       {
-        label: 'Total Agents Registered',
-        value: stats.totalAgents,
-        icon: <IUsers size={19} />,
-        to: '/admin/members',
+        label: 'Total Business Volume',
+        value: formatINR(stats.totalBusiness),
+        icon: <ITrophy size={19} />,
         borderLeftClass: 'border-l-[4.5px] border-l-[#A3906B]',
         iconBgClass: 'bg-[#F9F7F3] border-[#EDE9E0] text-[#A3906B]',
-        badge: `No. ${String(stats.totalAgents).padStart(4, '0')}`,
-        footerLeft: 'Active in system',
-        footerRight: '—',
-        footerRightColor: 'text-ink-2',
+        badge: 'LIFETIME',
+        footerLeft: 'Total premium sales',
       },
       {
-        label: 'Total Branch Offices',
-        value: stats.totalBranches,
-        icon: <IBuilding size={19} />,
-        to: '/admin/branches',
+        label: 'MTD Monthly Business',
+        value: formatINR(stats.monthlyBusiness),
+        icon: <ICash size={19} />,
         borderLeftClass: 'border-l-[4.5px] border-l-[#8FA382]',
         iconBgClass: 'bg-[#F4F6F2] border-[#E8ECE5] text-[#7A8E6E]',
-        badge: `No. ${String(stats.totalBranches).padStart(4, '0')}`,
-        footerLeft: `${stats.activeBranches} Active / ${stats.inactiveBranches} Inactive`,
-        footerRight: '—',
-        footerRightColor: 'text-ink-2',
+        badge: 'CURRENT MONTH',
+        footerLeft: 'Monthly targets metrics',
       },
       {
-        label: 'Month Collection (MTD)',
-        value: formatCompactINR(stats.monthCollection),
+        label: 'Total Paid Commissions',
+        value: formatINR(stats.totalCommission),
         icon: <ICash size={19} />,
-        to: '/reports/collections',
         borderLeftClass: 'border-l-[4.5px] border-l-[#D29E6B]',
         iconBgClass: 'bg-[#FAF6F2] border-[#F2ECE5] text-[#BF8955]',
-        badge: 'MTD',
-        footerLeft: "Premium sales totals",
-        footerRight: 'Today: ' + formatINR(stats.todayCollection),
-        footerRightColor: 'text-gold font-semibold',
+        badge: 'COMMISSIONS',
+        footerLeft: 'Ledger payout credits',
       },
     ]
   }, [stats, loading])
@@ -235,99 +211,152 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Greeting */}
-      <div className="flex flex-wrap items-center justify-between gap-4 py-2">
+      {/* Greeting Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-navy-4/50">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-ink-2">Portal Operations Summary</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-ink-2">Branch Operations Portal Summary</p>
           <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-ink-1 mt-0.5 tracking-tight">
             {profile?.name || 'Super Admin'}
           </h2>
         </div>
         <div className="flex gap-2.5">
-          <Link to="/admin/payouts" className="btn-gold py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-            <ICash size={16} /> Payout Engine
+          <Link to="/admin/import" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5">
+            <IDoc size={14} /> Import Center
           </Link>
-          <Link to="/admin/import" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-            <IDoc size={16} /> Import Center
+          <Link to="/admin/payouts" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5">
+            <ICash size={14} /> Payouts Engine
           </Link>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI stats section */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <Link to={c.to} className={`card block p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md relative overflow-hidden flex flex-col justify-between h-44 ${c.borderLeftClass}`}>
+            <div className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 ${c.borderLeftClass}`}>
               <div>
                 <div className="flex items-center justify-between">
                   <span className={`flex h-9 w-9 items-center justify-center rounded-[8px] border ${c.iconBgClass}`}>
                     {c.icon}
                   </span>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full border border-navy-4/80 bg-navy-1 text-ink-2 font-bold tracking-wide">
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded border border-navy-4 bg-navy-1 text-ink-2 font-mono uppercase">
                     {c.badge}
                   </span>
                 </div>
-                <p className="mt-4 text-xs font-medium text-ink-2/80 tracking-wide">{c.label}</p>
+                <p className="mt-4 text-xs font-semibold text-ink-2 tracking-wide">{c.label}</p>
                 <p className="text-2xl font-bold font-serif text-ink-1 mt-1 leading-none">{c.value}</p>
               </div>
-              <div>
-                <div className="border-t border-dashed border-navy-4/80 my-2.5" />
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-ink-2 font-medium">{c.footerLeft}</span>
-                  <span className={c.footerRightColor}>{c.footerRight}</span>
-                </div>
-              </div>
-            </Link>
+            </div>
           </motion.div>
         ))}
       </div>
 
-      {/* Phase 4 Financial KPIs widgets */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+      {/* Dynamic Visual Growth Graphs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Business growth line area chart */}
+        <div className="card p-5 space-y-4 bg-navy-3 border border-navy-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+            Monthly Business Growth (6-Month Sales Volume)
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#A3906B" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#A3906B" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#253545" />
+                <XAxis dataKey="month" stroke="#7A8E9E" fontSize={10} />
+                <YAxis stroke="#7A8E9E" fontSize={10} tickFormatter={(val) => `₹${formatCompactINR(val)}`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#132230', borderColor: '#253545', borderRadius: '8px' }}
+                  labelStyle={{ color: '#7A8E9E', fontWeight: 'bold' }}
+                  itemStyle={{ color: '#A3906B' }}
+                />
+                <Area type="monotone" dataKey="Business" stroke="#A3906B" fillOpacity={1} fill="url(#colorSales)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Top Branch performance Bar Chart */}
+        <div className="card p-5 space-y-4 bg-navy-3 border border-navy-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+            Branch Office Performance (Sales Rankings)
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.branchPerformance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#253545" />
+                <XAxis dataKey="name" stroke="#7A8E9E" fontSize={10} />
+                <YAxis stroke="#7A8E9E" fontSize={10} tickFormatter={(val) => `₹${formatCompactINR(val)}`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#132230', borderColor: '#253545', borderRadius: '8px' }}
+                  labelStyle={{ color: '#7A8E9E', fontWeight: 'bold' }}
+                  itemStyle={{ color: '#7A8E6E' }}
+                />
+                <Bar dataKey="Sales" fill="#7A8E6E" radius={[4, 4, 0, 0]} maxBarSize={45} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Today's Import validations grid info */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">
         <div className="card p-4 border-l-2 border-l-gold-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Monthly Commission</span>
-          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{formatINR(stats.monthlyCommission)}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Active Agents</span>
+          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.activeAgents}</span>
         </div>
         <div className="card p-4 border-l-2 border-l-ok">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Paid Payouts</span>
-          <span className="text-xl font-bold font-serif text-ok mt-1 block">{formatINR(stats.paidPayouts)}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Active Policies</span>
+          <span className="text-xl font-bold font-serif text-ok mt-1 block">{stats.activePlans}</span>
         </div>
-        <Link to="/admin/payouts" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Payouts</span>
-          <span className="text-xl font-bold font-serif text-danger mt-1 block">{formatINR(stats.pendingPayouts)}</span>
+        <div className="card p-4 border-l-2 border-l-gold">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Approved Promotions</span>
+          <span className="text-xl font-bold font-serif text-gold-1 mt-1 block">{stats.promotionsCount}</span>
+        </div>
+        <Link to="/admin/import/history" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Import Errors</span>
+          <span className="text-xl font-bold font-serif text-danger mt-1 block">{stats.pendingImportErrors}</span>
         </Link>
       </div>
 
-      {/* Admin Grid Sections */}
+      {/* Grid distributions panels */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         
-        {/* Left Column: Recent Upload History & Rank distribution */}
+        {/* Left Column: Top Performers lists */}
         <div className="space-y-6">
-          {/* Highest Earning Agents list */}
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <INetwork size={16} /> Highest Earning Agents
+          {/* Top performing agents ranking */}
+          <div className="card p-5 space-y-4 bg-navy-3 border border-navy-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
+              <IUsers size={16} /> Top Performing Agents
             </h3>
-            {stats.highestEarning.length ? (
+            {stats.topAgentsList.length > 0 ? (
               <div className="space-y-3">
-                {stats.highestEarning.map((agent) => (
-                  <div key={agent.code} className="flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-semibold text-ink-1 block">{agent.name}</span>
-                      <span className="text-[10px] text-ink-2 font-mono">{agent.code}</span>
+                {stats.topAgentsList.map((agent, i) => (
+                  <div key={agent.id} className="flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-ink-2 font-mono w-4">{i + 1}.</span>
+                      <div>
+                        <span className="font-semibold text-ink-1 block">{agent.name}</span>
+                        <span className="text-[9px] text-ink-2 font-mono uppercase">{agent.code}</span>
+                      </div>
                     </div>
                     <span className="font-mono font-bold text-gold bg-navy-2 px-2 py-0.5 rounded border border-navy-4">
-                      {formatINR(agent.total)}
+                      {formatINR(agent.volume)}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-ink-2 italic py-2 text-center">No payouts calculated yet.</p>
+              <p className="text-xs text-ink-2 italic text-center py-4">No agent records found.</p>
             )}
           </div>
 
-          {/* Recent Imports list */}
+          {/* Recent upload history files */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
@@ -362,7 +391,7 @@ export default function Dashboard() {
 
         {/* Right Column: Tables and logs */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Recent Financial Activity ledger */}
+          {/* Recent Payouts approvals activity logs */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
@@ -378,7 +407,7 @@ export default function Dashboard() {
                   <thead>
                     <tr>
                       <th>Agent Name</th>
-                      <th>Month</th>
+                      <th>Period</th>
                       <th>Policies</th>
                       <th>Total Commission</th>
                       <th>Net Payable</th>
@@ -409,7 +438,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Recent Policies table */}
+          {/* Recent Policies table list */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">

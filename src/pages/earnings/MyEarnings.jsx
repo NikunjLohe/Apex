@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { where } from 'firebase/firestore'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCollection } from '../../hooks/useFirestore'
 import { useRanks } from '../../contexts/RanksContext'
-import { formatINR, fmtDate } from '../../utils/format'
+import { formatINR, fmtDate, toDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { ITrophy, ICash, IShield, IClock, IDoc, IUsers } from '../../components/ui/icons'
+import { ITrophy, ICash, IShield, IClock, IDoc, IUsers, ICheck } from '../../components/ui/icons'
 
 export default function MyEarnings() {
   const { profile } = useAuth()
@@ -20,13 +21,15 @@ export default function MyEarnings() {
   const commissions = useCollection('commissions', uid ? [where('agentId', '==', uid)] : null)
   const payouts = useCollection('payouts', uid ? [where('agentId', '==', uid)] : null)
   const ledger = useCollection('income_ledger', sponsorCode ? [where('sponsorCode', '==', sponsorCode)] : null)
+  const allUsers = useCollection('users')
+  const enrolledCustomers = useCollection('customers', uid ? [where('enrolledBy', '==', uid)] : null)
 
   const { getRank, nextRank, config } = useRanks()
 
   // Selected payout detail view state
   const [selectedPayout, setSelectedPayout] = useState(null)
 
-  const loading = ownPlans.loading || commissions.loading || payouts.loading || ledger.loading
+  const loading = ownPlans.loading || commissions.loading || payouts.loading || ledger.loading || allUsers.loading || enrolledCustomers.loading
 
   // Calculations
   const stats = useMemo(() => {
@@ -53,6 +56,11 @@ export default function MyEarnings() {
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
+    // Current Month Commissions Income
+    const currentMonthIncome = commissions.data
+      .filter(c => c.month === currMonth && c.year === currYear)
+      .reduce((sum, c) => sum + (c.amount || 0), 0)
+
     // Sort payouts by date descending
     const sortedPayouts = [...payouts.data].sort((a, b) => {
       const timeA = a.generatedDate?.seconds ? a.generatedDate.seconds * 1000 : 0
@@ -68,6 +76,20 @@ export default function MyEarnings() {
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
+    // Calculate MLM Team business volume recursively
+    const visited = new Set()
+    const getDownlineVolume = (parentId) => {
+      let vol = 0
+      allUsers.data.forEach(u => {
+        if (u.referredBy === parentId && !visited.has(u.id)) {
+          visited.add(u.id)
+          vol += (u.businessVolume || 0) + getDownlineVolume(u.id)
+        }
+      })
+      return vol
+    }
+    const teamBusiness = getDownlineVolume(uid)
+
     // Rank properties
     const rankIdx = (Number(profile?.rank) || 1) - 1
     const mfaTarget = config.MFA_TARGET?.[rankIdx] || 0
@@ -79,11 +101,23 @@ export default function MyEarnings() {
     const mfaPct = mfaTarget > 0 ? Math.min(100, (monthlyBusinessVolume / mfaTarget) * 100) : 0
     const pbPct = pbTarget > 0 ? Math.min(100, (monthlyBusinessVolume / pbTarget) * 100) : 0
 
+    // Recent Policies sold
+    const recentPolicies = [...ownPlans.data]
+      .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
+      .slice(0, 5)
+
+    // Recent Enrolled Customers
+    const recentCustomers = [...enrolledCustomers.data]
+      .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
+      .slice(0, 5)
+
     return {
       pendingAmount,
       paidAmount,
       monthlyBusinessVolume,
+      currentMonthIncome,
       lifetimeBusinessVolume,
+      teamBusiness,
       lastPayout,
       sortedPayouts,
       mfaTarget,
@@ -92,8 +126,10 @@ export default function MyEarnings() {
       pbAmount,
       mfaPct,
       pbPct,
+      recentPolicies,
+      recentCustomers,
     }
-  }, [commissions.data, payouts.data, ownPlans.data, loading, profile?.rank, config])
+  }, [commissions.data, payouts.data, ownPlans.data, allUsers.data, enrolledCustomers.data, loading, profile?.rank, config, uid])
 
   const rank = getRank(profile?.rank)
   const next = nextRank(profile?.rank)
@@ -122,7 +158,7 @@ export default function MyEarnings() {
             <p className="mt-0.5 text-xs text-ink-2 font-mono">Rank Level: {rank.name} ({rank.code})</p>
           </div>
           <div className="text-right">
-            <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Lifetime Business Volume</span>
+            <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Personal Business Volume</span>
             <span className="text-2xl font-extrabold text-gold font-serif mt-0.5 block">
               {formatINR(stats.lifetimeBusinessVolume)}
             </span>
@@ -161,17 +197,17 @@ export default function MyEarnings() {
           <span className="flex h-8 w-8 items-center justify-center rounded bg-ok/10 text-ok border border-ok/25">
             <ICheck size={18} />
           </span>
-          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Paid commissions</p>
-          <p className="text-lg font-bold text-ink-1 font-serif">{formatINR(stats.paidAmount)}</p>
+          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Current Month Income</p>
+          <p className="text-lg font-bold text-ink-1 font-serif">{formatINR(stats.currentMonthIncome)}</p>
         </div>
 
         <div className="card p-4 space-y-1">
           <span className="flex h-8 w-8 items-center justify-center rounded bg-navy-4 text-gold-1 border border-navy-4">
-            <ICash size={18} />
+            <ITrophy size={18} />
           </span>
-          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Last payout amount</p>
+          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Team Business Volume</p>
           <p className="text-lg font-bold text-ink-1 font-serif">
-            {stats.lastPayout ? formatINR(stats.lastPayout.totalPayable) : '—'}
+            {formatINR(stats.teamBusiness)}
           </p>
         </div>
 
@@ -239,6 +275,81 @@ export default function MyEarnings() {
         </div>
       </div>
 
+      {/* Recent Policies and Customers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Recent Policies list */}
+        <div className="card p-5 space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+            Recent Policies Sold
+          </h3>
+          {stats.recentPolicies.length ? (
+            <div className="table-wrap">
+              <table className="tbl text-xs">
+                <thead>
+                  <tr>
+                    <th>Policy No.</th>
+                    <th>Client Name</th>
+                    <th>Product</th>
+                    <th>Deposit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recentPolicies.map(p => {
+                    const isRD = p.type?.toLowerCase().startsWith('rd')
+                    return (
+                      <tr key={p.id}>
+                        <td className="font-mono text-gold font-semibold">{p.policyNumber}</td>
+                        <td className="font-semibold text-ink-1">{p.customerName}</td>
+                        <td className="uppercase font-semibold text-ink-2">{p.type}</td>
+                        <td className="font-mono font-bold text-ink-1">
+                          {isRD ? `${formatINR(p.monthlyAmount)}/mo` : formatINR(p.fdAmount)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs text-ink-2 italic py-4 text-center">No recent policies logged.</p>
+          )}
+        </div>
+
+        {/* Recent Onboarded Customers */}
+        <div className="card p-5 space-y-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+            Recently Onboarded Customers
+          </h3>
+          {stats.recentCustomers.length ? (
+            <div className="table-wrap">
+              <table className="tbl text-xs">
+                <thead>
+                  <tr>
+                    <th>Customer ID</th>
+                    <th>Client Name</th>
+                    <th>Phone</th>
+                    <th>Plans Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recentCustomers.map(c => (
+                    <tr key={c.id}>
+                      <td className="font-mono font-semibold text-gold">{c.customerId}</td>
+                      <td className="font-semibold text-ink-1">{c.name}</td>
+                      <td className="font-mono text-ink-2">{c.phone || '—'}</td>
+                      <td className="font-bold text-ink-1">{c.plansCount || 1}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs text-ink-2 italic py-4 text-center">No customer profiles onboarded yet.</p>
+          )}
+        </div>
+      </div>
+
       {/* Payout statement and income breakdown history */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
@@ -261,7 +372,7 @@ export default function MyEarnings() {
                 >
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-ink-1">
-                      {MONTHS.find(m => m.value === p.month)?.label} {p.year}
+                      {p.month}/{p.year}
                     </span>
                     <StatusBadge status={p.status} />
                   </div>
@@ -281,7 +392,7 @@ export default function MyEarnings() {
         <div className="card p-5 space-y-4 md:col-span-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
             {selectedPayout 
-              ? `Statement Detail: ${MONTHS.find(m => m.value === selectedPayout.month)?.label} ${selectedPayout.year}` 
+              ? `Statement Detail: ${selectedPayout.month}/${selectedPayout.year}` 
               : 'Statement Detail Preview'
             }
           </h3>

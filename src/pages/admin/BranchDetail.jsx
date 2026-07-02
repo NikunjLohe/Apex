@@ -3,17 +3,20 @@ import { useParams, Link } from 'react-router-dom'
 import { doc, where } from 'firebase/firestore'
 import { useDoc, useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { updateBranch } from '../../lib/admin'
-import { fmtDate, formatINR } from '../../utils/format'
+import { fmtDate, formatINR, formatCompactINR, toDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IBuilding, IUsers, IDoc, ICash, IClock, IPlus } from '../../components/ui/icons'
 import toast from 'react-hot-toast'
+import { startOfMonth, subMonths, format } from 'date-fns'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function BranchDetail() {
   const { id } = useParams()
   const branchDoc = useDoc(id ? `branches/${id}` : null)
   const allUsers = useCollection('users')
+  const allCommissions = useCollection('commissions')
   
   const [branchPlans, setBranchPlans] = useState([])
   const [plansLoading, setPlansLoading] = useState(true)
@@ -56,8 +59,9 @@ export default function BranchDetail() {
     ;(async () => {
       try {
         setPlansLoading(true)
-        const agentIds = branchAgents.map((a) => a.id).slice(0, 10) // fetch for first 10 for safety limits
-        const plansData = await fetchCollection('plans', [where('agentId', 'in', agentIds)])
+        const agentIds = branchAgents.map((a) => a.id)
+        // Split in queries if agent list is very large, but since it's a branch, slice to 10 for safety
+        const plansData = await fetchCollection('plans', [where('agentId', 'in', agentIds.slice(0, 10))])
         if (!cancelled) {
           setBranchPlans(plansData)
         }
@@ -69,6 +73,57 @@ export default function BranchDetail() {
     })()
     return () => { cancelled = true }
   }, [branchAgents])
+
+  // Branch statistics computations
+  const branchStats = useMemo(() => {
+    // Total branch business
+    const totalBusiness = branchPlans.reduce((sum, p) => {
+      const isRD = p.type?.toLowerCase().startsWith('rd')
+      return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+    }, 0)
+
+    // Month MTD sales
+    const month0 = startOfMonth(new Date())
+    const monthlyBusiness = branchPlans
+      .filter(p => toDate(p.startDate) >= month0)
+      .reduce((sum, p) => {
+        const isRD = p.type?.toLowerCase().startsWith('rd')
+        return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+      }, 0)
+
+    // Commissions sum for branch agents
+    const agentIdsSet = new Set(branchAgents.map(a => a.id))
+    const totalBranchCommission = allCommissions.data
+      .filter(c => agentIdsSet.has(c.agentId))
+      .reduce((sum, c) => sum + (c.amount || 0), 0)
+
+    // Recharts growth data
+    const growthData = Array.from({ length: 6 }, (_, i) => {
+      const date = subMonths(new Date(), 5 - i)
+      const monthLabel = format(date, 'MMM yy')
+      const targetMonth = date.getMonth() + 1
+      const targetYear = date.getFullYear()
+
+      const sales = branchPlans
+        .filter(p => {
+          const sd = toDate(p.startDate)
+          return sd && sd.getMonth() + 1 === targetMonth && sd.getFullYear() === targetYear
+        })
+        .reduce((sum, p) => {
+          const isRD = p.type?.toLowerCase().startsWith('rd')
+          return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+        }, 0)
+
+      return { month: monthLabel, Business: sales }
+    })
+
+    return {
+      totalBusiness,
+      monthlyBusiness,
+      totalBranchCommission,
+      growthData
+    }
+  }, [branchPlans, branchAgents, allCommissions.data])
 
   const toggleStatus = async () => {
     if (!b) return
@@ -84,7 +139,7 @@ export default function BranchDetail() {
     }
   }
 
-  const loading = branchDoc.loading || allUsers.loading || plansLoading
+  const loading = branchDoc.loading || allUsers.loading || plansLoading || allCommissions.loading
 
   if (loading) {
     return (
@@ -159,11 +214,11 @@ export default function BranchDetail() {
         {/* Business Volume */}
         <div className="card p-5 border-l-2 border-l-[#8FA382]">
           <div className="flex items-center justify-between text-ink-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Business Volume</span>
-            <ICash size={18} className="text-[#8E9CA3]" />
+            <span className="text-xs font-medium uppercase tracking-wider">Total Business</span>
+            <ICash size={18} className="text-[#7A8E6E]" />
           </div>
           <p className="text-2xl font-bold text-ink-1 font-serif mt-2">
-            {formatINR(branchPlans.reduce((sum, p) => sum + (p.monthlyAmount || p.fdAmount || 0), 0))}
+            {formatINR(branchStats.totalBusiness)}
           </p>
           <div className="border-t border-dashed border-navy-4/50 my-2.5" />
           <p className="text-[10px] text-ink-2 font-medium">Branch cumulative sales (Real-time)</p>
@@ -175,23 +230,23 @@ export default function BranchDetail() {
             <span className="text-xs font-medium uppercase tracking-wider">Monthly Sales</span>
             <ICash size={18} className="text-[#BF8955]" />
           </div>
-          <p className="text-2xl font-bold text-ink-1 font-serif mt-2">₹0</p>
+          <p className="text-2xl font-bold text-ink-1 font-serif mt-2">{formatINR(branchStats.monthlyBusiness)}</p>
           <div className="border-t border-dashed border-navy-4/50 my-2.5" />
           <div className="flex justify-between items-center text-[10px]">
-            <span className="text-ink-2 font-medium">Imported this month</span>
+            <span className="text-ink-2 font-medium">MTD Business Volume</span>
             <span className="text-gold font-bold">MTD</span>
           </div>
         </div>
 
-        {/* Imported Policies */}
+        {/* Total Branch Commissions */}
         <div className="card p-5 border-l-2 border-l-[#7EB59E]">
           <div className="flex items-center justify-between text-ink-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Imported Policies</span>
-            <IDoc size={18} className="text-[#559E7E]" />
+            <span className="text-xs font-medium uppercase tracking-wider">Commission Summary</span>
+            <ICash size={18} className="text-[#559E7E]" />
           </div>
-          <p className="text-2xl font-bold text-ink-1 font-serif mt-2">{branchPlans.length}</p>
+          <p className="text-2xl font-bold text-ink-1 font-serif mt-2">{formatINR(branchStats.totalBranchCommission)}</p>
           <div className="border-t border-dashed border-navy-4/50 my-2.5" />
-          <p className="text-[10px] text-ink-2 font-medium">Total policies linked to agents</p>
+          <p className="text-[10px] text-ink-2 font-medium">Total commissions earned by agents</p>
         </div>
       </div>
 
@@ -253,14 +308,37 @@ export default function BranchDetail() {
           </div>
         </div>
 
-        {/* Right Column - Agents List Table */}
+        {/* Right Column - Agents List & Sales growth */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Branch monthly business growth chart */}
+          <div className="card p-5 space-y-4 bg-navy-3 border border-navy-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
+              Branch Monthly Growth (6-Month Sales Volume)
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={branchStats.growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#253545" />
+                  <XAxis dataKey="month" stroke="#7A8E9E" fontSize={10} />
+                  <YAxis stroke="#7A8E9E" fontSize={10} tickFormatter={(val) => `₹${formatCompactINR(val)}`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#132230', borderColor: '#253545', borderRadius: '8px' }}
+                    labelStyle={{ color: '#7A8E9E', fontWeight: 'bold' }}
+                    itemStyle={{ color: '#7A8E6E' }}
+                  />
+                  <Bar dataKey="Business" fill="#7A8E6E" radius={[4, 4, 0, 0]} maxBarSize={45} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Agents Table List */}
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
               <IUsers size={16} /> Agents Assigned to Branch
             </h3>
             {branchAgents.length ? (
-              <div className="border border-navy-4 rounded-card overflow-hidden">
+              <div className="table-wrap">
                 <table className="tbl text-xs">
                   <thead>
                     <tr>
@@ -304,18 +382,45 @@ export default function BranchDetail() {
             )}
           </div>
 
-          {/* Premium Visual Placeholders for Imported Policies */}
+          {/* Policies Imported table */}
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <IDoc size={16} /> Premium Policies Log (Bank Import)
+              <IDoc size={16} /> Branch Imported Policies Ledger
             </h3>
-            <div className="rounded-card border border-dashed border-navy-4 bg-navy-2/30 p-6 text-center text-xs text-ink-2 space-y-3">
-              <p>Premium policy accounts and deposits imported from the bank's daily transaction Excel sheets will list here.</p>
-              <div className="flex justify-center gap-2">
-                <span className="text-[10px] bg-gold-1/10 border border-gold-1/25 px-2.5 py-1 rounded text-gold-1">Transaction Ledger Placeholder</span>
-                <span className="text-[10px] bg-navy-4/30 border border-navy-4 px-2.5 py-1 rounded text-ink-2 font-mono">Future Integration Area</span>
+            {branchPlans.length ? (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Policy No.</th>
+                      <th>Client Name</th>
+                      <th>Agent Name</th>
+                      <th>Product</th>
+                      <th>Maturity</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchPlans.map(p => {
+                      const isRD = p.type?.toLowerCase().startsWith('rd')
+                      const val = isRD ? `${formatINR(p.monthlyAmount)} /mo` : formatINR(p.fdAmount)
+                      return (
+                        <tr key={p.id}>
+                          <td className="font-mono text-gold font-semibold">{p.policyNumber}</td>
+                          <td className="font-semibold text-ink-1">{p.customerName}</td>
+                          <td className="text-ink-2">{p.agentName}</td>
+                          <td className="text-ink-2 font-semibold uppercase">{p.type}</td>
+                          <td>{p.duration} Years</td>
+                          <td className="font-mono text-ink-1 font-semibold">{val}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic text-center py-4 bg-navy-2/30 rounded border border-navy-4/50">No policies linked to this branch yet.</p>
+            )}
           </div>
         </div>
       </div>

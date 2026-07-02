@@ -1,51 +1,243 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useCollection } from '../../hooks/useFirestore'
-import { fmtDateTime, formatINR, toDate } from '../../utils/format'
+import { fmtDateTime, formatINR, toDate, fmtDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { IClock } from '../../components/ui/icons'
+import { IClock, IAlert, IDoc } from '../../components/ui/icons'
 
-// Activity log derived from payments + customer + plan creation events.
 export default function SystemLogs() {
+  // Load collections
   const payments = useCollection('payments')
   const customers = useCollection('customers')
   const plans = useCollection('plans')
+  const imports = useCollection('imports')
+  const payouts = useCollection('payouts')
 
-  const loading = payments.loading || customers.loading || plans.loading
+  const [activeTab, setActiveTab] = useState('audit')
 
-  const logs = useMemo(() => {
+  const loading = payments.loading || customers.loading || plans.loading || imports.loading || payouts.loading
+
+  // 1. Audit Trail logs calculation
+  const auditLogs = useMemo(() => {
+    if (loading) return []
     const events = []
-    payments.data.forEach((p) => events.push({ id: `pay-${p.id}`, ts: toDate(p.createdAt) || toDate(p.paidDate), type: 'Payment', who: p.agentName, detail: `${formatINR(p.amount)} from ${p.customerName} (${p.receiptNumber})` }))
-    customers.data.forEach((c) => events.push({ id: `cust-${c.id}`, ts: toDate(c.createdAt), type: 'Customer', who: c.enrolledByName, detail: `Onboarded ${c.name} (${c.accountNumber})` }))
-    plans.data.forEach((p) => events.push({ id: `plan-${p.id}`, ts: toDate(p.createdAt), type: 'Plan', who: p.agentName, detail: `${p.type} for ${p.customerName} (${p.planAccountNumber})` }))
-    return events.filter((e) => e.ts).sort((a, b) => b.ts - a.ts).slice(0, 100)
-  }, [payments.data, customers.data, plans.data])
+    
+    payments.data.forEach((p) => {
+      events.push({
+        id: `pay-${p.id}`,
+        ts: toDate(p.createdAt) || toDate(p.paidDate),
+        type: 'Collection Payment',
+        operator: p.agentName || 'System',
+        detail: `Collected premium of ${formatINR(p.amount)} from customer ${p.customerName} (Receipt: ${p.receiptNumber})`
+      })
+    })
 
-  const TYPE = { Payment: 'text-ok', Customer: 'text-info', Plan: 'text-gold' }
+    customers.data.forEach((c) => {
+      events.push({
+        id: `cust-${c.id}`,
+        ts: toDate(c.createdAt),
+        type: 'Client Enrolled',
+        operator: c.enrolledByName || 'System',
+        detail: `Onboarded verification folder for customer ${c.name} (CIF Account: ${c.customerId})`
+      })
+    })
+
+    plans.data.forEach((p) => {
+      events.push({
+        id: `plan-${p.id}`,
+        ts: toDate(p.createdAt),
+        type: 'Policy Created',
+        operator: p.agentName || 'System',
+        detail: `Registered ${p.type} savings plan policy account ${p.policyNumber} (Maturity: ${p.duration} Years)`
+      })
+    })
+
+    payouts.data.forEach((p) => {
+      events.push({
+        id: `payo-${p.id}`,
+        ts: toDate(p.generatedDate),
+        type: 'Payout Calculated',
+        operator: 'Payout Engine',
+        detail: `Generated monthly commission calculation for ${p.agentName} (Period: ${p.month}/${p.year}, Net: ${formatINR(p.totalPayable)})`
+      })
+    })
+
+    return events.filter(e => e.ts).sort((a, b) => b.ts - a.ts)
+  }, [payments.data, customers.data, plans.data, payouts.data, loading])
+
+  // 2. Error and Diagnostics log list
+  const errorLogs = useMemo(() => {
+    if (loading) return []
+    const errors = []
+
+    imports.data.forEach(imp => {
+      if (imp.failedRows > 0) {
+        errors.push({
+          id: `imp-err-${imp.id}`,
+          ts: toDate(imp.importDate),
+          type: 'Import Excel Error',
+          operator: 'Excel Parser',
+          detail: `File '${imp.fileName}' had ${imp.failedRows} rows fail validation. Check imports history logs for row-by-row diagnostics.`
+        })
+      }
+    })
+
+    return errors.sort((a, b) => b.ts - a.ts)
+  }, [imports.data, loading])
+
+  const TYPE_CLASSES = {
+    'Collection Payment': 'text-ok font-bold',
+    'Client Enrolled': 'text-info font-bold',
+    'Policy Created': 'text-gold font-bold',
+    'Payout Calculated': 'text-gold-1 font-bold',
+    'Import Excel Error': 'text-danger font-bold'
+  }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Title */}
+      <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
+        <div>
+          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">System Audit & Logs Workspace</h2>
+          <p className="text-xs text-ink-2">Verify operational audit trails, examine data parse diagnostics, and list upload session records.</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-navy-4">
+        <button 
+          onClick={() => setActiveTab('audit')}
+          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'audit' 
+              ? 'border-gold text-gold-1' 
+              : 'border-transparent text-ink-2 hover:text-ink-1'
+          }`}
+        >
+          Operational Audit Trail ({auditLogs.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('errors')}
+          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'errors' 
+              ? 'border-gold text-gold-1' 
+              : 'border-transparent text-ink-2 hover:text-ink-1'
+          }`}
+        >
+          Data Error Diagnostics ({errorLogs.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('imports')}
+          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+            activeTab === 'imports' 
+              ? 'border-gold text-gold-1' 
+              : 'border-transparent text-ink-2 hover:text-ink-1'
+          }`}
+        >
+          Import Session Log ({imports.data.length})
+        </button>
+      </div>
+
+      {/* Loading Skeleton */}
       {loading ? (
-        <SkeletonTable rows={10} cols={4} />
-      ) : !logs.length ? (
-        <EmptyState icon={<IClock size={24} />} title="No activity yet" />
+        <SkeletonTable rows={8} cols={4} />
       ) : (
-        <div className="table-wrap">
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead><tr><th>Time</th><th>Type</th><th>By</th><th>Detail</th></tr></thead>
-              <tbody>
-                {logs.map((l) => (
-                  <tr key={l.id}>
-                    <td className="whitespace-nowrap text-ink-2">{fmtDateTime(l.ts)}</td>
-                    <td><span className={`text-xs font-bold ${TYPE[l.type]}`}>{l.type}</span></td>
-                    <td className="text-ink-2">{l.who || '—'}</td>
-                    <td className="text-ink-1">{l.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="card p-5">
+          
+          {/* Audit Tab */}
+          {activeTab === 'audit' && (
+            auditLogs.length === 0 ? (
+              <EmptyState icon={<IClock size={24} />} title="Audit trail empty" message="No operational actions have been captured yet." />
+            ) : (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Time Logged</th>
+                      <th>Activity Event</th>
+                      <th>Operator</th>
+                      <th>Operational Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map(l => (
+                      <tr key={l.id}>
+                        <td className="font-mono text-ink-2 whitespace-nowrap">{fmtDateTime(l.ts)}</td>
+                        <td><span className={TYPE_CLASSES[l.type] || 'text-ink-1'}>{l.type}</span></td>
+                        <td className="text-ink-2 font-medium">{l.operator}</td>
+                        <td className="text-ink-1 leading-relaxed">{l.detail}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+          {/* Errors Tab */}
+          {activeTab === 'errors' && (
+            errorLogs.length === 0 ? (
+              <EmptyState icon={<IAlert size={24} />} title="No system errors logged" message="Excellent! All imported rows and payout processes ran smoothly." />
+            ) : (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Time Logged</th>
+                      <th>Error Type</th>
+                      <th>Module</th>
+                      <th>Diagnostic Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {errorLogs.map(l => (
+                      <tr key={l.id}>
+                        <td className="font-mono text-ink-2 whitespace-nowrap">{fmtDateTime(l.ts)}</td>
+                        <td><span className="text-danger font-bold uppercase">{l.type}</span></td>
+                        <td className="text-ink-2 font-semibold">{l.operator}</td>
+                        <td className="text-danger leading-relaxed font-semibold">{l.detail}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+          {/* Import Sessions Tab */}
+          {activeTab === 'imports' && (
+            imports.data.length === 0 ? (
+              <EmptyState icon={<IDoc size={24} />} title="No uploads history" message="Onboard bank data using the Excel Import Center." />
+            ) : (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Upload Date</th>
+                      <th>Excel Filename</th>
+                      <th>Onboarded Rows</th>
+                      <th>Failed Validation</th>
+                      <th>Total Scanned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {imports.data.map(imp => (
+                      <tr key={imp.id}>
+                        <td className="font-mono text-ink-2">{imp.importDate ? fmtDate(imp.importDate) : '—'}</td>
+                        <td className="font-semibold text-ink-1 font-mono">{imp.fileName}</td>
+                        <td className="text-ok font-bold font-mono">{imp.successRows}</td>
+                        <td className={imp.failedRows > 0 ? 'text-danger font-bold font-mono' : 'text-ink-2 font-mono'}>
+                          {imp.failedRows}
+                        </td>
+                        <td className="font-mono font-semibold text-ink-1">{imp.totalRows}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
         </div>
       )}
     </div>
