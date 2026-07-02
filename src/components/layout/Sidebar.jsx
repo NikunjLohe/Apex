@@ -13,7 +13,6 @@ const GROUPS = [
     items: [
       { to: '/dashboard', label: 'Dashboard', Icon: IDashboard, cap: null, end: true },
       { to: '/customers', label: 'Customers', Icon: IUsers, cap: null },
-      { to: '/plans/new', label: 'New RD/FD Plan', Icon: ICalendar, cap: CAP.ONBOARD },
       { to: '/payments/collect', label: 'Collect Payment', Icon: ICash, cap: CAP.COLLECT },
     ],
   },
@@ -38,7 +37,9 @@ const GROUPS = [
     items: [
       { to: '/admin/members', label: 'Members', Icon: IUsers, cap: CAP.ADMIN },
       { to: '/admin/branches', label: 'Branches', Icon: IBuilding, cap: CAP.ADMIN },
-      { to: '/admin/import', label: 'Import Data', Icon: IDoc, cap: CAP.ADMIN },
+      { to: '/admin/customers', label: 'Customers', Icon: IUsers, cap: CAP.ADMIN },
+      { to: '/admin/policies', label: 'Policies', Icon: IDoc, cap: CAP.ADMIN },
+      { to: '/admin/import', label: 'Import Center', Icon: IDoc, cap: CAP.ADMIN },
       { to: '/admin/settings', label: 'Settings', Icon: ISettings, cap: CAP.ADMIN },
     ],
   },

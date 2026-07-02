@@ -9,6 +9,19 @@ import { formatINR } from '../../utils/format'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
 import { IPlus, IEdit, IClose, IDoc, ICash, ITrophy, ISettings, IBuilding } from '../../components/ui/icons'
 
+const DEFAULT_MAPPING = {
+  customerId: 'Customer ID',
+  customerName: 'Customer Name',
+  mobile: 'Mobile',
+  address: 'Address',
+  agentCode: 'Agent Code',
+  policyNumber: 'Policy Number',
+  planCode: 'Plan Code',
+  monthlyAmount: 'Monthly Amount',
+  totalAmount: 'Total Amount',
+  startDate: 'Start Date',
+}
+
 export default function Settings() {
   const { isSuperAdmin } = useAuth()
   const { data: settingsData, loading: settingsLoading } = useDoc('config/settings')
@@ -17,11 +30,15 @@ export default function Settings() {
   const { data: commissionsData, loading: commissionsLoading } = useDoc('config/commissions')
   const { data: promotionsData, loading: promotionsLoading } = useDoc('config/promotions')
 
-  const [activeTab, setActiveTab] = useState('system') // 'system' | 'ranks' | 'plans' | 'commissions' | 'promotions'
+  const [activeTab, setActiveTab] = useState('system') // 'system' | 'ranks' | 'plans' | 'commissions' | 'promotions' | 'mapping'
 
   // System & Company settings form state
   const [systemForm, setSystemForm] = useState(null)
   const [savingSystem, setSavingSystem] = useState(false)
+
+  // Excel Mapping state
+  const [excelMapping, setExcelMapping] = useState(DEFAULT_MAPPING)
+  const [savingMapping, setSavingMapping] = useState(false)
 
   // Rank modal form states
   const [editingRank, setEditingRank] = useState(null)
@@ -50,6 +67,9 @@ export default function Settings() {
       supportPhone: settingsData?.supportPhone || '',
       receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
     })
+    if (settingsData?.excelMapping) {
+      setExcelMapping(settingsData.excelMapping)
+    }
   }, [settingsData])
 
   // Load initial commissions
@@ -135,6 +155,19 @@ export default function Settings() {
       toast.error('Could not save system settings')
     } finally {
       setSavingSystem(false)
+    }
+  }
+
+  // Save Excel Column Mappings
+  const handleSaveMapping = async () => {
+    setSavingMapping(true)
+    try {
+      await setDoc(doc(db, 'config', 'settings'), { excelMapping, updatedAt: serverTimestamp() }, { merge: true })
+      toast.success('Excel Column Mapping saved')
+    } catch {
+      toast.error('Could not save Excel mapping')
+    } finally {
+      setSavingMapping(false)
     }
   }
 
@@ -303,6 +336,7 @@ export default function Settings() {
           <button type="button" onClick={() => setActiveTab('plans')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'plans' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Plan Master</button>
           <button type="button" onClick={() => setActiveTab('commissions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'commissions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Commission Master</button>
           <button type="button" onClick={() => setActiveTab('promotions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'promotions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Promotion Master</button>
+          <button type="button" onClick={() => setActiveTab('mapping')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'mapping' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Excel Mapping</button>
         </div>
       </div>
 
@@ -651,6 +685,40 @@ export default function Settings() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 6: Excel Mapping */}
+        {activeTab === 'mapping' && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-navy-4/50">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <IDoc size={16} /> Excel Import Column Mapping
+                </h3>
+                <p className="text-[11px] text-ink-2 mt-0.5">Map Excel sheet column header labels to internal database fields.</p>
+              </div>
+              <button type="button" onClick={handleSaveMapping} disabled={savingMapping} className="btn-gold py-1.5 px-4 text-xs">
+                {savingMapping ? 'Saving...' : 'Save Mapping'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.keys(DEFAULT_MAPPING).map((key) => (
+                <div key={key} className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-ink-2 tracking-wider">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </label>
+                  <input
+                    type="text"
+                    className="field py-2"
+                    value={excelMapping[key] || ''}
+                    placeholder={`e.g. ${DEFAULT_MAPPING[key]}`}
+                    onChange={(e) => setExcelMapping(prev => ({ ...prev, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         )}

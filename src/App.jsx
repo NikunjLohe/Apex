@@ -31,6 +31,11 @@ const BranchDetail = lazy(() => import('./pages/admin/BranchDetail'))
 const Overview = lazy(() => import('./pages/admin/Overview'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const ImportData = lazy(() => import('./pages/admin/ImportData'))
+const ImportHistory = lazy(() => import('./pages/admin/ImportHistory'))
+const Customers = lazy(() => import('./pages/admin/Customers'))
+const CustomerDetail = lazy(() => import('./pages/admin/CustomerDetail'))
+const Policies = lazy(() => import('./pages/admin/Policies'))
+const PolicyDetail = lazy(() => import('./pages/admin/PolicyDetail'))
 const AllReports = lazy(() => import('./pages/admin/AllReports'))
 const SystemLogs = lazy(() => import('./pages/admin/SystemLogs'))
 
@@ -101,6 +106,11 @@ export default function App() {
               <Route path="/admin/branches" element={<Protected capability={CAP.ADMIN}><Branches /></Protected>} />
               <Route path="/admin/branches/:id" element={<Protected capability={CAP.ADMIN}><BranchDetail /></Protected>} />
               <Route path="/admin/import" element={<Protected capability={CAP.ADMIN}><ImportData /></Protected>} />
+              <Route path="/admin/import/history" element={<Protected capability={CAP.ADMIN}><ImportHistory /></Protected>} />
+              <Route path="/admin/customers" element={<Protected capability={CAP.ADMIN}><Customers /></Protected>} />
+              <Route path="/admin/customers/:id" element={<Protected capability={CAP.ADMIN}><CustomerDetail /></Protected>} />
+              <Route path="/admin/policies" element={<Protected capability={CAP.ADMIN}><Policies /></Protected>} />
+              <Route path="/admin/policies/:id" element={<Protected capability={CAP.ADMIN}><PolicyDetail /></Protected>} />
               <Route path="/admin/settings" element={<Protected capability={CAP.ADMIN}><Settings /></Protected>} />
 
               {/* Super admin */}

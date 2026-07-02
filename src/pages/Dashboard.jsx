@@ -5,7 +5,7 @@ import { startOfMonth, startOfDay } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermission, CAP } from '../hooks/usePermission'
 import { useCollection } from '../hooks/useFirestore'
-import { formatINR, formatCompactINR, fmtDate, toDate } from '../utils/format'
+import { formatINR, formatCompactINR, fmtDate, fmtDateTime, toDate } from '../utils/format'
 import RankBadge from '../components/ui/RankBadge'
 import StatusBadge from '../components/ui/StatusBadge'
 import EmptyState from '../components/ui/EmptyState'
@@ -26,14 +26,15 @@ export default function Dashboard() {
     return <MyEarnings />
   }
 
-  // Load Firestore data
+  // Load Firestore collections
   const customers = useCollection('customers')
   const plans = useCollection('plans')
   const payments = useCollection('payments')
   const users = useCollection('users')
   const branches = useCollection('branches')
+  const imports = useCollection('imports')
 
-  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading
+  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading
 
   // Admin and Super Admin Stats calculation
   const stats = useMemo(() => {
@@ -83,6 +84,34 @@ export default function Dashboard() {
       })
       .slice(0, 5)
 
+    // Phase 3 calculations
+    // Today's imported policies
+    const todayImportedPolicies = plans.data.filter((p) => toDate(p.createdAt) >= today0).length
+
+    // Today's imported customers
+    const todayImportedCustomers = customers.data.filter((c) => toDate(c.createdAt) >= today0).length
+
+    // Total failed import rows
+    const pendingImportErrors = imports.data.reduce((sum, imp) => sum + (imp.failedRows || 0), 0)
+
+    // Recent imports (last 3 upload sessions)
+    const recentImports = [...imports.data]
+      .sort((a, b) => {
+        const timeA = a.importDate ? (a.importDate.seconds ? a.importDate.seconds * 1000 : new Date(a.importDate).getTime()) : 0
+        const timeB = b.importDate ? (b.importDate.seconds ? b.importDate.seconds * 1000 : new Date(b.importDate).getTime()) : 0
+        return timeB - timeA
+      })
+      .slice(0, 3)
+
+    // Recent policies (last 5)
+    const recentPolicies = [...plans.data]
+      .sort((a, b) => {
+        const timeA = a.createdAt ? (a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime()) : 0
+        const timeB = b.createdAt ? (b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime()) : 0
+        return timeB - timeA
+      })
+      .slice(0, 5)
+
     return {
       customers: customers.data.length,
       activePlans: activePlans.length,
@@ -97,8 +126,14 @@ export default function Dashboard() {
       inactiveBranches,
       rankDistribution,
       recentlyJoined,
+      // Phase 3 stats
+      todayImportedPolicies,
+      todayImportedCustomers,
+      pendingImportErrors,
+      recentImports,
+      recentPolicies,
     }
-  }, [customers.data, plans.data, payments.data, users.data, branches.data, loading])
+  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, loading])
 
   // KPI configurations
   const cards = useMemo(() => {
@@ -157,22 +192,18 @@ export default function Dashboard() {
       {/* Greeting */}
       <div className="flex flex-wrap items-center justify-between gap-4 py-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-ink-2">Portal Administrator Overview</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-ink-2">Portal Operations Summary</p>
           <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-ink-1 mt-0.5 tracking-tight">
             {profile?.name || 'Super Admin'}
           </h2>
         </div>
         <div className="flex gap-2.5">
-          {can(CAP.ADMIN) && (
-            <Link to="/admin/members" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-              <IUsers size={16} /> Manage Members
-            </Link>
-          )}
-          {can(CAP.ADMIN) && (
-            <Link to="/admin/branches" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
-              <IBuilding size={16} /> Manage Branches
-            </Link>
-          )}
+          <Link to="/admin/import" className="btn-gold py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
+            <IDoc size={16} /> Import Center
+          </Link>
+          <Link to="/admin/customers" className="btn-ghost py-2 text-sm font-semibold shadow-sm flex items-center gap-1.5">
+            <IUsers size={16} /> Customers List
+          </Link>
         </div>
       </div>
 
@@ -205,11 +236,59 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Phase 3 Today's Upload stats widgets */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="card p-4 border-l-2 border-l-gold-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Today's Imported Policies</span>
+          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.todayImportedPolicies}</span>
+        </div>
+        <div className="card p-4 border-l-2 border-l-ok">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Today's Imported Customers</span>
+          <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.todayImportedCustomers}</span>
+        </div>
+        <Link to="/admin/import/history" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Import Errors</span>
+          <span className="text-xl font-bold font-serif text-danger mt-1 block">{stats.pendingImportErrors}</span>
+        </Link>
+      </div>
+
       {/* Admin Grid Sections */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left Column: Ranks and quick distributions */}
+        {/* Left Column: Recent Upload History log */}
         <div className="space-y-6">
-          {/* Rank Distribution Card */}
+          {/* Recent Imports list */}
+          <div className="card p-5 space-y-4">
+            <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <IClock size={16} /> Recent Imports
+              </h3>
+              <Link to="/admin/import/history" className="text-xs font-bold text-gold hover:underline">
+                History &rarr;
+              </Link>
+            </div>
+            {stats.recentImports.length ? (
+              <div className="space-y-3.5">
+                {stats.recentImports.map((imp) => (
+                  <div key={imp.id} className="text-xs space-y-1 bg-navy-2/40 border border-navy-4 p-3 rounded-card">
+                    <div className="flex justify-between font-mono text-[10px] text-ink-2">
+                      <span>{imp.importDate ? fmtDate(imp.importDate) : '—'}</span>
+                      <span className={imp.failedRows > 0 ? 'text-danger font-semibold' : 'text-ok font-semibold'}>
+                        {imp.failedRows > 0 ? `${imp.failedRows} failed` : 'All Success'}
+                      </span>
+                    </div>
+                    <p className="font-semibold text-ink-1 font-mono truncate">{imp.fileName}</p>
+                    <div className="text-[10px] text-ink-2 mt-1">
+                      Success: {imp.successRows} / Total: {imp.totalRows}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic text-center py-4">No import sessions executed yet.</p>
+            )}
+          </div>
+
+          {/* Agents by Rank */}
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
               <INetwork size={16} /> Agents by Rank
@@ -229,31 +308,63 @@ export default function Dashboard() {
               <p className="text-xs text-ink-2 italic py-2 text-center">No agents registered in system.</p>
             )}
           </div>
-
-          {/* Quick System Settings overview */}
-          <div className="card p-5 space-y-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <ISettings size={16} /> Master Operations Status
-            </h3>
-            <div className="space-y-2 text-xs text-ink-2">
-              <div className="flex justify-between py-1 border-b border-navy-4/20">
-                <span>Direct Customers</span>
-                <span className="font-mono font-semibold text-ink-1">{stats.customers}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-navy-4/20">
-                <span>Active Plans</span>
-                <span className="font-mono font-semibold text-ink-1">{stats.activePlans}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span>Maturing Plans (Month)</span>
-                <span className="font-mono font-semibold text-ink-1">{stats.maturingThisMonth}</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Right Column: Tables and logs */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Recent Policies table */}
+          <div className="card p-5 space-y-4">
+            <div className="flex justify-between items-center pb-1.5 border-b border-navy-4/50">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <IDoc size={16} /> Recent Imported Policies
+              </h3>
+              <Link to="/admin/policies" className="text-xs font-bold text-gold hover:underline">
+                Ledger &rarr;
+              </Link>
+            </div>
+            {stats.recentPolicies.length ? (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Policy No.</th>
+                      <th>Customer Name</th>
+                      <th>Agent Name</th>
+                      <th>Product</th>
+                      <th>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recentPolicies.map((p) => {
+                      const isRDPlan = p.type?.toLowerCase().startsWith('rd')
+                      return (
+                        <tr key={p.id}>
+                          <td className="font-mono text-gold font-semibold">
+                            <Link to={`/admin/policies/${p.id}`} className="hover:underline">
+                              {p.policyNumber || '—'}
+                            </Link>
+                          </td>
+                          <td className="font-semibold text-ink-1">{p.customerName}</td>
+                          <td className="text-ink-2 font-medium">{p.agentName || '—'}</td>
+                          <td className="text-ink-2 font-semibold uppercase">{p.type || '—'}</td>
+                          <td className="font-semibold text-ink-1">
+                            {isRDPlan ? (
+                              <span>{formatINR(p.monthlyAmount)} /mo</span>
+                            ) : (
+                              <span>{formatINR(p.fdAmount)} Total</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic text-center py-4">No policies loaded yet.</p>
+            )}
+          </div>
+
           {/* Recently Joined Agents */}
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
@@ -295,46 +406,6 @@ export default function Dashboard() {
               </div>
             ) : (
               <p className="text-xs text-ink-2 italic py-2 text-center">No agents registered recently.</p>
-            )}
-          </div>
-
-          {/* Recent Payments collections */}
-          <div className="card p-5 space-y-4">
-            <div className="flex items-center justify-between pb-1.5 border-b border-navy-4/50">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
-                <ICash size={16} /> Recent Premium Receipts (Direct Log)
-              </h3>
-              <Link to="/reports/collections" className="text-xs font-bold text-gold hover:underline">
-                View all &rarr;
-              </Link>
-            </div>
-            {stats.recent.length ? (
-              <div className="table-wrap">
-                <table className="tbl text-xs">
-                  <thead>
-                    <tr>
-                      <th>Receipt</th>
-                      <th>Customer</th>
-                      <th>Amount</th>
-                      <th>Mode</th>
-                      <th>Paid Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.recent.map((p) => (
-                      <tr key={p.id}>
-                        <td className="font-mono text-ink-2">{p.receiptNumber}</td>
-                        <td className="font-medium text-ink-1">{p.customerName || '—'}</td>
-                        <td className="font-semibold text-ink-1">{formatINR(p.amount)}</td>
-                        <td className="uppercase text-ink-2 font-semibold">{p.paymentMode}</td>
-                        <td className="text-ink-2">{fmtDate(p.paidDate)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState icon={<ICash size={20} />} title="No collections recorded" message="Payments logged will show here." />
             )}
           </div>
         </div>
