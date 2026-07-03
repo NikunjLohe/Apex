@@ -25,7 +25,7 @@ export default function PlanEnroll() {
   const [submitting, setSubmitting] = useState(false)
 
   const activePlans = useMemo(() => {
-    return (plansMaster.data || []).filter(p => p.status !== 'inactive')
+    return (plansMaster.data || []).filter(p => (p.status || 'active').toLowerCase() !== 'inactive')
   }, [plansMaster.data])
 
   const defaultPlanCode = useMemo(() => {
@@ -105,10 +105,10 @@ export default function PlanEnroll() {
             <label className="label">Plan Type *</label>
             <select className="field text-xs" {...register('type')}>
               <optgroup label="Recurring Deposit (RD)">
-                {activePlans.filter(p => p.type === 'RD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
+                {activePlans.filter(p => (p.type || 'RD').toUpperCase() === 'RD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
               <optgroup label="Fixed Deposit (FD)">
-                {activePlans.filter(p => p.type === 'FD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
+                {activePlans.filter(p => (p.type || 'RD').toUpperCase() === 'FD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
             </select>
           </div>
