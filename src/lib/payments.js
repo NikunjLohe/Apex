@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { generateReceiptNumber } from './ids'
 import { toDate, daysBetween } from '../utils/format'
 import { isRD } from '../data/compensation'
+import { updateDashboardSummary } from './summary'
 
 /**
  * Record a payment atomically:
@@ -74,6 +75,11 @@ export async function recordPayment({ plan, customer, agent, form }) {
       generatedAt: serverTimestamp(),
       pdfUrl: '',
     })
+  })
+
+  await updateDashboardSummary({
+    todayCollection: Number(form.amount),
+    monthCollection: Number(form.amount)
   })
 
   return { paymentId: paymentRef.id, receiptId: receiptRef.id, receiptNumber }

@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
-import { getDoc, doc, collection } from 'firebase/firestore'
+import { getDoc, getDocs, doc, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCollection } from '../../hooks/useFirestore'
@@ -22,9 +22,56 @@ import GenealogyTree from '../../components/ui/GenealogyTree'
 export default function MyDownline() {
   const { profile } = useAuth()
   const uid = profile?.uid
-  const allUsers = useCollection('users')
   const { can } = usePermission()
   const { config: ranksConfig, getRank, nextRank } = useRanks()
+
+  // Load only direct children from Firestore, not all users
+  const directChildren = useCollection(
+    'users',
+    uid ? [where('referredBy', '==', uid)] : [],
+    `downline-${uid}`
+  )
+
+  // Recursive full downline loader (for stats panel)
+  const [downline, setDownline] = useState([])
+  const [downlineLoading, setDownlineLoading] = useState(false)
+
+  useEffect(() => {
+    if (!uid) return
+    let cancelled = false
+    setDownlineLoading(true)
+
+    const fetchFullDownline = async () => {
+      const all = []
+      const visited = new Set()
+      const queue = [uid]
+
+      while (queue.length > 0) {
+        const parentId = queue.shift()
+        if (visited.has(parentId)) continue
+        visited.add(parentId)
+
+        try {
+          const snaps = await getDocs(query(collection(db, 'users'), where('referredBy', '==', parentId)))
+          snaps.docs.forEach(d => {
+            const child = { id: d.id, ...d.data() }
+            all.push(child)
+            queue.push(d.id)
+          })
+        } catch (err) {
+          console.error('Downline fetch error for', parentId, err)
+        }
+      }
+
+      if (!cancelled) {
+        setDownline(all.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0)))
+        setDownlineLoading(false)
+      }
+    }
+
+    fetchFullDownline()
+    return () => { cancelled = true }
+  }, [uid])
 
   const [activeTab, setActiveTab] = useState('members')
   const [showRecruit, setShowRecruit] = useState(false)
@@ -54,32 +101,10 @@ export default function MyDownline() {
     })()
   }, [])
 
-  // Calculate full downline subtree (recursive)
-  const downline = useMemo(() => {
-    if (!uid || !allUsers.data || !allUsers.data.length) return []
-    const myRank = Number(profile?.rank) || 0
-    const list = []
-    const visited = new Set()
+  // No-op: downline is now loaded lazily by the useEffect above
 
-    const findChildren = (parentId) => {
-      allUsers.data.forEach((u) => {
-        if (u.referredBy === parentId && !visited.has(u.id)) {
-          visited.add(u.id)
-          // List user in downline
-          list.push(u)
-          findChildren(u.id)
-        }
-      })
-    }
-
-    findChildren(uid)
-    return list.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0))
-  }, [allUsers.data, uid, profile?.rank])
-
-  // Direct team (level 1 children)
-  const directTeam = useMemo(() => {
-    return downline.filter(u => u.referredBy === uid)
-  }, [downline, uid])
+  // Direct team = the targeted direct-children query results
+  const directTeam = directChildren.data || []
 
   // Team Statistics calculations
   const teamStats = useMemo(() => {
@@ -129,24 +154,24 @@ export default function MyDownline() {
   const sponsorName = (m) => {
     if (!m.referredBy) return '—'
     if (m.referredBy === uid) return 'You'
-    return allUsers.data.find((u) => u.id === m.referredBy)?.name || '—'
+    const found = downline.find((u) => u.id === m.referredBy)
+    return found?.name || '—'
   }
 
   const handleRecruit = async (data) => {
     setRecruiting(true)
     try {
+      // Load all users to find max sponsorCode (one-time read on recruit action only)
       let maxId = 0
-      if (allUsers.data && allUsers.data.length > 0) {
-        allUsers.data.forEach(member => {
-          if (member.sponsorCode) {
-            const numStr = member.sponsorCode.replace(/^[A-Z]+/i, '')
-            const num = parseInt(numStr, 10)
-            if (!isNaN(num) && num > maxId) {
-              maxId = num
-            }
-          }
-        })
-      }
+      const allSnaps = await getDocs(collection(db, 'users'))
+      allSnaps.forEach(d => {
+        const member = d.data()
+        if (member.sponsorCode) {
+          const numStr = member.sponsorCode.replace(/^[A-Z]+/i, '')
+          const num = parseInt(numStr, 10)
+          if (!isNaN(num) && num > maxId) maxId = num
+        }
+      })
       const nextId = maxId + 1
       data.sponsorCode = `AG${String(nextId).padStart(6, '0')}`
       data.referredBy = uid || ''
@@ -228,7 +253,7 @@ export default function MyDownline() {
       {/* Tab 1: Team List */}
       {activeTab === 'members' && (
         <div className="space-y-4">
-          {allUsers.loading ? (
+          {downlineLoading ? (
             <SkeletonTable rows={6} cols={6} />
           ) : downline.length === 0 ? (
             <EmptyState 
@@ -274,7 +299,7 @@ export default function MyDownline() {
 
       {/* Tab 2: Genealogy Tree visualizer */}
       {activeTab === 'tree' && (
-        <GenealogyTree users={allUsers.data} rootId={uid} />
+        <GenealogyTree rootId={uid} />
       )}
 
       {/* Tab 3: Team Dashboard */}

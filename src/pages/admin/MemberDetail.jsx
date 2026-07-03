@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { where } from 'firebase/firestore'
+import { where, getDocs, query, collection, getDoc, doc } from 'firebase/firestore'
+import { db } from '../../firebase'
 import { useDoc, useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { updateMember } from '../../lib/admin'
 import { useRanks } from '../../contexts/RanksContext'
@@ -17,9 +18,14 @@ import toast from 'react-hot-toast'
 export default function MemberDetail() {
   const { id } = useParams()
   const agentDoc = useDoc(id ? `users/${id}` : null)
-  const allUsers = useCollection('users')
   const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
+
+  // Lazy recursive downline loader — avoids loading all users
+  const [downline, setDownline] = useState([])
+  const [downlineLoading, setDownlineLoading] = useState(true)
+  // Cache for sponsor name lookups
+  const [sponsorMap, setSponsorMap] = useState({})
 
   // Agent data states for performance computation
   const [ownPlans, setOwnPlans] = useState([])
@@ -32,7 +38,38 @@ export default function MemberDetail() {
   const rank = getRank(m?.rank)
   const next = nextRank(m?.rank)
 
-  // Fetch performance data
+  // Lazy recursive downline fetch
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setDownlineLoading(true)
+    ;(async () => {
+      const all = []
+      const visited = new Set()
+      const queue = [id]
+      while (queue.length > 0) {
+        const parentId = queue.shift()
+        if (visited.has(parentId)) continue
+        visited.add(parentId)
+        try {
+          const snaps = await getDocs(query(collection(db, 'users'), where('referredBy', '==', parentId)))
+          snaps.docs.forEach(d => {
+            all.push({ id: d.id, ...d.data() })
+            queue.push(d.id)
+          })
+        } catch (err) {
+          console.error('Downline fetch error:', err)
+        }
+      }
+      if (!cancelled) {
+        setDownline(all.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0)))
+        setDownlineLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [id])
+
+  // Fetch performance data (plans/payments/downline plans)
   useEffect(() => {
     if (!id || !agentDoc.exists) return
     let cancelled = false
@@ -75,24 +112,7 @@ export default function MemberDetail() {
     })
   }, [m, statsLoading, ownPlans, ownPayments, downlinePlans, config])
 
-  // Resolve team/downline recursively
-  const downline = useMemo(() => {
-    if (!id || !allUsers.data || !allUsers.data.length) return []
-    const list = []
-    const visited = new Set()
-
-    const findChildren = (parentId) => {
-      allUsers.data.forEach((u) => {
-        if (u.referredBy === parentId && !visited.has(u.id)) {
-          visited.add(u.id)
-          list.push(u)
-          findChildren(u.id)
-        }
-      })
-    }
-    findChildren(id)
-    return list.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0))
-  }, [allUsers.data, id])
+  // downline is loaded lazily by the useEffect above and already sorted
 
   const toggleStatus = async () => {
     if (!m) return
@@ -109,9 +129,17 @@ export default function MemberDetail() {
   }
 
   const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
-  const sponsorName = (uid) => allUsers.data.find((u) => u.id === uid)?.name || '—'
+  const sponsorName = useCallback((uid) => {
+    if (!uid) return '—'
+    if (sponsorMap[uid]) return sponsorMap[uid]
+    // Trigger async fetch and cache
+    getDoc(doc(db, 'users', uid)).then(snap => {
+      if (snap.exists()) setSponsorMap(prev => ({ ...prev, [uid]: snap.data().name || '—' }))
+    }).catch(() => {})
+    return '…'
+  }, [sponsorMap])
 
-  if (agentDoc.loading || allUsers.loading || branches.loading) {
+  if (agentDoc.loading || branches.loading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="card h-28 animate-pulse bg-navy-2" />

@@ -2,9 +2,10 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { startOfMonth, startOfDay, subMonths, format } from 'date-fns'
+import { orderBy, limit } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermission, CAP } from '../hooks/usePermission'
-import { useCollection } from '../hooks/useFirestore'
+import { useCollection, useDoc } from '../hooks/useFirestore'
 import { formatINR, formatCompactINR, fmtDate, toDate } from '../utils/format'
 import RankBadge from '../components/ui/RankBadge'
 import StatusBadge from '../components/ui/StatusBadge'
@@ -22,151 +23,45 @@ export default function Dashboard() {
   const { can } = usePermission()
   const { getRank } = useRanks()
 
-  // If the user is a normal agent (rank < 10), render MyEarnings dashboard
-  if (!isSuperAdmin && (profile?.rank || 0) < 10) {
-    return <MyEarnings />
-  }
+  // ── All hooks MUST be declared before any conditional return ──────────────
+  // Load pre-calculated summary document
+  const { data: summary, loading: summaryLoading } = useDoc('system_summaries/dashboard')
 
-  // Load Firestore collections
-  const customers = useCollection('customers')
-  const plans = useCollection('plans')
-  const payments = useCollection('payments')
-  const users = useCollection('users')
-  const branches = useCollection('branches')
-  const imports = useCollection('imports')
-  const payouts = useCollection('payouts')
-  const promotions = useCollection('promotions_history')
+  // Feeds (limit 5, sorted descending)
+  const recentUsers    = useCollection('users',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-users')
+  const recentImports  = useCollection('imports', [orderBy('importDate',   'desc'), limit(3)], 'recent-imports')
+  const recentPlans    = useCollection('policies',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-plans')
+  const recentPayouts  = useCollection('payouts', [orderBy('generatedDate','desc'), limit(5)], 'recent-payouts')
 
-  const loading = customers.loading || plans.loading || payments.loading || users.loading || branches.loading || imports.loading || payouts.loading || promotions.loading
+  const loading = summaryLoading || recentUsers.loading || recentImports.loading || recentPlans.loading || recentPayouts.loading
 
-  // Admin and Super Admin Stats calculation
-  const stats = useMemo(() => {
-    if (loading) return {}
-    const today0 = startOfDay(new Date())
-    const month0 = startOfMonth(new Date())
+  // Pre-calculated stats from summary doc (safe defaults for every field)
+  const stats = useMemo(() => ({
+    totalBusiness:        summary?.totalBusiness        || 0,
+    monthlyBusiness:      summary?.monthlyBusiness      || 0,
+    activeAgents:         summary?.activeAgents         || 0,
+    activePlans:          summary?.activePlans          || 0,
+    todayCollection:      summary?.todayCollection      || 0,
+    monthCollection:      summary?.monthCollection      || 0,
+    totalCommission:      summary?.totalCommission      || 0,
+    pendingPayouts:       summary?.pendingPayouts       || 0,
+    defaulters:           summary?.defaulters           || 0,
+    recentlyJoined:       recentUsers.data              || [],
+    totalAgents:          summary?.totalAgents          || 0,
+    totalBranches:        summary?.totalBranches        || 0,
+    todayImportedPolicies:summary?.todayImportedPolicies|| 0,
+    todayImportedCustomers:summary?.todayImportedCustomers||0,
+    pendingImportErrors:  summary?.pendingImportErrors  || 0,
+    recentImports:        recentImports.data            || [],
+    recentPolicies:       recentPlans.data              || [],
+    growthData:           summary?.growthData           || [],
+    branchPerformance:    summary?.branchPerformance    || [],
+    topAgentsList:        summary?.topAgentsList        || [],
+    recentFinancial:      recentPayouts.data            || [],
+    promotionsCount:      summary?.promotionsCount      || 0,
+  }), [summary, recentUsers.data, recentImports.data, recentPlans.data, recentPayouts.data])
 
-    const todayCollection = payments.data
-      .filter((p) => toDate(p.paidDate) >= today0)
-      .reduce((s, p) => s + (p.amount || 0), 0)
-    const monthCollection = payments.data
-      .filter((p) => toDate(p.paidDate) >= month0)
-      .reduce((s, p) => s + (p.amount || 0), 0)
-
-    const activePlans = plans.data.filter((p) => p.status === 'active')
-    const defaulters = activePlans.filter((p) => {
-      const due = toDate(p.nextDueDate)
-      return due && due < today0
-    })
-    
-    // Total Business Volume (sum of RD monthly amounts * 12 + FD lump sums)
-    const totalBusiness = plans.data.reduce((sum, p) => {
-      const isRD = p.type?.toLowerCase().startsWith('rd')
-      return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
-    }, 0)
-
-    // Monthly MTD Business Volume
-    const monthlyBusiness = plans.data
-      .filter(p => toDate(p.startDate) >= month0)
-      .reduce((sum, p) => {
-        const isRD = p.type?.toLowerCase().startsWith('rd')
-        return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
-      }, 0)
-
-    const activeAgents = users.data.filter(u => u.status === 'active').length
-
-    // Dynamic Monthly Growth Chart Data (last 6 months)
-    const growthData = Array.from({ length: 6 }, (_, i) => {
-      const date = subMonths(new Date(), 5 - i)
-      const monthLabel = format(date, 'MMM yy')
-      const targetMonth = date.getMonth() + 1
-      const targetYear = date.getFullYear()
-      
-      const sales = plans.data
-        .filter(p => {
-          const sd = toDate(p.startDate)
-          return sd && sd.getMonth() + 1 === targetMonth && sd.getFullYear() === targetYear
-        })
-        .reduce((sum, p) => {
-          const isRD = p.type?.toLowerCase().startsWith('rd')
-          return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
-        }, 0)
-
-      return { month: monthLabel, Business: sales }
-    })
-
-    // Branch Performance Metrics
-    const branchPerformance = branches.data.map(b => {
-      const bPlans = plans.data.filter(p => p.branchId === b.id)
-      const sales = bPlans.reduce((sum, p) => {
-        const isRD = p.type?.toLowerCase().startsWith('rd')
-        return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
-      }, 0)
-      return { name: b.name, Sales: sales }
-    }).sort((a, b) => b.Sales - a.Sales).slice(0, 5)
-
-    // Top Performing Agents
-    const topAgentsList = users.data
-      .map(u => ({
-        id: u.id,
-        name: u.name,
-        code: u.sponsorCode || '—',
-        rank: u.rank || 1,
-        volume: u.businessVolume || 0
-      }))
-      .sort((a, b) => b.volume - a.volume)
-      .slice(0, 5)
-
-    // Phase 3 calculations
-    const todayImportedPolicies = plans.data.filter((p) => toDate(p.createdAt) >= today0).length
-    const todayImportedCustomers = customers.data.filter((c) => toDate(c.createdAt) >= today0).length
-    const pendingImportErrors = imports.data.reduce((sum, imp) => sum + (imp.failedRows || 0), 0)
-
-    const recentImports = [...imports.data]
-      .sort((a, b) => (toDate(b.importDate) || 0) - (toDate(a.importDate) || 0))
-      .slice(0, 3)
-
-    const recentPolicies = [...plans.data]
-      .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
-      .slice(0, 5)
-
-    // Phase 4 calculations
-    const totalCommission = payouts.data.reduce((sum, p) => sum + (p.totalCommission || 0), 0)
-    const pendingPayouts = payouts.data
-      .filter(p => p.status !== 'paid')
-      .reduce((sum, p) => sum + (p.totalPayable || 0), 0)
-
-    // Recent activities feed
-    const recentFinancial = [...payouts.data]
-      .sort((a, b) => (toDate(b.generatedDate) || 0) - (toDate(a.generatedDate) || 0))
-      .slice(0, 5)
-
-    return {
-      totalBusiness,
-      monthlyBusiness,
-      activeAgents,
-      activePlans: activePlans.length,
-      todayCollection,
-      monthCollection,
-      totalCommission,
-      pendingPayouts,
-      defaulters: defaulters.length,
-      recentlyJoined: users.data.slice(0, 5),
-      totalAgents: users.data.length,
-      totalBranches: branches.data.length,
-      todayImportedPolicies,
-      todayImportedCustomers,
-      pendingImportErrors,
-      recentImports,
-      recentPolicies,
-      growthData,
-      branchPerformance,
-      topAgentsList,
-      recentFinancial,
-      promotionsCount: promotions.data.length,
-    }
-  }, [customers.data, plans.data, payments.data, users.data, branches.data, imports.data, payouts.data, promotions.data, loading])
-
-  // KPI Configurations
+  // KPI card definitions
   const cards = useMemo(() => {
     if (loading) return []
     return [
@@ -199,6 +94,14 @@ export default function Dashboard() {
       },
     ]
   }, [stats, loading])
+  // ── End of hooks ─────────────────────────────────────────────────────────
+
+  // Agents below rank 10 see their personal earnings dashboard instead
+  if (!isSuperAdmin && (profile?.rank || 0) < 10) {
+    return <MyEarnings />
+  }
+
+
 
   if (loading) {
     return (
@@ -334,7 +237,7 @@ export default function Dashboard() {
             <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
               <IUsers size={16} /> Top Performing Agents
             </h3>
-            {stats.topAgentsList.length > 0 ? (
+            {(stats.topAgentsList || []).length > 0 ? (
               <div className="space-y-3">
                 {stats.topAgentsList.map((agent, i) => (
                   <div key={agent.id} className="flex justify-between items-center text-xs">
@@ -366,7 +269,7 @@ export default function Dashboard() {
                 History &rarr;
               </Link>
             </div>
-            {stats.recentImports.length ? (
+            {(stats.recentImports || []).length ? (
               <div className="space-y-3.5">
                 {stats.recentImports.map((imp) => (
                   <div key={imp.id} className="text-xs space-y-1 bg-navy-2/40 border border-navy-4 p-3 rounded-card">
@@ -401,7 +304,7 @@ export default function Dashboard() {
                 Payouts &rarr;
               </Link>
             </div>
-            {stats.recentFinancial.length ? (
+            {(stats.recentFinancial || []).length ? (
               <div className="table-wrap">
                 <table className="tbl text-xs">
                   <thead>
@@ -448,7 +351,7 @@ export default function Dashboard() {
                 Ledger &rarr;
               </Link>
             </div>
-            {stats.recentPolicies.length ? (
+            {(stats.recentPolicies || []).length ? (
               <div className="table-wrap">
                 <table className="tbl text-xs">
                   <thead>

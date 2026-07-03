@@ -7,6 +7,7 @@ import { initializeApp, getApp, getApps, deleteApp } from 'firebase/app'
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, setDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { updateDashboardSummary } from './summary'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -46,6 +47,7 @@ export async function createMember(form, tempPassword) {
     createdAt: serverTimestamp(),
   })
   await signOut(auth2)
+  await updateDashboardSummary({ totalAgents: 1, activeAgents: 1 })
   return { uid }
 }
 
@@ -78,6 +80,7 @@ export async function createBranch(form, existingBranches = []) {
     status: form.status || 'active',
     createdAt: serverTimestamp(),
   })
+  await updateDashboardSummary({ totalBranches: 1 })
   return { id: ref.id, branchCode }
 }
 

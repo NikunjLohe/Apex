@@ -8,6 +8,8 @@ import { useRanks } from '../../contexts/RanksContext'
 import { formatINR } from '../../utils/format'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
 import { IPlus, IEdit, IClose, IDoc, ICash, ITrophy, ISettings, IBuilding } from '../../components/ui/icons'
+import StatusBadge from '../../components/ui/StatusBadge'
+
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',

@@ -4,7 +4,8 @@ import { storage } from '../firebase'
 /** Upload a File/Blob and return its download URL. */
 export async function uploadFile(path, file) {
   const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, file)
+  const metadata = { contentType: file.type || 'application/octet-stream' }
+  await uploadBytes(storageRef, file, metadata)
   return getDownloadURL(storageRef)
 }
 

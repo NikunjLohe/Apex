@@ -14,6 +14,7 @@ import {
   writeBatch 
 } from 'firebase/firestore'
 import { db } from '../../firebase'
+import { updateDashboardSummary } from '../../lib/summary'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { MDA as DEFAULT_MDA, FD_PENSION as DEFAULT_FD_PENSION, isRD } from '../../data/compensation'
@@ -384,6 +385,8 @@ export default function ImportData() {
 
     let successCount = 0
     let failedCount = 0
+    let totalImportedBusiness = 0
+    let totalImportedCommissions = 0
     const logs = []
 
     const batchSize = 50
@@ -493,6 +496,8 @@ export default function ImportData() {
             status: 'unpaid',
           })
 
+          totalImportedBusiness += calculatedAmount
+          totalImportedCommissions += commissionAmount
           successCount++
         } catch (err) {
           console.error('Failed importing row:', row, err)
@@ -529,6 +534,20 @@ export default function ImportData() {
       })
     } catch (e) {
       console.error('Could not log import summary:', e)
+    }
+
+    try {
+      await updateDashboardSummary({
+        totalBusiness: totalImportedBusiness,
+        monthlyBusiness: totalImportedBusiness,
+        activePlans: successCount,
+        totalPolicies: successCount,
+        todayImportedPolicies: successCount,
+        todayImportedCustomers: successCount,
+        totalCommission: totalImportedCommissions,
+      })
+    } catch (err) {
+      console.error('Failed to update dashboard summaries:', err)
     }
 
     setImportSummary({

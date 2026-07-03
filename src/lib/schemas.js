@@ -28,8 +28,8 @@ export const customerSchema = z.object({
   state: z.string().min(2, 'State is required'),
   pincode: z.string().regex(/^\d{6}$/, '6-digit pincode'),
   // IDs
-  aadhaar: z.string().regex(/^\d{12}$/, 'Aadhaar must be 12 digits'),
-  pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'PAN format: ABCDE1234F'),
+  aadhaar: z.string().trim().regex(/^\d{12}$/, 'Aadhaar must be 12 digits'),
+  pan: z.string().trim().regex(/^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/, 'PAN format: ABCDE1234F'),
   // Nominee
   nomineeName: z.string().min(2, 'Nominee name is required'),
   nomineeRelation: z.string().min(2, 'Relation is required'),
@@ -81,7 +81,7 @@ export const paymentSchema = z
 
 export const memberSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Invalid email'),
+  email: z.string().email('Invalid email').or(z.literal('')).optional(),
   phone,
   rank: z.coerce.number().min(1),
   branchId: z.string().optional(),

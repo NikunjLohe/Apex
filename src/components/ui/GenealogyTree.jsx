@@ -1,159 +1,302 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore'
+import { db } from '../../firebase'
 import { formatINR } from '../../utils/format'
 import RankBadge from './RankBadge'
 import StatusBadge from './StatusBadge'
+import EmptyState from './EmptyState'
 import { ISearch, IChevronDown, IChevron } from './icons'
 
-// Build hierarchy helper
-const buildTreeData = (users, rootId) => {
-  const map = {}
-  users.forEach(u => {
-    map[u.id] = { ...u, children: [], expanded: true }
-  })
+// ─────────────────────────────────────────────────────────────────────────────
+// Firestore helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-  let root = null
-  const nodes = Object.values(map)
-
-  nodes.forEach(node => {
-    const parentId = node.referredBy
-    if (parentId && map[parentId]) {
-      map[parentId].children.push(node)
-    }
-  })
-
-  // Find root
-  if (rootId && map[rootId]) {
-    root = map[rootId]
-  } else {
-    // If no root specified, find nodes that don't have parents inside the current list
-    const candidates = nodes.filter(n => !n.referredBy || !map[n.referredBy])
-    // Choose the highest rank or fallback
-    root = candidates.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0))[0] || null
-  }
-
-  // Calculate downline and team stats recursively
-  const calculateSubtree = (node) => {
-    let count = 0
-    let volume = node.businessVolume || 0
-    node.children.forEach(child => {
-      const stats = calculateSubtree(child)
-      count += 1 + stats.count
-      volume += stats.volume
-    })
-    node.teamSize = count
-    node.teamVolume = volume
-    return { count, volume }
-  }
-
-  if (root) {
-    calculateSubtree(root)
-  }
-
-  return { root, map }
+/** Fetch a single user document */
+async function fetchUser(uid) {
+  const snap = await getDoc(doc(db, 'users', uid))
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
 }
 
-export default function GenealogyTree({ users = [], rootId = null }) {
+/** Fetch direct children of a given parent uid */
+async function fetchChildren(parentUid) {
+  const q = query(collection(db, 'users'), where('referredBy', '==', parentUid))
+  const snaps = await getDocs(q)
+  return snaps.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+/** Search users by name fragment (client-side filtered from a limited query) */
+async function searchUsers(term) {
+  // Firestore has no native full-text search. We load a small amount matching
+  // the start of the name or sponsorCode. For a deep org, recommend Algolia/Typesense
+  // as future improvement. Here we query where name >= term and name <= term + '\uf8ff'
+  // which covers prefix searches on the indexed 'name' field.
+  const upper = term[0].toUpperCase() + term.slice(1)
+  const lower = term[0].toLowerCase() + term.slice(1)
+
+  const [snapsUpper, snapsCode] = await Promise.all([
+    getDocs(query(
+      collection(db, 'users'),
+      where('name', '>=', upper),
+      where('name', '<=', upper + '\uf8ff')
+    )),
+    getDocs(query(
+      collection(db, 'users'),
+      where('sponsorCode', '>=', term.toUpperCase()),
+      where('sponsorCode', '<=', term.toUpperCase() + '\uf8ff')
+    )),
+  ])
+
+  const results = new Map()
+  ;[...snapsUpper.docs, ...snapsCode.docs].forEach(d => {
+    if (!results.has(d.id)) results.set(d.id, { id: d.id, ...d.data() })
+  })
+  return [...results.values()].slice(0, 10)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GenealogyTree Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function GenealogyTree({ rootId = null }) {
+  // ── Lazy node cache: id → { ...userData, childrenIds?: string[], childrenLoaded: bool } ──
+  const [nodeCache, setNodeCache] = useState({})
+
+  // ── Expanded nodes set ──
+  const [expandedNodes, setExpandedNodes] = useState(new Set())
+
+  // ── Loading state per node (to show spinners) ──
+  const [loadingNodes, setLoadingNodes] = useState(new Set())
+
+  // ── Root ID in tree ──
+  const [treeRootId, setTreeRootId] = useState(null)
+
+  // ── Search ──
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchDebounce = useRef(null)
+
+  // ── Zoom / Pan ──
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0 })
   const containerRef = useRef(null)
 
-  // Internal node expansion state
-  const [collapsedNodes, setCollapsedNodes] = useState(new Set())
-
-  // Parse and build hierarchical tree data
-  const { root, map } = useMemo(() => {
-    return buildTreeData(users, rootId)
-  }, [users, rootId])
-
-  // Toggle node collapse
-  const toggleNode = (nodeId, e) => {
-    e.stopPropagation()
-    setCollapsedNodes(prev => {
-      const next = new Set(prev)
-      if (next.has(nodeId)) {
-        next.delete(nodeId)
-      } else {
-        next.add(nodeId)
-      }
+  // ── Merge nodes into cache ──
+  const mergeNodes = useCallback((nodes) => {
+    setNodeCache(prev => {
+      const next = { ...prev }
+      nodes.forEach(n => {
+        next[n.id] = { ...next[n.id], ...n }
+      })
       return next
     })
-  }
+  }, [])
 
-  // Handle Drag Panning
+  // ── Initialize root node ──
+  useEffect(() => {
+    if (!rootId) return
+    setTreeRootId(rootId)
+    setNodeCache({})
+    setExpandedNodes(new Set())
+
+    ;(async () => {
+      const rootNode = await fetchUser(rootId)
+      if (!rootNode) return
+      setNodeCache({ [rootId]: { ...rootNode, childrenLoaded: false } })
+
+      // Pre-load the immediate children count so we know if there's a toggle
+      const children = await fetchChildren(rootId)
+      setNodeCache(prev => ({
+        ...prev,
+        [rootId]: {
+          ...prev[rootId],
+          childrenLoaded: true,
+          childrenIds: children.map(c => c.id),
+        }
+      }))
+      mergeNodes(children.map(c => ({ ...c, childrenLoaded: false })))
+      setExpandedNodes(new Set([rootId]))
+    })()
+  }, [rootId])
+
+  // ── Expand a node: load its children on demand ──
+  const expandNode = useCallback(async (nodeId, e) => {
+    e?.stopPropagation()
+    const cached = nodeCache[nodeId]
+    if (!cached) return
+
+    // If already expanded, collapse
+    if (expandedNodes.has(nodeId)) {
+      setExpandedNodes(prev => { const n = new Set(prev); n.delete(nodeId); return n })
+      return
+    }
+
+    // If children already loaded, just expand
+    if (cached.childrenLoaded) {
+      setExpandedNodes(prev => new Set([...prev, nodeId]))
+      return
+    }
+
+    // Fetch children from Firestore
+    setLoadingNodes(prev => new Set([...prev, nodeId]))
+    try {
+      const children = await fetchChildren(nodeId)
+      setNodeCache(prev => ({
+        ...prev,
+        [nodeId]: {
+          ...prev[nodeId],
+          childrenLoaded: true,
+          childrenIds: children.map(c => c.id),
+        }
+      }))
+      mergeNodes(children.map(c => ({ ...c, childrenLoaded: false })))
+      setExpandedNodes(prev => new Set([...prev, nodeId]))
+    } catch (err) {
+      console.error('Failed to load children for', nodeId, err)
+    } finally {
+      setLoadingNodes(prev => { const n = new Set(prev); n.delete(nodeId); return n })
+    }
+  }, [nodeCache, expandedNodes, mergeNodes])
+
+  // ── Search: debounced Firestore query ──
+  useEffect(() => {
+    const term = searchQuery.trim()
+    if (!term || term.length < 2) {
+      setSearchResults([])
+      setSearchOpen(false)
+      return
+    }
+
+    clearTimeout(searchDebounce.current)
+    setSearching(true)
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const results = await searchUsers(term)
+        setSearchResults(results)
+        setSearchOpen(results.length > 0)
+      } catch (err) {
+        console.error('Search failed:', err)
+      } finally {
+        setSearching(false)
+      }
+    }, 350)
+
+    return () => clearTimeout(searchDebounce.current)
+  }, [searchQuery])
+
+  // ── Select search result: traverse ancestors to root and expand the path ──
+  const selectSearchResult = useCallback(async (targetNode) => {
+    setSearchQuery(targetNode.name)
+    setSearchOpen(false)
+    setSearchResults([])
+
+    // Build ancestor chain: walk referredBy up to the tree root
+    const chain = [targetNode]
+    let current = targetNode
+
+    while (current.referredBy && current.referredBy !== treeRootId) {
+      let parent = nodeCache[current.referredBy]
+      if (!parent) {
+        parent = await fetchUser(current.referredBy)
+        if (!parent) break
+      }
+      chain.unshift(parent)
+      current = parent
+    }
+
+    // Merge all ancestor nodes into cache and expand them
+    const newCache = { ...nodeCache }
+    const toExpand = new Set(expandedNodes)
+
+    for (let i = 0; i < chain.length; i++) {
+      const n = chain[i]
+      const nextNode = chain[i + 1]
+
+      if (!newCache[n.id]) newCache[n.id] = { ...n, childrenLoaded: false }
+
+      // Load children if not already cached, ensuring this link exists
+      if (!newCache[n.id].childrenLoaded) {
+        const children = await fetchChildren(n.id)
+        newCache[n.id] = {
+          ...newCache[n.id],
+          childrenLoaded: true,
+          childrenIds: children.map(c => c.id),
+        }
+        children.forEach(c => {
+          if (!newCache[c.id]) newCache[c.id] = { ...c, childrenLoaded: false }
+        })
+      }
+
+      toExpand.add(n.id)
+    }
+
+    // Make sure the target node itself is merged
+    if (!newCache[targetNode.id]) {
+      newCache[targetNode.id] = { ...targetNode, childrenLoaded: false }
+    }
+
+    setNodeCache(newCache)
+    setExpandedNodes(toExpand)
+  }, [nodeCache, expandedNodes, treeRootId])
+
+  // ── Zoom / Pan handlers ──
+  const zoomIn = () => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))
+  const zoomOut = () => setZoom(z => Math.max(0.3, parseFloat((z - 0.1).toFixed(1))))
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+
   const handleMouseDown = (e) => {
     if (e.target.closest('button') || e.target.closest('input')) return
     setIsDragging(true)
     dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
   }
-
   const handleMouseMove = (e) => {
     if (!isDragging) return
-    setPan({
-      x: e.clientX - dragStart.current.x,
-      y: e.clientY - dragStart.current.y
-    })
+    setPan({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y })
+  }
+  const handleMouseUp = () => setIsDragging(false)
+
+  // Wheel zoom
+  const handleWheel = (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.1 : 0.1
+    setZoom(z => Math.min(2, Math.max(0.3, parseFloat((z + delta).toFixed(1)))))
   }
 
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
-
-  // Zoom helpers
-  const zoomIn = () => setZoom(z => Math.min(2, z + 0.1))
-  const zoomOut = () => setZoom(z => Math.max(0.5, z - 0.1))
-  const resetView = () => {
-    setZoom(1)
-    setPan({ x: 0, y: 0 })
-  }
-
-  // Auto-expand searched nodes ancestors
-  const matchedNodeIds = useMemo(() => {
-    if (!searchQuery.trim() || !map) return new Set()
-    const query = searchQuery.toLowerCase()
-    const matched = new Set()
-    
-    Object.values(map).forEach(node => {
-      if (
-        node.name.toLowerCase().includes(query) || 
-        (node.sponsorCode && node.sponsorCode.toLowerCase().includes(query))
-      ) {
-        matched.add(node.id)
-        // Automatically expand its ancestors
-        let parentId = node.referredBy
-        while (parentId && map[parentId]) {
-          collapsedNodes.delete(parentId)
-          parentId = map[parentId].referredBy
-        }
-      }
-    })
-    return matched
-  }, [searchQuery, map])
-
-  // Center tree initially or when root changes
   useEffect(() => {
-    resetView()
-  }, [rootId])
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [])
 
-  // Render node recursively
-  const renderNode = (node) => {
+  // ── Render a single tree node recursively ──
+  const renderNode = useCallback((nodeId) => {
+    const node = nodeCache[nodeId]
     if (!node) return null
-    const isCollapsed = collapsedNodes.has(node.id)
-    const hasChildren = node.children && node.children.length > 0
-    const isMatched = matchedNodeIds.has(node.id)
 
-    // Initials for avatar fallback
-    const initials = node.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    const isExpanded = expandedNodes.has(nodeId)
+    const isLoading = loadingNodes.has(nodeId)
+    const childrenIds = node.childrenIds || []
+    const hasChildren = childrenIds.length > 0 || !node.childrenLoaded
+    const initials = (node.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+
+    // Highlight searched node
+    const isHighlighted = searchQuery.trim().length >= 2 && (
+      node.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      node.sponsorCode?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
 
     return (
-      <div className="flex flex-col items-center relative" key={node.id}>
+      <div className="flex flex-col items-center relative" key={nodeId}>
         {/* Node Card */}
-        <div 
+        <div
           className={`relative z-10 card p-4 w-52 bg-navy-3 border transition-all ${
-            isMatched 
-              ? 'border-gold-1 ring-2 ring-gold-1/30 shadow-[0_0_15px_rgba(163,144,107,0.25)]' 
+            isHighlighted
+              ? 'border-gold-1 ring-2 ring-gold-1/30 shadow-[0_0_15px_rgba(163,144,107,0.25)]'
               : 'border-navy-4 hover:border-gold-1/30'
           }`}
         >
@@ -181,101 +324,139 @@ export default function GenealogyTree({ users = [], rootId = null }) {
               <span>Personal BV:</span>
               <span className="font-bold text-ink-1">{formatINR(node.businessVolume || 0)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Team Size:</span>
-              <span className="font-semibold text-gold-tan">{node.teamSize || 0} agents</span>
-            </div>
           </div>
 
-          {/* Toggle Expand/Collapse Button */}
+          {/* Expand / Collapse Button */}
           {hasChildren && (
-            <button 
-              onClick={(e) => toggleNode(node.id, e)}
-              className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-navy-4 bg-navy-3 text-ink-2 hover:text-gold hover:border-gold-1/50 shadow-md transition-all z-20"
+            <button
+              onClick={(e) => expandNode(nodeId, e)}
+              disabled={isLoading}
+              className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full border border-navy-4 bg-navy-3 text-ink-2 hover:text-gold hover:border-gold-1/50 shadow-md transition-all z-20 disabled:opacity-50"
             >
-              {isCollapsed ? <IChevron size={10} className="rotate-90" /> : <IChevronDown size={10} />}
+              {isLoading
+                ? <span className="animate-spin text-gold text-[10px]">⟳</span>
+                : isExpanded
+                  ? <IChevronDown size={10} />
+                  : <IChevron size={10} className="rotate-90" />
+              }
             </button>
           )}
         </div>
 
-        {/* Children Render */}
-        {hasChildren && !isCollapsed && (
+        {/* Children render only when expanded and loaded */}
+        {isExpanded && node.childrenLoaded && childrenIds.length > 0 && (
           <div className="flex gap-6 mt-10 relative pt-4">
-            {/* Top vertical connector line coming from parent */}
+            {/* Top vertical connector from parent */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-4 bg-navy-4/80" />
 
-            {/* Horizontal line connector connecting all siblings */}
-            <div 
-              className="absolute top-4 bg-navy-4/80 h-0.5" 
+            {/* Horizontal connector across all siblings */}
+            <div
+              className="absolute top-4 bg-navy-4/80 h-0.5"
               style={{
-                left: `calc((100% / ${node.children.length}) / 2)`,
-                right: `calc((100% / ${node.children.length}) / 2)`
+                left: `calc((100% / ${childrenIds.length}) / 2)`,
+                right: `calc((100% / ${childrenIds.length}) / 2)`
               }}
             />
 
-            {node.children.map((child, idx) => (
-              <div className="relative" key={child.id}>
-                {/* Child vertical connector line up to the horizontal connector */}
+            {childrenIds.map(childId => (
+              <div className="relative" key={childId}>
+                {/* Child vertical connector up to horizontal */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-4 bg-navy-4/80" />
-                {renderNode(child)}
+                {renderNode(childId)}
               </div>
             ))}
           </div>
         )}
       </div>
     )
-  }
+  }, [nodeCache, expandedNodes, loadingNodes, searchQuery, expandNode])
+
+  const isInitializing = !treeRootId || !nodeCache[treeRootId]
 
   return (
     <div className="relative card overflow-hidden bg-navy-2 border border-navy-4 h-[600px] flex flex-col">
       {/* Controls & Search header */}
       <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2.5 items-center w-[calc(100%-2rem)]">
+
         {/* Search */}
         <div className="relative w-72 shrink-0">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-2">
             <ISearch size={16} />
           </span>
-          <input 
-            type="text" 
-            placeholder="Search Agent Name or Code..." 
-            className="field pl-9 py-2 text-xs font-semibold bg-navy-3/95" 
+          <input
+            type="text"
+            placeholder="Search Agent Name or Code..."
+            className="field pl-9 py-2 text-xs font-semibold bg-navy-3/95"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
           />
+          {searching && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-ink-2 animate-pulse">
+              Searching…
+            </span>
+          )}
+
+          {/* Search Dropdown */}
+          {searchOpen && searchResults.length > 0 && (
+            <div className="absolute top-full mt-1 left-0 w-full bg-navy-3 border border-navy-4 rounded-card shadow-xl z-30 max-h-52 overflow-y-auto">
+              {searchResults.map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => selectSearchResult(r)}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-navy-2 transition-colors"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-1/10 text-[10px] font-bold text-gold">
+                    {r.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="block text-xs font-semibold text-ink-1 truncate">{r.name}</span>
+                    <span className="block text-[10px] text-ink-2 font-mono">{r.sponsorCode || '—'}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Zoom Controls */}
         <div className="flex items-center gap-1.5 bg-navy-3/95 border border-navy-4 rounded-card px-2 py-1 shadow-md">
-          <button onClick={zoomOut} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom Out">-</button>
+          <button onClick={zoomOut} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom Out">−</button>
           <span className="text-[10px] font-mono font-bold text-ink-2 px-1 w-12 text-center">{Math.round(zoom * 100)}%</span>
           <button onClick={zoomIn} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom In">+</button>
           <div className="h-4 w-px bg-navy-4 mx-1" />
           <button onClick={resetView} className="text-[10px] font-bold uppercase tracking-wider text-gold hover:underline px-1.5">Reset</button>
         </div>
+
+        {/* Loading indicator */}
+        {isInitializing && (
+          <span className="text-[10px] text-ink-2 animate-pulse">Loading tree…</span>
+        )}
       </div>
 
       {/* Interactive Visualizer Canvas */}
-      <div 
+      <div
         ref={containerRef}
-        className={`flex-1 overflow-hidden relative cursor-grab select-none ${isDragging ? 'cursor-grabbing' : ''}`}
+        className={`flex-1 overflow-hidden relative select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {root ? (
-          <div 
+        {!isInitializing ? (
+          <div
             className="absolute origin-top-left transition-transform duration-75 flex justify-center p-20"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               minWidth: 'max-content'
             }}
           >
-            {renderNode(root)}
+            {renderNode(treeRootId)}
           </div>
         ) : (
           <div className="h-full flex items-center justify-center">
-            <EmptyState title="No tree nodes found" message="Add members to build the genealogy network tree." />
+            <EmptyState title="No tree data" message="Add members to build the genealogy network tree." />
           </div>
         )}
       </div>

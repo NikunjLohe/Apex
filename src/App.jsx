@@ -40,6 +40,7 @@ const Policies = lazy(() => import('./pages/admin/Policies'))
 const PolicyDetail = lazy(() => import('./pages/admin/PolicyDetail'))
 const AllReports = lazy(() => import('./pages/admin/AllReports'))
 const SystemLogs = lazy(() => import('./pages/admin/SystemLogs'))
+const SeedDemo = lazy(() => import('./pages/admin/SeedDemo'))
 const NotFound = lazy(() => import('./pages/errors/NotFound'))
 const Unauthorized = lazy(() => import('./pages/errors/Unauthorized'))
 const ChangePassword = lazy(() => import('./pages/ChangePassword'))
@@ -101,10 +102,11 @@ export default function App() {
               <Route path="/reports/defaulters" element={<Defaulters />} />
               <Route path="/reports/maturities" element={<Maturities />} />
 
-              {/* My earnings */}
-              <Route path="/my-earnings" element={<MyEarnings />} />
-              <Route path="/my-downline" element={<MyDownline />} />
-              <Route path="/cmd-awards" element={<CmdAwards />} />
+              {/* My Earnings — agent accounts only (rank 1–18, not pure super admin) */}
+              <Route path="/my-earnings" element={<Protected capability={CAP.AGENT_ONLY}><MyEarnings /></Protected>} />
+              <Route path="/my-downline" element={<Protected capability={CAP.AGENT_ONLY}><MyDownline /></Protected>} />
+              <Route path="/cmd-awards"  element={<Protected capability={CAP.AGENT_ONLY}><CmdAwards /></Protected>} />
+
 
               {/* Admin */}
               <Route path="/admin/members" element={<Protected capability={CAP.ADMIN}><Members /></Protected>} />
@@ -120,6 +122,7 @@ export default function App() {
               <Route path="/admin/policies" element={<Protected capability={CAP.ADMIN}><Policies /></Protected>} />
               <Route path="/admin/policies/:id" element={<Protected capability={CAP.ADMIN}><PolicyDetail /></Protected>} />
               <Route path="/admin/settings" element={<Protected capability={CAP.ADMIN}><Settings /></Protected>} />
+              <Route path="/admin/seed" element={<Protected capability={CAP.ADMIN}><SeedDemo /></Protected>} />
 
               {/* Super admin */}
               <Route path="/admin/overview" element={<Protected capability={CAP.SUPER_ADMIN}><Overview /></Protected>} />

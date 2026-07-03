@@ -239,11 +239,18 @@ function MemberModal({ modal, branches, members, onClose }) {
         onClose()
       } else {
         const tempPassword = form.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
+        // Auto-generate email if blank
+        if (!cleanForm.email) {
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000)
+          cleanForm.email = `agent${form.sponsorCode.toLowerCase()}_${randomSuffix}@apex.com`
+        }
+
         const { uid } = await createMember(cleanForm, tempPassword)
         setCreatedAgent({
           id: uid,
           name: form.name,
           sponsorCode: form.sponsorCode,
+          email: cleanForm.email,
           password: tempPassword,
           phone: form.phone
         })
@@ -276,6 +283,9 @@ Your account has been created successfully.
 Agent Code:
 ${createdAgent.sponsorCode}
 
+Login Email:
+${createdAgent.email}
+
 Password:
 ${createdAgent.password}
 
@@ -292,7 +302,7 @@ Welcome to the Apex Family.`
         }}
         onCancel={() => {
           const loginUrl = window.location.origin
-          const credentialsText = `Agent Code: ${createdAgent.sponsorCode}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
+          const credentialsText = `Agent Code: ${createdAgent.sponsorCode}\nLogin Email: ${createdAgent.email}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
           navigator.clipboard.writeText(credentialsText)
           toast.success('Credentials copied to clipboard')
         }}
@@ -311,6 +321,10 @@ Welcome to the Apex Family.`
             <div>
               <span className="block text-[10px] text-ink-2 font-mono">AGENT CODE (SPONSOR ID)</span>
               <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] text-ink-2 font-mono">LOGIN EMAIL</span>
+              <span className="text-ink-1 font-bold font-mono text-sm">{createdAgent.email}</span>
             </div>
             <div>
               <span className="block text-[10px] text-ink-2 font-mono">TEMPORARY PASSWORD</span>
@@ -335,38 +349,34 @@ Welcome to the Apex Family.`
   if (!isEdit) {
     return (
       <ConfirmDialog open title="Add member" confirmLabel="Create" loading={saving} onConfirm={handleSubmit(submit)} onClose={onClose}>
-        <form className="mt-3 space-y-3" onSubmit={handleSubmit(submit)}>
-          <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Email</label><input className="field" type="email" {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
-            <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit)} autoComplete="off">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2"><label className="label">Full name</label><input className="field" autoComplete="off" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
+            <div><label className="label">Phone</label><input className="field" maxLength={10} autoComplete="off" {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
             <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
             <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+            <div><label className="label">Rank</label><select className="field" {...register('rank', { valueAsNumber: true })}>{activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
           </div>
-          <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Rank</label><select className="field" {...register('rank')}>{activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
+          <div><label className="label">Address</label><textarea className="field h-12 resize-none" autoComplete="off" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label">Sponsor ID (Agent Code)</label>
+              <label className="label">Sponsor ID</label>
               <input 
                 className="field font-mono uppercase" 
                 placeholder="e.g. AG000001 (leave blank for top)" 
+                autoComplete="off"
                 {...register('sponsorCodeInput')} 
               />
             </div>
+            <div><label className="label">Agent Code</label><input className="field" placeholder="Auto-generated" disabled {...register('sponsorCode')} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Sponsor code (Agent Code)</label><input className="field" placeholder="Auto if blank" {...register('sponsorCode')} /></div>
+          <div className="grid grid-cols-2 gap-2">
             <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+            <div className="flex items-center gap-2 pb-1 text-sm text-ink-2 mt-5">
+              <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
+              <label htmlFor="isSuperAdmin" className="text-xs font-semibold text-ink-1">Super Admin Account</label>
+            </div>
           </div>
-          <div className="flex items-end gap-2 pb-1 text-sm text-ink-2">
-            <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
-            <label htmlFor="isSuperAdmin" className="text-xs font-semibold text-ink-1">Super Admin Account</label>
-          </div>
-          <div><label className="label">Password (optional)</label><input className="field" type="password" placeholder="Auto-generate if blank" {...register('password')} /></div>
-          <p className="text-xs text-ink-2">Creates a login account. Leave password blank to auto-generate a secure temporary one.</p>
         </form>
       </ConfirmDialog>
     )

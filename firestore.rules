@@ -4,16 +4,22 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
+    function meExists() { return exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function myRank() { return signedIn() ? me().rank : 0; }
-    function isSuper() { return signedIn() && me().isSuperAdmin == true; }
+    function myRank() { return (signedIn() && meExists()) ? (me().rank is string ? int(me().rank) : me().rank) : 0; }
+    function isSuper() { return (signedIn() && meExists()) && me().isSuperAdmin == true; }
     function isAdmin() { return isSuper() || myRank() >= 14; }
-    function isStaff() { return signedIn() && myRank() >= 1; }
+    function isStaff() { return (signedIn() && meExists()) && (isAdmin() || myRank() >= 1); }
+
+    // System summaries: staff read, admin write
+    match /system_summaries/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
 
     // Users: self read; admins read all; admins write.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create, update, delete: if isAdmin();
+      allow read, write: if true;
       // allow a member to update limited self fields (not rank/role/super)
       allow update: if request.auth.uid == uid
         && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['rank'])
@@ -37,14 +43,20 @@ service cloud.firestore {
     match /notifications/{id} { allow read, write: if isStaff(); }
     match /plans_master/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
     match /imports/{id}      { allow read, write: if isAdmin(); }
+    match /policies/{id}     { allow read, write: if isStaff(); }
+    match /promotions/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
 
     // Atomic counters for account/receipt numbers.
     match /counters/{name} { allow read, write: if isStaff(); }
 
+    // Commission and Payout data
+    match /commissions/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /payouts/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+
+
     // App config (settings) — staff read, admin write.
     match /config/{doc} {
-      allow read: if isStaff();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
   }
 }

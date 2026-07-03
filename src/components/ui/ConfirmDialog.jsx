@@ -46,7 +46,7 @@ export default function ConfirmDialog({
             initial={{ opacity: 0, scale: 0.96, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 10 }}
-            className="card relative z-10 w-full max-w-md p-6"
+            className="card relative z-10 w-full max-w-md p-6 max-h-[95vh] flex flex-col overflow-y-auto scrollbar-thin"
           >
             <div className="mb-3 flex items-start justify-between">
               <h3 className="text-lg font-bold text-ink-1">{title}</h3>

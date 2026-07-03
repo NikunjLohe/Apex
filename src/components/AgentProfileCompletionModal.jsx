@@ -9,13 +9,13 @@ import toast from 'react-hot-toast'
 import Logo from './ui/Logo'
 
 const profileCompletionSchema = z.object({
-  aadhaar: z.string().regex(/^\d{12}$/, 'Aadhaar must be exactly 12 digits'),
-  pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'PAN format: ABCDE1234F'),
+  aadhaar: z.string().trim().regex(/^\d{12}$/, 'Aadhaar must be exactly 12 digits'),
+  pan: z.string().trim().regex(/^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/, 'PAN format: ABCDE1234F'),
   bankName: z.string().min(2, 'Bank name is required'),
   accountHolderName: z.string().min(2, 'Account holder name is required'),
-  accountNumber: z.string().regex(/^\d{9,18}$/, 'Account number must be 9 to 18 digits'),
-  ifscCode: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'IFSC format: ABCD0123456 (11 alphanumeric, 5th digit must be 0)'),
-  branch: z.string().min(2, 'Branch name is required'),
+  accountNumber: z.string().trim().regex(/^\d{9,18}$/, 'Account number must be 9 to 18 digits'),
+  ifscCode: z.string().trim().regex(/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/, 'IFSC format: ABCD0123456 (11 alphanumeric, 5th digit must be 0)'),
+  branch: z.string().trim().min(2, 'Branch name is required'),
 })
 
 export default function AgentProfileCompletionModal() {
