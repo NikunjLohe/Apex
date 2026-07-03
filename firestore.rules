@@ -6,8 +6,8 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function meExists() { return exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function myRank() { return (signedIn() && meExists()) ? (me().rank is string ? int(me().rank) : me().rank) : 0; }
-    function isSuper() { return (signedIn() && meExists()) && me().isSuperAdmin == true; }
+    function myRank() { return (signedIn() && meExists()) ? ('rank' in me() ? (me().rank is string ? int(me().rank) : me().rank) : 0) : 0; }
+    function isSuper() { return (signedIn() && meExists()) && ('isSuperAdmin' in me() && me().isSuperAdmin == true); }
     function isAdmin() { return isSuper() || myRank() >= 14; }
     function isStaff() { return (signedIn() && meExists()) && (isAdmin() || myRank() >= 1); }
 
