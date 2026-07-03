@@ -30,7 +30,7 @@ export default function Dashboard() {
   // Feeds (limit 5, sorted descending)
   const recentUsers    = useCollection('users',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-users')
   const recentImports  = useCollection('imports', [orderBy('importDate',   'desc'), limit(3)], 'recent-imports')
-  const recentPlans    = useCollection('policies',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-plans')
+  const recentPlans    = useCollection('plans',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-plans')
   const recentPayouts  = useCollection('payouts', [orderBy('generatedDate','desc'), limit(5)], 'recent-payouts')
 
   const loading = summaryLoading || recentUsers.loading || recentImports.loading || recentPlans.loading || recentPayouts.loading

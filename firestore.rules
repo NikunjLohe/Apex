@@ -11,10 +11,10 @@ service cloud.firestore {
     function isAdmin() { return isSuper() || myRank() >= 14; }
     function isStaff() { return (signedIn() && meExists()) && (isAdmin() || myRank() >= 1); }
 
-    // System summaries: staff read, admin write
+    // System summaries: staff read, staff write (agents need to update stats on payment collection)
     match /system_summaries/{doc} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isStaff();
     }
 
     // Users: self read; admins read all; admins write.
