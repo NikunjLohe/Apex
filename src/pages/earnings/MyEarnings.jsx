@@ -18,9 +18,9 @@ export default function MyEarnings() {
 
   // Load Firestore collections dynamically
   const ownPlans = useCollection('plans', uid ? [where('agentId', '==', uid)] : null)
-  const commissions = useCollection('commissions', uid ? [where('agentId', '==', uid)] : null)
+  const commissions = useCollection('commission_ledger', uid ? [where('agentId', '==', uid)] : null)
   const payouts = useCollection('payouts', uid ? [where('agentId', '==', uid)] : null)
-  const ledger = useCollection('income_ledger', sponsorCode ? [where('sponsorCode', '==', sponsorCode)] : null)
+  const ledger = useCollection('commission_ledger', sponsorCode ? [where('sponsorCode', '==', sponsorCode)] : null)
   const allUsers = useCollection('users')
   const enrolledCustomers = useCollection('customers', uid ? [where('enrolledBy', '==', uid)] : null)
 
@@ -76,30 +76,17 @@ export default function MyEarnings() {
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
-    // Calculate MLM Team business volume recursively
-    const visited = new Set()
-    const getDownlineVolume = (parentId) => {
+    // Calculate MLM Team business volume (direct downline only as per requirements)
+    const getDirectDownlineVolume = (parentId) => {
       let vol = 0
       allUsers.data.forEach(u => {
-        if (u.referredBy === parentId && !visited.has(u.id)) {
-          visited.add(u.id)
-          vol += (u.businessVolume || 0) + getDownlineVolume(u.id)
+        if (u.referredBy === parentId) {
+          vol += (u.businessVolume || 0)
         }
       })
       return vol
     }
-    const teamBusiness = getDownlineVolume(uid)
-
-    // Rank properties
-    const rankIdx = (Number(profile?.rank) || 1) - 1
-    const mfaTarget = config.MFA_TARGET?.[rankIdx] || 0
-    const mfaAmount = config.MFA?.[rankIdx] || 0
-    const pbTarget = config.PB_TARGET?.[rankIdx] || 0
-    const pbAmount = config.PB_AMOUNT?.[rankIdx] || 0
-
-    // Targets checks progress
-    const mfaPct = mfaTarget > 0 ? Math.min(100, (monthlyBusinessVolume / mfaTarget) * 100) : 0
-    const pbPct = pbTarget > 0 ? Math.min(100, (monthlyBusinessVolume / pbTarget) * 100) : 0
+    const teamBusiness = getDirectDownlineVolume(uid)
 
     // Recent Policies sold
     const recentPolicies = [...ownPlans.data]
@@ -120,12 +107,6 @@ export default function MyEarnings() {
       teamBusiness,
       lastPayout,
       sortedPayouts,
-      mfaTarget,
-      mfaAmount,
-      pbTarget,
-      pbAmount,
-      mfaPct,
-      pbPct,
       recentPolicies,
       recentCustomers,
     }
@@ -220,60 +201,7 @@ export default function MyEarnings() {
         </div>
       </div>
 
-      {/* Target qualification check indicators */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* MFA Card */}
-        <div className="card p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
-            Monthly Field Allowance (MFA) Target
-          </h3>
-          {stats.mfaTarget > 0 ? (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-ink-2">Target Volume: {formatINR(stats.mfaTarget)}</span>
-                <span className="text-ink-1 font-semibold">Reward: {formatINR(stats.mfaAmount)}</span>
-              </div>
-              <div className="w-full bg-navy-2 rounded-full h-2 overflow-hidden border border-navy-4">
-                <div className="bg-gold h-2 rounded-full transition-all duration-300" style={{ width: `${stats.mfaPct}%` }} />
-              </div>
-              <div className="flex justify-between items-center text-[10px]">
-                <span className="text-ink-2">Progress: {Math.round(stats.mfaPct)}%</span>
-                <span className={stats.mfaPct >= 100 ? 'text-ok font-bold' : 'text-gold font-bold'}>
-                  {stats.mfaPct >= 100 ? 'Qualified' : 'In Progress'}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-ink-2 italic">No field allowance target configured at this rank tier.</p>
-          )}
-        </div>
 
-        {/* PB Card */}
-        <div className="card p-5 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
-            Performance Bonus (PB) Target
-          </h3>
-          {stats.pbTarget > 0 ? (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-ink-2">Target Volume: {formatINR(stats.pbTarget)}</span>
-                <span className="text-ink-1 font-semibold">Reward: {formatINR(stats.pbAmount)}</span>
-              </div>
-              <div className="w-full bg-navy-2 rounded-full h-2 overflow-hidden border border-navy-4">
-                <div className="bg-ok h-2 rounded-full transition-all duration-300" style={{ width: `${stats.pbPct}%` }} />
-              </div>
-              <div className="flex justify-between items-center text-[10px]">
-                <span className="text-ink-2">Progress: {Math.round(stats.pbPct)}%</span>
-                <span className={stats.pbPct >= 100 ? 'text-ok font-bold' : 'text-gold font-bold'}>
-                  {stats.pbPct >= 100 ? 'Achieved' : 'In Progress'}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-ink-2 italic">No performance bonus target configured at this rank tier.</p>
-          )}
-        </div>
-      </div>
 
       {/* Recent Policies and Customers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -462,8 +390,8 @@ export default function MyEarnings() {
                     <td className="font-semibold text-ink-1">{log.customerName || '—'}</td>
                     <td className="text-ink-2 font-semibold uppercase">{log.planCode || '—'}</td>
                     <td>
-                      <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4">
-                        {log.type}
+                      <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block">
+                        {log.compressionReason || log.commissionType || '—'}
                       </span>
                     </td>
                     <td className="text-ink-2 font-mono">{log.percentage ? `${log.percentage}%` : '—'}</td>

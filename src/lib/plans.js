@@ -47,15 +47,5 @@ export async function createPlan({ form, customer, agent, ranksConfig }) {
   await setDoc(ref, payload)
   await updateDoc(doc(db, 'customers', customer.id), { plansCount: increment(1) })
 
-  const isRDPlan = payload.planType === 'RD'
-  const baseAmt = isRDPlan ? (computed.monthlyAmount * 12) : computed.fdAmount
-
-  await updateDashboardSummary({
-    totalBusiness: baseAmt,
-    monthlyBusiness: baseAmt,
-    activePlans: 1,
-    todayImportedPolicies: 1,
-    todayImportedCustomers: (customer.plansCount || 0) === 0 ? 1 : 0
-  })
   return { id: ref.id, planAccountNumber, ...computed }
 }

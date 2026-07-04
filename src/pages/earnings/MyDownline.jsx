@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { getDoc, getDocs, doc, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
-import { useCollection } from '../../hooks/useFirestore'
+import { useCollection, useDoc } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import { useRanks } from '../../contexts/RanksContext'
 import { memberSchema } from '../../lib/schemas'
@@ -24,6 +24,7 @@ export default function MyDownline() {
   const uid = profile?.uid
   const { can } = usePermission()
   const { config: ranksConfig, getRank, nextRank } = useRanks()
+  const { data: settings } = useDoc('config/settings')
 
   // Load only direct children from Firestore, not all users
   const directChildren = useCollection(
@@ -108,7 +109,8 @@ export default function MyDownline() {
 
   // Team Statistics calculations
   const teamStats = useMemo(() => {
-    const totalVolume = downline.reduce((sum, u) => sum + (u.businessVolume || 0), 0)
+    // Only use directTeam (direct downline) for business volume as per requirements
+    const totalVolume = directTeam.reduce((sum, u) => sum + (u.businessVolume || 0), 0)
 
     const rankCounts = {}
     downline.forEach(u => {
@@ -127,9 +129,9 @@ export default function MyDownline() {
     if (nextRankObj && promoRules) {
       const rules = promoRules[nextRankObj.code] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
       
-      // Calculate how many downline members have rank >= requiredPromotedRank
+      // Calculate how many DIRECT members have rank >= requiredPromotedRank
       const reqRankNum = ranksConfig?.RANKS?.find(r => r.code === rules.requiredPromotedRank)?.rank || 0
-      const qualifiedDownlineCount = downline.filter(u => (Number(u.rank) || 0) >= reqRankNum).length
+      const qualifiedDownlineCount = directTeam.filter(u => (Number(u.rank) || 0) >= reqRankNum).length
 
       nextPromoProgress = {
         targetRankCode: nextRankObj.code,
@@ -161,11 +163,22 @@ export default function MyDownline() {
   const handleRecruit = async (data) => {
     setRecruiting(true)
     try {
+      if (data.panNumber) data.panNumber = data.panNumber.toUpperCase()
+
+      // Validate PAN Uniqueness
+      const allSnaps = await getDocs(collection(db, 'users'))
+      const allUsers = allSnaps.docs.map(d => d.data())
+      
+      const existingPanUser = allUsers.find(u => u.panNumber === data.panNumber)
+      if (existingPanUser) {
+        toast.error('PAN number is already registered to another agent')
+        setRecruiting(false)
+        return
+      }
+
       // Load all users to find max sponsorCode (one-time read on recruit action only)
       let maxId = 0
-      const allSnaps = await getDocs(collection(db, 'users'))
-      allSnaps.forEach(d => {
-        const member = d.data()
+      allUsers.forEach(member => {
         if (member.sponsorCode) {
           const numStr = member.sponsorCode.replace(/^[A-Z]+/i, '')
           const num = parseInt(numStr, 10)
@@ -173,7 +186,8 @@ export default function MyDownline() {
         }
       })
       const nextId = maxId + 1
-      data.sponsorCode = `AG${String(nextId).padStart(6, '0')}`
+      const prefix = settings?.agentPrefix || 'KB'
+      data.sponsorCode = `${prefix}${String(nextId).padStart(6, '0')}`
       data.referredBy = uid || ''
       data.branchId = profile?.branchId || ''
       data.rank = 1 // joins as rank AO (rank 1)
@@ -489,10 +503,15 @@ export default function MyDownline() {
                 {errors.dob && <p className="err">{errors.dob.message}</p>}
               </div>
               <div>
-                <label className="label">Temporary Password (optional)</label>
-                <input className="field" type="password" placeholder="Auto if blank" {...register('password')} />
-                {errors.password && <p className="err">{errors.password.message}</p>}
+                <label className="label">PAN Number</label>
+                <input className="field font-mono uppercase" maxLength={10} placeholder="ABCDE1234F" {...register('panNumber')} />
+                {errors.panNumber && <p className="err">{errors.panNumber.message}</p>}
               </div>
+            </div>
+            <div>
+              <label className="label">Temporary Password (optional)</label>
+              <input className="field" type="password" placeholder="Auto if blank" {...register('password')} />
+              {errors.password && <p className="err">{errors.password.message}</p>}
             </div>
             <div>
               <label className="label">Address</label>

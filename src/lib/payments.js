@@ -77,10 +77,7 @@ export async function recordPayment({ plan, customer, agent, form }) {
     })
   })
 
-  await updateDashboardSummary({
-    todayCollection: Number(form.amount),
-    monthCollection: Number(form.amount)
-  })
+
 
   return { paymentId: paymentRef.id, receiptId: receiptRef.id, receiptNumber }
 }

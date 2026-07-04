@@ -27,7 +27,9 @@ export default function CustomerNew() {
   const onSubmit = async (form) => {
     setSubmitting(true)
     const tId = toast.loading('Saving customer…')
+    console.log("Step 1: Validation passed, starting onSubmit")
     try {
+      console.log("Step 2: Preparing asset uploads")
       // Upload assets in parallel
       const uploads = {}
       const jobs = []
@@ -36,17 +38,34 @@ export default function CustomerNew() {
       else if (signatureBlob) jobs.push(uploadFile(customerAssetPath('signatures', 'sign.png'), signatureBlob).then((u) => (uploads.signatureUrl = u)))
       if (aadhaarFile) jobs.push(uploadFile(customerAssetPath('aadhaar', aadhaarFile.name), aadhaarFile).then((u) => (uploads.aadhaarUrl = u)))
       if (panFile) jobs.push(uploadFile(customerAssetPath('pan', panFile.name), panFile).then((u) => (uploads.panUrl = u)))
-      await Promise.all(jobs)
+      
+      try {
+        console.log("Step 3: Awaiting Promise.all for uploads")
+        await Promise.all(jobs)
+        console.log("Step 4: Assets uploaded successfully", uploads)
+      } catch (err) {
+        console.error("Error in upload step:", err)
+        throw err
+      }
 
-      const { id, accountNumber } = await createCustomer(form, {
-        uploads,
-        agent: { uid: profile?.uid, name: profile?.name, branchId: profile?.branchId },
-      })
-      toast.success(`Customer created · ${accountNumber}`, { id: tId })
-      navigate(`/customers/${id}`)
+      try {
+        console.log("Step 5: Calling createCustomer")
+        const { id, accountNumber } = await createCustomer(form, {
+          uploads,
+          agent: { uid: profile?.uid, name: profile?.name, branchId: profile?.branchId },
+        })
+        console.log("Step 6: Customer created successfully", id, accountNumber)
+        toast.success(`Customer created · ${accountNumber}`, { id: tId })
+        navigate(`/customers/${id}`)
+      } catch (err) {
+        console.error("Error in createCustomer step:", err)
+        throw err
+      }
     } catch (e) {
+      console.error("Step 7: Caught error in onSubmit", e)
       toast.error(e.message || 'Could not save customer', { id: tId })
     } finally {
+      console.log("Step 8: Finished onSubmit finally block")
       setSubmitting(false)
     }
   }

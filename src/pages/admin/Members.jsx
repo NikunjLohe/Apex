@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { where } from 'firebase/firestore'
 import { Link, useNavigate } from 'react-router-dom'
-import { useCollection, fetchCollection } from '../../hooks/useFirestore'
+import { useCollection, fetchCollection, useDoc } from '../../hooks/useFirestore'
 import { memberSchema } from '../../lib/schemas'
 import { createMember, updateMember } from '../../lib/admin'
 import { useRanks } from '../../contexts/RanksContext'
@@ -23,6 +23,7 @@ export default function Members() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // { mode:'new'|'edit', member }
   const navigate = useNavigate()
+  const { data: settings } = useDoc('config/settings')
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -129,6 +130,7 @@ function MemberModal({ modal, branches, members, onClose }) {
       status: m?.status || 'active', referredBy: m?.referredBy || '', sponsorCode: m?.sponsorCode || '',
       password: '', address: m?.address || '', dob: m?.dob || '',
       sponsorCodeInput: initialSponsorCode,
+      panNumber: m?.panNumber || '',
     },
   })
 
@@ -193,6 +195,17 @@ function MemberModal({ modal, branches, members, onClose }) {
   const submit = async (form) => {
     setSaving(true)
     try {
+      // Uppercase PAN Number
+      if (form.panNumber) form.panNumber = form.panNumber.toUpperCase()
+
+      // Validate PAN Uniqueness
+      const existingPanUser = (members || []).find(u => u.panNumber === form.panNumber)
+      if (existingPanUser && (!isEdit || existingPanUser.id !== m.id)) {
+        toast.error('PAN number is already registered to another agent')
+        setSaving(false)
+        return
+      }
+
       // Validate Sponsor ID (referredBy Code)
       const sponsorCodeInput = form.sponsorCodeInput?.trim()
       if (sponsorCodeInput) {
@@ -227,7 +240,8 @@ function MemberModal({ modal, branches, members, onClose }) {
           })
         }
         const nextId = maxId + 1
-        form.sponsorCode = `AG${String(nextId).padStart(6, '0')}`
+        const prefix = settings?.agentPrefix || 'KB'
+        form.sponsorCode = `${prefix}${String(nextId).padStart(6, '0')}`
       }
 
       const cleanForm = { ...form }
@@ -578,7 +592,7 @@ Welcome to the Apex Family.`
                     </div>
                     <div>
                       <span className="block text-[10px] text-ink-2">PAN Card Number</span>
-                      <span className="font-semibold text-ink-1 font-mono uppercase">{m?.pan || '—'}</span>
+                      <span className="font-semibold text-ink-1 font-mono uppercase">{m?.panNumber || '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -654,6 +668,9 @@ Welcome to the Apex Family.`
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
+                <div><label className="label">PAN Number</label><input className="field font-mono uppercase" maxLength={10} placeholder="ABCDE1234F" {...register('panNumber')} />{errors.panNumber && <p className="err">{errors.panNumber.message}</p>}</div>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
                 <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
               </div>
               <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>

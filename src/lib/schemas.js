@@ -83,6 +83,7 @@ export const memberSchema = z.object({
   name: z.string().min(2, 'Name is required'),
   email: z.string().email('Invalid email').or(z.literal('')).optional(),
   phone,
+  panNumber: z.string().trim().regex(/^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/, 'Valid PAN required (e.g. ABCDE1234F)'),
   rank: z.coerce.number().min(1),
   branchId: z.string().optional(),
   referredBy: z.string().optional(), // sponsor / upline uid

@@ -48,6 +48,8 @@ export default function SeedDemo() {
     setLoading(true)
     setLogs(['Starting Seed Process...'])
     try {
+      const settingsSnap = await getDoc(doc(db, 'config', 'settings'))
+      const agentPrefix = settingsSnap.exists() ? (settingsSnap.data().agentPrefix || 'KB') : 'KB'
       // Ensure secondary app exists for auth creation
       const secondaryApp = getApps().length > 1 ? getApp('SecondaryApp') : initializeApp(firebaseConfig, 'SecondaryApp')
       const secondaryAuth = getAuth(secondaryApp)
@@ -108,7 +110,7 @@ export default function SeedDemo() {
       const agents = []
       
       const createAgent = async (rank, sponsorCode = null, indexStr) => {
-        const code = `AG${agentCounter++}`
+        const code = `${agentPrefix}${agentCounter++}`
         const randId = Math.floor(Math.random() * 99999)
         const email = `agent${code.toLowerCase()}_${randId}@apex.test`
         const pw = '123456'

@@ -7,7 +7,16 @@ import { generateAccountNumber } from './ids'
  * @returns {{ id, accountNumber }}
  */
 export async function createCustomer(form, { uploads = {}, agent }) {
-  const accountNumber = await generateAccountNumber()
+  console.log("createCustomer Step 1: generating account number")
+  let accountNumber
+  try {
+    accountNumber = await generateAccountNumber()
+    console.log("createCustomer Step 2: generated account number", accountNumber)
+  } catch (err) {
+    console.error("createCustomer Error generating account number:", err)
+    throw err
+  }
+  
   const ref = doc(collection(db, 'customers'))
   const payload = {
     name: form.name,
@@ -45,7 +54,15 @@ export async function createCustomer(form, { uploads = {}, agent }) {
     plansCount: 0,
     createdAt: serverTimestamp(),
   }
-  await setDoc(ref, payload)
+  
+  console.log("createCustomer Step 3: calling setDoc on customers collection")
+  try {
+    await setDoc(ref, payload)
+    console.log("createCustomer Step 4: setDoc finished successfully")
+  } catch (err) {
+    console.error("createCustomer Error in setDoc:", err)
+    throw err
+  }
   return { id: ref.id, accountNumber }
 }
 

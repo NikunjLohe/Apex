@@ -48,7 +48,7 @@ export default function PlanEnroll() {
 
   const rd = useMemo(() => {
     if (!selectedPlanObj) return String(type).toUpperCase().startsWith('RD')
-    return selectedPlanObj.type === 'RD'
+    return (selectedPlanObj.type || 'RD').toUpperCase() === 'RD'
   }, [selectedPlanObj, type])
 
   const preview = useMemo(() => {

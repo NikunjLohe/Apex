@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { collection, doc, getDocs, setDoc, writeBatch, serverTimestamp, query, where, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { useCollection } from '../../hooks/useFirestore'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -9,6 +8,8 @@ import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import toast from 'react-hot-toast'
 import { ICash, ICheck, IAlert, IClock, IUsers, IDoc } from '../../components/ui/icons'
+import { updateDashboardSummary } from '../../lib/summary'
+import { Link } from 'react-router-dom'
 
 const MONTHS = [
   { value: 1, label: 'January' },
@@ -64,11 +65,11 @@ export default function Payouts() {
   // Generate Payout calculation process
   const handleGeneratePayouts = async () => {
     setGenerating(true)
-    const toastId = toast.loading('Calculating monthly payouts & allowance targets...')
+    const toastId = toast.loading('Calculating monthly Commission Bills...')
     try {
-      // 1. Fetch all unpaid commissions for target month/year
+      // 1. Fetch all unpaid commissions for target month/year from commission_ledger
       const commQuery = query(
-        collection(db, 'commissions'),
+        collection(db, 'commission_ledger'),
         where('status', '==', 'unpaid'),
         where('month', '==', selectedMonth),
         where('year', '==', selectedYear)
@@ -85,18 +86,11 @@ export default function Payouts() {
         return
       }
 
-      // 2. Fetch all users (agents) to get ranks
+      // 2. Fetch all users (agents) to get PAN and details
       const usersSnap = await getDocs(collection(db, 'users'))
       const usersMap = {}
       usersSnap.forEach(d => {
         usersMap[d.id] = { id: d.id, ...d.data() }
-      })
-
-      // 3. Fetch all active policies of target month/year to compute Monthly BV for target allowances checks
-      const plansSnap = await getDocs(collection(db, 'plans'))
-      const plansList = []
-      plansSnap.forEach(d => {
-        plansList.push({ id: d.id, ...d.data() })
       })
 
       // Group commissions by agent
@@ -112,42 +106,14 @@ export default function Payouts() {
 
       for (const agentId in groupedComms) {
         const commList = groupedComms[agentId]
-        const agent = usersMap[agentId] || { name: commList[0].agentName, sponsorCode: commList[0].sponsorCode || '—', rank: 1 }
+        const agent = usersMap[agentId] || { name: commList[0].agentName, sponsorCode: commList[0].sponsorCode || '—', rank: 1, panNumber: 'UNASSIGNED' }
         
-        // Compute monthly business volume sold in this target month
-        const agentPlans = plansList.filter(p => {
-          if (p.agentId !== agentId) return false
-          const startDateVal = p.startDate?.seconds ? new Date(p.startDate.seconds * 1000) : new Date(p.startDate)
-          if (isNaN(startDateVal.getTime())) return false
-          return (startDateVal.getMonth() + 1 === selectedMonth) && (startDateVal.getFullYear() === selectedYear)
-        })
-
-        // Monthly BV = sum of RD monthly amounts * 12 + FD lump sum amounts
-        const monthlyBV = agentPlans.reduce((sum, p) => {
-          const isRD = p.type?.toLowerCase().startsWith('rd')
-          return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
-        }, 0)
-
-        // Rank settings
-        const rankIdx = (Number(agent.rank) || 1) - 1
-        const rankInfo = getRank(agent.rank)
+        const grossCommission = commList.reduce((sum, c) => sum + (c.amount || 0), 0)
         
-        // MFA Target Check
-        const mfaTarget = config.MFA_TARGET[rankIdx] || 0
-        const mfaAmount = config.MFA[rankIdx] || 0
-        const mfa = monthlyBV >= mfaTarget ? mfaAmount : 0
-
-        // PB Target Check
-        const pbTarget = config.PB_TARGET[rankIdx] || 0
-        const pbAmount = config.PB_AMOUNT[rankIdx] || 0
-        const pb = (pbTarget > 0 && monthlyBV >= pbTarget) ? pbAmount : 0
-
-        // Travel Allowance (flat flat allowance if they had active sales)
-        const taAmount = config.TA[rankIdx] || 0
-        const ta = agentPlans.length > 0 ? taAmount : 0
-
-        const totalCommission = commList.reduce((sum, c) => sum + (c.amount || 0), 0)
-        const totalPayable = totalCommission + mfa + pb + ta
+        // Deductions: 5% TDS and 5% Admin Charge
+        const tds = grossCommission * 0.05
+        const adminCharge = grossCommission * 0.05
+        const netPayable = grossCommission - tds - adminCharge
 
         // Construct Payout Document
         const payoutRef = doc(collection(db, 'payouts'))
@@ -155,23 +121,24 @@ export default function Payouts() {
           agentId,
           agentName: agent.name,
           sponsorCode: agent.sponsorCode || '—',
+          panNumber: agent.panNumber || '—',
           month: selectedMonth,
           year: selectedYear,
           policiesCount: commList.length,
-          totalCommission,
-          mda: totalCommission, // MDA is direct commission
-          mfa,
-          pb,
-          ta,
-          totalPayable,
+          grossCommission,
+          tds,
+          adminCharge,
+          netPayable,
           status: 'generated',
           generatedDate: serverTimestamp(),
           paidDate: null,
+          // We can optionally store the references to the commission entries to lock them
+          commissionEntryIds: commList.map(c => c.id)
         })
       }
 
       await batch.commit()
-      toast.success('Payout calculation batch created successfully!', { id: toastId })
+      toast.success('Commission Bills created successfully!', { id: toastId })
       fetchPayouts()
     } catch (err) {
       console.error('Error generating payouts:', err)
@@ -190,38 +157,22 @@ export default function Payouts() {
       
       if (nextStatus === 'paid') {
         updateData.paidDate = serverTimestamp()
-        
-        // Fetch payout details to match commissions
-        const snap = await getDocs(query(collection(db, 'payouts'), where('status', '==', 'approved')))
         const currentPayout = payoutsList.find(p => p.id === payoutId)
 
         if (currentPayout) {
-          // Get all commissions of this agent matching month & year
-          const commQuery = query(
-            collection(db, 'commissions'),
-            where('agentId', '==', currentPayout.agentId),
-            where('month', '==', selectedMonth),
-            where('year', '==', selectedYear)
-          )
-          const commSnap = await getDocs(commQuery)
           const batch = writeBatch(db)
+          let payoutTotal = currentPayout.netPayable || 0
 
-          // Mark matching commissions paid
-          commSnap.forEach(d => {
-            batch.update(doc(db, 'commissions', d.id), { status: 'paid' })
-          })
+          // Update all linked commission_ledger entries
+          if (currentPayout.commissionEntryIds && currentPayout.commissionEntryIds.length > 0) {
+             for (const commId of currentPayout.commissionEntryIds) {
+               batch.update(doc(db, 'commission_ledger', commId), { status: 'paid' })
+             }
+          }
 
-          // Mark matching ledger entries paid
-          const ledgerQuery = query(
-            collection(db, 'income_ledger'),
-            where('sponsorCode', '==', currentPayout.sponsorCode),
-            where('status', '==', 'unpaid')
-          )
-          const ledgerSnap = await getDocs(ledgerQuery)
-          ledgerSnap.forEach(d => {
-            batch.update(doc(db, 'income_ledger', d.id), { status: 'paid' })
-          })
-
+          // Trigger dashboard summary update for paid commissions (QA-002 Fix)
+          await updateDashboardSummary({ totalCommission: payoutTotal })
+          
           await batch.commit()
         }
       }
@@ -240,8 +191,8 @@ export default function Payouts() {
       {/* Title */}
       <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
         <div>
-          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Monthly Payout Engine</h2>
-          <p className="text-xs text-ink-2">Calculate, approve, and execute monthly agent compensation disbursements.</p>
+          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Commission Payout Engine</h2>
+          <p className="text-xs text-ink-2">Generate and approve monthly Commission Bills.</p>
         </div>
       </div>
 
@@ -269,7 +220,7 @@ export default function Payouts() {
           disabled={generating} 
           className="btn-gold px-6 py-2.5 text-xs uppercase tracking-wider font-bold"
         >
-          {generating ? 'Calculating...' : 'Generate Monthly Payouts'}
+          {generating ? 'Calculating...' : 'Generate Commission Bills'}
         </button>
       </div>
 
@@ -279,8 +230,8 @@ export default function Payouts() {
       ) : payoutsList.length === 0 ? (
         <EmptyState 
           icon={<ICash size={24} />} 
-          title="No payouts calculated" 
-          message="Run payout generation to compute commissions and allow targeting metrics for this month."
+          title="No Commission Bills" 
+          message="Run payout generation to compute commissions for this month."
         />
       ) : (
         <div className="card p-5 space-y-4">
@@ -295,12 +246,11 @@ export default function Payouts() {
               <thead>
                 <tr>
                   <th>Agent Name</th>
-                  <th>Policies</th>
-                  <th>Total Comm</th>
-                  <th>MFA</th>
-                  <th>PB</th>
-                  <th>TA</th>
-                  <th>Total Payable</th>
+                  <th>Entries</th>
+                  <th>Gross Comm</th>
+                  <th className="text-red-400">TDS (5%)</th>
+                  <th className="text-red-400">Admin (5%)</th>
+                  <th className="text-gold">Net Payable</th>
                   <th>Status</th>
                   <th className="text-right">Actions</th>
                 </tr>
@@ -310,18 +260,23 @@ export default function Payouts() {
                   <tr key={p.id}>
                     <td>
                       <span className="font-semibold text-ink-1 block">{p.agentName}</span>
-                      <span className="text-[10px] text-ink-2 font-mono">{p.sponsorCode}</span>
+                      <span className="text-[10px] text-ink-2 font-mono">PAN: {p.panNumber}</span>
                     </td>
                     <td className="font-mono text-ink-1 font-bold">{p.policiesCount}</td>
-                    <td className="text-ink-1 font-semibold">{formatINR(p.totalCommission)}</td>
-                    <td className="text-ink-1">{p.mfa > 0 ? formatINR(p.mfa) : '—'}</td>
-                    <td className="text-ink-1">{p.pb > 0 ? formatINR(p.pb) : '—'}</td>
-                    <td className="text-ink-1">{p.ta > 0 ? formatINR(p.ta) : '—'}</td>
-                    <td className="text-gold font-bold">{formatINR(p.totalPayable)}</td>
+                    <td className="text-ink-1 font-semibold">{formatINR(p.grossCommission)}</td>
+                    <td className="text-red-400 font-semibold">{formatINR(p.tds)}</td>
+                    <td className="text-red-400 font-semibold">{formatINR(p.adminCharge)}</td>
+                    <td className="text-gold font-bold text-sm">{formatINR(p.netPayable)}</td>
                     <td>
                       <StatusBadge status={p.status} />
                     </td>
                     <td className="text-right space-x-2">
+                      <Link 
+                        to={`/admin/commission-bill/${p.id}`} 
+                        className="btn-dark py-1 px-3 text-[10px] uppercase font-bold"
+                      >
+                        View Bill
+                      </Link>
                       {p.status === 'generated' && (
                         <button 
                           onClick={() => handleUpdateStatus(p.id, 'approved')} 
@@ -339,7 +294,7 @@ export default function Payouts() {
                         </button>
                       )}
                       {p.status === 'paid' && (
-                        <span className="text-[10px] text-ink-2 italic font-medium">
+                        <span className="text-[10px] text-ink-2 italic font-medium block mt-1">
                           Paid {p.paidDate ? fmtDate(p.paidDate) : ''}
                         </span>
                       )}

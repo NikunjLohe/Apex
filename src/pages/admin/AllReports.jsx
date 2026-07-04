@@ -190,17 +190,19 @@ export default function AllReports() {
         'Cycle Month/Year': `${c.month}/${c.year}`,
         'Percentage (%)': c.percentage || 0,
         'Amount Earned': c.amount || 0,
+        'Commission Type': c.compressionReason || (c.compression ? 'Roll-up' : 'Direct'),
         'Payout Status': c.status,
       }))
     } else if (activeTab === 'payouts') {
       sheetData = payoutsData.map(p => ({
         'Agent Name': p.agentName,
         'Sponsor Code': p.sponsorCode,
+        'PAN Number': p.panNumber || '—',
         'Payout Period': `${p.month}/${p.year}`,
-        'MDA Commission': p.totalCommission || 0,
-        'Field Allowance': p.mfa || 0,
-        'Travel Allowance': p.ta || 0,
-        'Net Payable': p.totalPayable || 0,
+        'Gross Commission': p.grossCommission || 0,
+        'TDS (5%)': p.tds || 0,
+        'Admin Charge (5%)': p.adminCharge || 0,
+        'Net Payable': p.netPayable || 0,
         'Payout Status': p.status,
       }))
     } else if (activeTab === 'promotions') {
@@ -493,6 +495,7 @@ export default function AllReports() {
                       <th>Plan Product</th>
                       <th>Percentage</th>
                       <th>Amount Credit</th>
+                      <th>Type</th>
                       <th>Cycle</th>
                       <th>Status</th>
                     </tr>
@@ -508,6 +511,11 @@ export default function AllReports() {
                         <td className="font-semibold text-ink-1 uppercase">{c.planCode}</td>
                         <td className="font-mono text-ink-2">{c.percentage}%</td>
                         <td className="font-mono font-bold text-gold">{formatINR(c.amount)}</td>
+                        <td>
+                          <span className="text-gray-800 text-[10px] font-bold block leading-tight">
+                            {c.compressionReason || (c.compression ? 'Roll-up' : 'Direct')}
+                          </span>
+                        </td>
                         <td>{c.month}/{c.year}</td>
                         <td><StatusBadge status={c.status} /></td>
                       </tr>

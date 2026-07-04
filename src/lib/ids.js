@@ -7,13 +7,24 @@ import { db } from '../firebase'
 /** Atomically increment a named counter and return the new integer value. */
 export async function nextCounter(name) {
   const ref = doc(db, 'counters', name)
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref)
-    const current = snap.exists() ? snap.data().value || 0 : 0
-    const next = current + 1
-    tx.set(ref, { value: next }, { merge: true })
-    return next
-  })
+  console.log(`nextCounter Step 1: starting runTransaction for ${name}`)
+  try {
+    const nextVal = await runTransaction(db, async (tx) => {
+      console.log(`nextCounter Step 2: inside transaction for ${name}, calling tx.get`)
+      const snap = await tx.get(ref)
+      console.log(`nextCounter Step 3: got snapshot for ${name}, exists?`, snap.exists())
+      const current = snap.exists() ? snap.data().value || 0 : 0
+      const next = current + 1
+      console.log(`nextCounter Step 4: writing next value ${next} for ${name}`)
+      tx.set(ref, { value: next }, { merge: true })
+      return next
+    })
+    console.log(`nextCounter Step 5: transaction finished successfully for ${name}, returning ${nextVal}`)
+    return nextVal
+  } catch (err) {
+    console.error(`nextCounter Error in runTransaction for ${name}:`, err)
+    throw err
+  }
 }
 
 /** Customer account number: APEX-YYYY-00001 */

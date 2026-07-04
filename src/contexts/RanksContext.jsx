@@ -2,18 +2,7 @@ import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { RANKS as DEFAULT_RANKS } from '../data/ranks'
-import {
-  MDA as DEFAULT_MDA,
-  MFA as DEFAULT_MFA,
-  MFA_TARGET as DEFAULT_MFA_TARGET,
-  TA as DEFAULT_TA,
-  PB_TARGET as DEFAULT_PB_TARGET,
-  PB_AMOUNT as DEFAULT_PB_AMOUNT,
-  PROMO_TARGET as DEFAULT_PROMO_TARGET,
-  CMD_AWARD_TARGET as DEFAULT_CMD_AWARD_TARGET,
-  CMD_AWARD_AMOUNT as DEFAULT_CMD_AWARD_AMOUNT,
-  FD_PENSION as DEFAULT_FD_PENSION,
-} from '../data/compensation'
+
 
 const RanksContext = createContext(null)
 
@@ -30,38 +19,9 @@ function buildConfigFromRanksList(ranksList) {
     promoDesc: r.promoDesc || '',
     status: r.status || 'active',
   }))
-  const MFA = sorted.map(r => Number(r.mfa) || 0)
-  const MFA_TARGET = sorted.map(r => Number(r.mfaTarget) || 0)
-  const TA = sorted.map(r => Number(r.ta) || 0)
-  const PB_TARGET = sorted.map(r => Number(r.pbTarget) || 0)
-  const PB_AMOUNT = sorted.map(r => Number(r.pbAmount) || 0)
-  const PROMO_TARGET = sorted.map(r => Number(r.promoTarget) || 0)
-  const CMD_AWARD_TARGET = sorted.map(r => Number(r.cmdTarget) || 0)
-  const CMD_AWARD_AMOUNT = sorted.map(r => Number(r.cmdAmount) || 0)
-
-  // Map MDA percentages to decimals
-  const MDA = sorted.map(r => ({
-    y1: (r.mdaY1 || [0, 0, 0, 0, 0]).map(val => (Number(val) || 0) / 100),
-    y2: (r.mdaY2 || [0, 0, 0, 0, 0]).map(val => val === null ? null : (Number(val) || 0) / 100),
-  }))
-
-  // Map FD percentages to decimals
-  const FD_PENSION = sorted.map(r =>
-    (r.fdPension || [0, 0, 0, 0, 0]).map(val => (Number(val) || 0) / 100)
-  )
 
   return {
     RANKS,
-    MFA,
-    MFA_TARGET,
-    TA,
-    PB_TARGET,
-    PB_AMOUNT,
-    PROMO_TARGET,
-    CMD_AWARD_TARGET,
-    CMD_AWARD_AMOUNT,
-    MDA,
-    FD_PENSION,
   }
 }
 
@@ -89,7 +49,7 @@ export function RanksProvider({ children }) {
 
   const config = useMemo(() => {
     if (ranksList.length === 0) {
-      // Fallback configuration matching hardcoded tables
+      // Fallback configuration
       return {
         RANKS: DEFAULT_RANKS.map(r => ({
           ...r,
@@ -97,16 +57,6 @@ export function RanksProvider({ children }) {
           promoDesc: '',
           status: 'active',
         })),
-        MFA: DEFAULT_MFA,
-        MFA_TARGET: DEFAULT_MFA_TARGET,
-        TA: DEFAULT_TA,
-        PB_TARGET: DEFAULT_PB_TARGET,
-        PB_AMOUNT: DEFAULT_PB_AMOUNT,
-        PROMO_TARGET: DEFAULT_PROMO_TARGET,
-        CMD_AWARD_TARGET: DEFAULT_CMD_AWARD_TARGET,
-        CMD_AWARD_AMOUNT: DEFAULT_CMD_AWARD_AMOUNT,
-        MDA: DEFAULT_MDA,
-        FD_PENSION: DEFAULT_FD_PENSION,
       }
     }
     return buildConfigFromRanksList(ranksList)

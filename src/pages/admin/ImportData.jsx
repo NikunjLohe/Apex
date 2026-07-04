@@ -25,6 +25,7 @@ import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IPlus, IClock, IAlert, ICheck, IClose } from '../../components/ui/icons'
 import { Link } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
+import { calculateCommissions } from '../../lib/commissionEngine'
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',
@@ -39,39 +40,6 @@ const DEFAULT_MAPPING = {
   startDate: 'Start Date',
 }
 
-const getCommissionRate = (planCode, policyYear, agentRankCode, agentRankNum, commsConfig, ranksConfig, planType) => {
-  const code = String(planCode).toUpperCase()
-  const yr = Number(policyYear) || 1
-  const rankCodeStr = String(agentRankCode || 'AO').toUpperCase()
-  
-  // 1. Try to read from dynamic commissions configuration master
-  if (commsConfig && commsConfig[code]?.[yr]?.[rankCodeStr] !== undefined) {
-    return Number(commsConfig[code][yr][rankCodeStr]) / 100
-  }
-  
-  // 2. Fallback to default ranks configuration arrays (MDA or FD_PENSION)
-  const rankIdx = (Number(agentRankNum) || 1) - 1
-  const isRDPlan = isRD(planCode, planType)
-  
-  let planIdx = 0
-  const match = code.match(/(\d)/)
-  if (match) {
-    planIdx = Math.max(0, Math.min(4, Number(match[1]) - 1))
-  }
-  
-  if (isRDPlan) {
-    const isYear1 = yr === 1
-    const table = ranksConfig?.MDA || DEFAULT_MDA
-    const mdaObj = table[rankIdx] || { y1: [0,0,0,0,0], y2: [0,0,0,0,0] }
-    const rate = isYear1 ? mdaObj.y1?.[planIdx] : mdaObj.y2?.[planIdx]
-    return rate || 0
-  } else {
-    const table = ranksConfig?.FD_PENSION || DEFAULT_FD_PENSION
-    const row = table[rankIdx] || [0,0,0,0,0]
-    return row[planIdx] || 0
-  }
-}
-
 export default function ImportData() {
   const { profile } = useAuth()
   const { getRank, config: ranksConfig } = useRanks()
@@ -79,6 +47,7 @@ export default function ImportData() {
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [data, setData] = useState([])
   const [agentsMap, setAgentsMap] = useState({})
+  const [usersMap, setUsersMap] = useState({})
   const [plansMaster, setPlansMaster] = useState([])
 
   const [loading, setLoading] = useState(false)
@@ -116,13 +85,17 @@ export default function ImportData() {
       try {
         const usersSnap = await getDocs(collection(db, 'users'))
         const uMap = {}
+        const idMap = {}
         usersSnap.forEach(d => {
           const u = d.data()
+          const userObj = { id: d.id, name: u.name, branchId: u.branchId, rank: u.rank, sponsorCode: u.sponsorCode, referredBy: u.referredBy }
           if (u.sponsorCode) {
-            uMap[u.sponsorCode.trim().toLowerCase()] = { id: d.id, name: u.name, branchId: u.branchId, rank: u.rank, sponsorCode: u.sponsorCode }
+            uMap[u.sponsorCode.trim().toLowerCase()] = userObj
           }
+          idMap[d.id] = userObj
         })
         setAgentsMap(uMap)
+        setUsersMap(idMap)
       } catch (err) {
         console.warn('Agent mapping fetch failed:', err)
       }
@@ -447,57 +420,49 @@ export default function ImportData() {
             recentImportDate: serverTimestamp(),
           })
 
-          // 4. Calculate Commissions
-          const agentRankObj = getRank(agentRef.rank)
-          const rate = getCommissionRate(row.planCode, 1, agentRankObj.code, agentRef.rank, commissionsConfig, ranksConfig, row.planType)
-          const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
-          const commissionAmount = baseAmount * rate
-
+          // 4. Calculate Commissions (Hierarchical with compression)
           const calculationDate = new Date()
           const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
           const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
-
-          // Create Commission Doc
-          const commRef = doc(collection(db, 'commissions'))
-          const commId = commRef.id
-          batch.set(commRef, {
-            agentId: agentRef.id,
-            agentName: agentRef.name,
-            sponsorCode: agentRef.sponsorCode || '',
-            customerId: customerDocId,
-            customerName: row.customerName,
-            customerAccount: row.customerId,
-            policyId: policyRef.id,
-            policyNumber: row.policyNumber,
+          const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
+          
+          const commissionResults = calculateCommissions({
+            baseAgent: agentRef,
+            usersMap,
             planCode: row.planCode,
             planType: row.planType,
             policyYear: 1,
-            percentage: rate * 100,
-            amount: commissionAmount,
-            month: monthNum,
-            year: yearNum,
-            calculationDate: serverTimestamp(),
-            status: 'unpaid',
+            businessAmount: baseAmount,
+            commissionsConfig,
+            ranksConfig
           })
 
-          // Create Income Ledger entry
-          const ledgerRef = doc(collection(db, 'income_ledger'))
-          batch.set(ledgerRef, {
-            createdAt: serverTimestamp(),
-            policyNumber: row.policyNumber,
-            customerName: row.customerName,
-            agentName: agentRef.name,
-            sponsorCode: agentRef.sponsorCode || '',
-            planCode: row.planCode,
-            type: 'commission',
-            percentage: rate * 100,
-            amount: commissionAmount,
-            refId: commId,
-            status: 'unpaid',
+          // Create ledger entries for each beneficiary
+          commissionResults.forEach(comm => {
+            const ledgerRef = doc(collection(db, 'commission_ledger'))
+            batch.set(ledgerRef, {
+              policyId: policyRef.id,
+              policyNumber: row.policyNumber,
+              customerName: row.customerName,
+              agentId: comm.beneficiaryId,
+              agentName: comm.beneficiaryName,
+              sponsorCode: comm.sponsorCode,
+              planCode: row.planCode,
+              type: 'commission',
+              percentage: comm.percentage,
+              amount: comm.amount,
+              businessAmount: baseAmount,
+              originalRank: comm.originalRank,
+              compression: comm.compression,
+              month: monthNum,
+              year: yearNum,
+              status: 'unpaid',
+              createdAt: serverTimestamp()
+            })
+            totalImportedCommissions += comm.amount
           })
 
           totalImportedBusiness += calculatedAmount
-          totalImportedCommissions += commissionAmount
           successCount++
         } catch (err) {
           console.error('Failed importing row:', row, err)
@@ -544,7 +509,6 @@ export default function ImportData() {
         totalPolicies: successCount,
         todayImportedPolicies: successCount,
         todayImportedCustomers: successCount,
-        totalCommission: totalImportedCommissions,
       })
     } catch (err) {
       console.error('Failed to update dashboard summaries:', err)
