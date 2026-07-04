@@ -20,7 +20,7 @@ export default function AllReports() {
   const allUsers = useCollection('users')
   const allBranches = useCollection('branches')
   const allPlans = useCollection('plans')
-  const allCommissions = useCollection('commissions')
+  const allCommissions = useCollection('commission_ledger')
   const allPayouts = useCollection('payouts')
   const allPromotions = useCollection('promotion_recommendations')
 

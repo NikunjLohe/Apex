@@ -18,8 +18,6 @@ import { updateDashboardSummary } from '../../lib/summary'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { isRD } from '../../data/compensation'
-const DEFAULT_MDA = []
-const DEFAULT_FD_PENSION = []
 import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -28,6 +26,9 @@ import { IDoc, IPlus, IClock, IAlert, ICheck, IClose } from '../../components/ui
 import { Link } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
 import { calculateCommissions } from '../../lib/commissionEngine'
+
+const DEFAULT_MDA = []
+const DEFAULT_FD_PENSION = []
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',

@@ -97,12 +97,12 @@ export default function Members() {
         </div>
       )}
 
-      {modal && <MemberModal modal={modal} branches={branches.data} members={members.data} onClose={() => setModal(null)} />}
+      {modal && <MemberModal modal={modal} branches={branches.data} members={members.data} settings={settings} onClose={() => setModal(null)} />}
     </div>
   )
 }
 
-function MemberModal({ modal, branches, members, onClose }) {
+function MemberModal({ modal, branches, members, settings, onClose }) {
   const { config, nextRank, getRank } = useRanks()
   const RANKS = config.RANKS
   const isEdit = modal.mode === 'edit'
