@@ -4,7 +4,7 @@ import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firesto
 import { db } from '../../firebase'
 import { formatINR, fmtDate } from '../../utils/format'
 import { useDoc } from '../../hooks/useFirestore'
-import { IPrint, IArrowLeft } from '../../components/ui/icons'
+import { IPrint } from '../../components/ui/icons'
 
 export default function CommissionBill() {
   const { id } = useParams()
@@ -61,7 +61,7 @@ export default function CommissionBill() {
     <div className="mx-auto max-w-4xl space-y-6 pb-20">
       <div className="flex justify-between items-center print:hidden">
         <Link to="/admin/payouts" className="text-gold flex items-center gap-1 text-sm font-semibold hover:underline">
-          <IArrowLeft size={16} /> Back to Payouts
+          &larr; Back to Payouts
         </Link>
         <button onClick={() => window.print()} className="btn-dark px-4 py-2 flex items-center gap-2 text-xs uppercase font-bold">
           <IPrint size={14} /> Print Bill

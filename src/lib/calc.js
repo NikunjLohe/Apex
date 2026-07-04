@@ -2,7 +2,6 @@
 // Plan maturity & schedule calculations (pure functions).
 // ============================================================================
 import { addMonths, addYears } from 'date-fns'
-import { FD_PENSION } from '../data/compensation'
 import { planYears, planIndex, isRD } from '../data/compensation'
 
 /**
@@ -15,7 +14,7 @@ import { planYears, planIndex, isRD } from '../data/compensation'
 export function computePlan({ type, monthlyAmount = 0, fdAmount = 0, startDate = new Date(), rateRankIndex = 0, ranksConfig }) {
   const years = planYears(type)
   const idx = planIndex(type)
-  const fdPensionTable = ranksConfig ? ranksConfig.FD_PENSION : FD_PENSION
+  const fdPensionTable = ranksConfig?.FD_PENSION || []
   const rate = fdPensionTable[rateRankIndex]?.[idx] ?? 0 // per-annum rate (decimal)
   const start = startDate instanceof Date ? startDate : new Date(startDate)
   const maturityDate = addYears(start, years)

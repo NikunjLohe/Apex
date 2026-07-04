@@ -17,7 +17,9 @@ import { db } from '../../firebase'
 import { updateDashboardSummary } from '../../lib/summary'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
-import { MDA as DEFAULT_MDA, FD_PENSION as DEFAULT_FD_PENSION, isRD } from '../../data/compensation'
+import { isRD } from '../../data/compensation'
+const DEFAULT_MDA = []
+const DEFAULT_FD_PENSION = []
 import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'

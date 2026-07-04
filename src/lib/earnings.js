@@ -3,20 +3,24 @@
 // UI controls the Firestore reads.
 // ============================================================================
 import {
-  MDA, MFA, PB_TARGET, PB_AMOUNT, TA, FD_PENSION,
-  PROMO_TARGET, CMD_AWARD_TARGET, CMD_AWARD_AMOUNT, CMD_RULES,
   planIndex, isRD, planYears,
 } from '../data/compensation'
 import { toDate } from '../utils/format'
 import { startOfMonth } from 'date-fns'
 
-/** MDA on a single payment based on the agent rank, plan year-band, and plan index. */
+const CMD_RULES = {
+  minInstallments: 12,
+  weightByYear: { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 },
+  mainLegShare: 0.8,
+  otherLegsMin: 0.2
+}
+
 /** MDA on a single payment based on the agent rank, plan year-band, and plan index. */
 function mdaForPayment(rankIdx, payment, plan, mdaConfig) {
   if (!plan) return 0
   const idx = planIndex(plan.type)
   const inYear1 = (payment.installmentNumber || 1) <= 12
-  const mdaTable = mdaConfig || MDA
+  const mdaTable = mdaConfig || []
   const rate = inYear1 ? mdaTable[rankIdx]?.y1?.[idx] : mdaTable[rankIdx]?.y2?.[idx]
   return (payment.amount || 0) * (rate || 0)
 }
@@ -30,16 +34,16 @@ function mdaForPayment(rankIdx, payment, plan, mdaConfig) {
  * @param {Object} ranksConfig   optional dynamic ranks configuration
  */
 export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePlans = [], ranksConfig }) {
-  const mdaTable = ranksConfig ? ranksConfig.MDA : MDA
-  const mfaTable = ranksConfig ? ranksConfig.MFA : MFA
-  const taTable = ranksConfig ? ranksConfig.TA : TA
-  const pbTargetTable = ranksConfig ? ranksConfig.PB_TARGET : PB_TARGET
-  const pbAmountTable = ranksConfig ? ranksConfig.PB_AMOUNT : PB_AMOUNT
-  const fdPensionTable = ranksConfig ? ranksConfig.FD_PENSION : FD_PENSION
-  const promoTargetTable = ranksConfig ? ranksConfig.PROMO_TARGET : PROMO_TARGET
-  const cmdAwardTargetTable = ranksConfig ? ranksConfig.CMD_AWARD_TARGET : CMD_AWARD_TARGET
-  const cmdAwardAmountTable = ranksConfig ? ranksConfig.CMD_AWARD_AMOUNT : CMD_AWARD_AMOUNT
-  const totalRanksCount = ranksConfig ? ranksConfig.RANKS.length : 18
+  const mdaTable = ranksConfig?.MDA || []
+  const mfaTable = ranksConfig?.MFA || []
+  const taTable = ranksConfig?.TA || []
+  const pbTargetTable = ranksConfig?.PB_TARGET || []
+  const pbAmountTable = ranksConfig?.PB_AMOUNT || []
+  const fdPensionTable = ranksConfig?.FD_PENSION || []
+  const promoTargetTable = ranksConfig?.PROMO_TARGET || []
+  const cmdAwardTargetTable = ranksConfig?.CMD_AWARD_TARGET || []
+  const cmdAwardAmountTable = ranksConfig?.CMD_AWARD_AMOUNT || []
+  const totalRanksCount = ranksConfig?.RANKS?.length || 18
 
   const rankIdx = (Number(rank) || 1) - 1
   const month0 = startOfMonth(new Date())
