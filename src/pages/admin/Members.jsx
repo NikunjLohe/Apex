@@ -371,25 +371,31 @@ Welcome to the Apex Family.`
             <div><label className="label">Branch</label><select className="field" {...register('branchId')}><option value="">— None —</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
             <div><label className="label">Rank</label><select className="field" {...register('rank', { valueAsNumber: true })}>{activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}</select></div>
           </div>
-          <div><label className="label">Address</label><textarea className="field h-12 resize-none" autoComplete="off" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
           <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2"><label className="label">Address</label><textarea className="field h-12 resize-none" autoComplete="off" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
+            <div>
+              <label className="label">PAN Number</label>
+              <input className="field font-mono uppercase" maxLength={10} autoComplete="off" {...register('panNumber')} />
+              {errors.panNumber && <p className="err">{errors.panNumber.message}</p>}
+            </div>
+            <div>
+              <label className="label">Agent Code</label>
+              <input className="field" placeholder="Auto-generated" disabled {...register('sponsorCode')} />
+            </div>
             <div>
               <label className="label">Sponsor ID</label>
               <input 
                 className="field font-mono uppercase" 
-                placeholder="e.g. AG000001 (leave blank for top)" 
+                placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001 (leave blank for top)`}
                 autoComplete="off"
                 {...register('sponsorCodeInput')} 
               />
             </div>
-            <div><label className="label">Agent Code</label><input className="field" placeholder="Auto-generated" disabled {...register('sponsorCode')} /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
             <div><label className="label">Status</label><select className="field" {...register('status')}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-            <div className="flex items-center gap-2 pb-1 text-sm text-ink-2 mt-5">
-              <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
-              <label htmlFor="isSuperAdmin" className="text-xs font-semibold text-ink-1">Super Admin Account</label>
-            </div>
+          </div>
+          <div className="flex items-center gap-2 pb-1 text-sm text-ink-2 mt-2">
+            <input type="checkbox" id="isSuperAdmin" className="accent-gold-1 h-4 w-4" {...register('isSuperAdmin')} />
+            <label htmlFor="isSuperAdmin" className="text-xs font-semibold text-ink-1">Super Admin Account</label>
           </div>
         </form>
       </ConfirmDialog>
