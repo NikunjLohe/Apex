@@ -136,11 +136,11 @@ export default function Settings() {
   useEffect(() => {
     if (!plansMaster.loading && plansMaster.data.length === 0) {
       const defaults = [
-        { name: 'RD 1 Year', code: 'RD1Y', duration: 1, status: 'active' },
-        { name: 'RD 2 Year', code: 'RD2Y', duration: 2, status: 'active' },
-        { name: 'RD 3 Year', code: 'RD3Y', duration: 3, status: 'active' },
-        { name: 'RD 4 Year', code: 'RD4Y', duration: 4, status: 'active' },
-        { name: 'Pension', code: 'PENS', duration: 5, status: 'active' },
+        { name: 'RD 1 Year', code: 'RD1Y', duration: 1, type: 'RD', status: 'active' },
+        { name: 'RD 2 Year', code: 'RD2Y', duration: 2, type: 'RD', status: 'active' },
+        { name: 'RD 3 Year', code: 'RD3Y', duration: 3, type: 'RD', status: 'active' },
+        { name: 'RD 4 Year', code: 'RD4Y', duration: 4, type: 'RD', status: 'active' },
+        { name: 'Pension', code: 'PENS', duration: 5, type: 'FD', status: 'active' },
       ]
       defaults.forEach(async (p) => {
         await addDoc(collection(db, 'plans_master'), p)

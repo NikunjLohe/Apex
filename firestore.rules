@@ -45,12 +45,14 @@ service cloud.firestore {
     match /imports/{id}      { allow read, write: if isAdmin(); }
     match /policies/{id}     { allow read, write: if isStaff(); }
     match /promotions/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /promotion_recommendations/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
 
     // Atomic counters for account/receipt numbers.
     match /counters/{name} { allow read, write: if isStaff(); }
 
     // Commission and Payout data
     match /commissions/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /commission_ledger/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
     match /payouts/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
 
 

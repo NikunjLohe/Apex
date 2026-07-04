@@ -45,7 +45,7 @@ const DEFAULT_MAPPING = {
 
 export default function ImportData() {
   const { profile } = useAuth()
-  const { getRank, config: ranksConfig } = useRanks()
+  const { getRank, config: ranksConfig, ranksList } = useRanks()
   const [commissionsConfig, setCommissionsConfig] = useState(null)
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [data, setData] = useState([])
@@ -272,7 +272,7 @@ export default function ImportData() {
           const masterPlan = plansMaster.find(p => p.code.toLowerCase() === planCode || p.name.toLowerCase() === planCode)
           if (!masterPlan) {
             isValid = false
-            errors.push(`Plan "${planCode}" does not match active Plan Master`)
+            errors.push(`Plan Code ${row[mapping.planCode] || planCode} not found in Plans master.`)
           }
 
           // 4. Missing required CIF/Name check
@@ -321,8 +321,8 @@ export default function ImportData() {
             address,
             agentCode,
             policyNumber: policyNo,
-            planCode: masterPlan?.code || planCode,
-            planType: masterPlan?.type || 'RD',
+            planCode: masterPlan?.code || planCode.toUpperCase(),
+            planType: masterPlan?.type || (planCode.toUpperCase().startsWith('PENS') ? 'FD' : planCode.toUpperCase().startsWith('FD') ? 'FD' : 'RD'),
             duration: masterPlan?.duration || 1,
             monthlyAmount: mAmount,
             totalAmount: tAmount,
@@ -430,14 +430,20 @@ export default function ImportData() {
           const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
           
           const commissionResults = calculateCommissions({
+            businessAmount: baseAmount,
+            plan: {
+              planCode: row.planCode,
+              planType: row.planType,
+              policyYear: 1
+            },
             baseAgent: agentRef,
             usersMap,
-            planCode: row.planCode,
-            planType: row.planType,
-            policyYear: 1,
-            businessAmount: baseAmount,
-            commissionsConfig,
-            ranksConfig
+            commissionMaster: commissionsConfig,
+            ranksList: ranksList,
+            customer: { id: customerDocId, name: row.customerName, account: row.customerId },
+            policyInfo: { id: policyRef.id, number: row.policyNumber },
+            monthNum,
+            yearNum
           })
 
           // Create ledger entries for each beneficiary
@@ -447,8 +453,8 @@ export default function ImportData() {
               policyId: policyRef.id,
               policyNumber: row.policyNumber,
               customerName: row.customerName,
-              agentId: comm.beneficiaryId,
-              agentName: comm.beneficiaryName,
+              agentId: comm.agentId,
+              agentName: comm.agentName,
               sponsorCode: comm.sponsorCode,
               planCode: row.planCode,
               type: 'commission',
