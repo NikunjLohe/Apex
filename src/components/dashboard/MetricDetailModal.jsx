@@ -500,7 +500,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
             className="card relative z-10 w-full max-w-5xl p-6 max-h-[92vh] flex flex-col overflow-hidden bg-navy-3 border border-navy-4"
           >
             {/* Header */}
-            <div className="mb-4 flex items-center justify-between border-b border-navy-4/50 pb-3">
+            <div className="mb-4 flex items-center justify-between border-b border-navy-4/50 pb-3 shrink-0">
               <div>
                 <h3 className={`font-serif text-lg sm:text-xl font-bold tracking-tight text-ink-1 flex items-center gap-2`}>
                   <span className={meta.iconColor}>◈</span> {meta.title}
@@ -520,7 +520,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* MTD Daily subtotal chart */}
             {metricType === 'monthly-business' && !loading && sortedRecords.length > 0 && (
-              <div className="mb-5 bg-navy-2/40 border border-navy-4 p-4 rounded-card">
+              <div className="mb-5 bg-navy-2/40 border border-navy-4 p-4 rounded-card shrink-0">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan mb-3">
                   Daily Business Sub-Total Chart (Current Month)
                 </h4>
@@ -545,7 +545,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* Search Filters */}
             {!loading && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
                 <div className="relative flex-1 max-w-sm">
                   <ISearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
                   <input
@@ -761,7 +761,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* Pagination footer */}
             {!loading && totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-between border-t border-navy-4/50 pt-3">
+              <div className="mt-4 flex items-center justify-between border-t border-navy-4/50 pt-3 shrink-0">
                 <button
                   type="button"
                   disabled={currentPage === 1}
@@ -786,7 +786,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* Metric Footer Summary Panel */}
             {!loading && footerSummary && (
-              <div className="mt-4 grid grid-cols-3 gap-4 border-t border-navy-4/70 bg-navy-2/30 p-3.5 rounded-card text-xs">
+              <div className="mt-4 grid grid-cols-3 gap-4 border-t border-navy-4/70 bg-navy-2/30 p-3.5 rounded-card text-xs shrink-0">
                 <div>
                   <span className="text-ink-2 font-semibold block uppercase text-[10px] tracking-wider">Total Records</span>
                   <span className="text-sm font-bold font-serif text-ink-1 mt-0.5 block">{footerSummary.totalRecords}</span>
