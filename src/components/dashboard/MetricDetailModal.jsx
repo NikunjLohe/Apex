@@ -24,7 +24,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
   // 2. Query Firestore collections conditionally
   const plans = useCollection(isPlansCollectionNeeded && open ? 'plans' : null)
-  const commissions = useCollection(isCommissionNeeded && open ? 'commission_ledger' : null)
+  const payouts = useCollection(isCommissionNeeded && open ? 'payouts' : null)
   const users = useCollection(isUsersNeeded && open ? 'users' : null)
   const promotions = useCollection(isPromotionsNeeded && open ? 'promotions_history' : null)
   const imports = useCollection(isImportsNeeded && open ? 'imports' : null)
@@ -63,7 +63,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       case 'monthly-business':
         return plans.loading || users.loading
       case 'total-commissions':
-        return commissions.loading
+        return payouts.loading
       case 'active-agents':
         return users.loading || branches.loading
       case 'active-policies':
@@ -75,7 +75,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       default:
         return false
     }
-  }, [open, metricType, plans.loading, commissions.loading, users.loading, promotions.loading, imports.loading, branches.loading])
+  }, [open, metricType, plans.loading, payouts.loading, users.loading, promotions.loading, imports.loading, branches.loading])
 
   // 6. Gather and process raw records for the active metric
   const processedRecords = useMemo(() => {
@@ -92,14 +92,18 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
         let runSum = 0
         const mapped = sortedPlans.map((p) => {
-          const amount = p.planType === 'RD' ? (p.monthlyAmount || 0) : (p.fdAmount || 0)
+          const monthlyAmount = Number(p.monthlyAmount) || 0
+          const fdAmount = Number(p.fdAmount) || 0
+          const amount = p.planType === 'RD' ? (monthlyAmount * 12) : fdAmount
           runSum += amount
           return {
             id: p.id,
             date: p.startDate,
             agent: p.agentName || '—',
             client: p.customerName || '—',
-            policyId: p.policyNumber || '—',
+            policyId: p.policyNumber || p.planAccountNumber || '—',
+            planCode: p.type || '—',
+            monthlyAmount: p.planType === 'RD' ? monthlyAmount : 0,
             amount,
             runningTotal: runSum,
           }
@@ -123,26 +127,34 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
         })
 
         return sortedPlans.map((p) => {
-          const amount = p.planType === 'RD' ? (p.monthlyAmount || 0) : (p.fdAmount || 0)
+          const monthlyAmount = Number(p.monthlyAmount) || 0
+          const fdAmount = Number(p.fdAmount) || 0
+          const amount = p.planType === 'RD' ? (monthlyAmount * 12) : fdAmount
           return {
             id: p.id,
             date: p.startDate,
             agent: p.agentName || '—',
             client: p.customerName || '—',
-            policyId: p.policyNumber || '—',
+            policyId: p.policyNumber || p.planAccountNumber || '—',
+            planCode: p.type || '—',
             amount,
+            source: p.planAccountNumber ? 'Manual' : 'Excel Import',
           }
         }).reverse()
       }
 
       case 'total-commissions': {
-        return commissions.data.map((c) => ({
-          id: c.id,
-          agent: c.agentName || '—',
-          date: c.createdAt,
-          policyRef: c.policyNumber || '—',
-          amount: c.amount || 0,
-          status: c.status === 'unpaid' ? 'pending' : 'paid',
+        const paidPayouts = payouts.data.filter((p) => p.status === 'paid')
+        return paidPayouts.map((p) => ({
+          id: p.id,
+          agent: p.agentName || '—',
+          date: p.paidDate || p.generatedDate,
+          payoutId: p.id,
+          grossCommission: p.grossCommission || 0,
+          tds: p.tds || 0,
+          adminCharge: p.adminCharge || 0,
+          netPaid: p.netPayable || 0,
+          status: p.status || 'paid',
         }))
       }
 
@@ -225,7 +237,43 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       default:
         return []
     }
-  }, [open, loading, metricType, plans.data, commissions.data, users.data, promotions.data, imports.data, branchMap, ranksConfig])
+  }, [open, loading, metricType, plans.data, payouts.data, users.data, promotions.data, imports.data, branchMap, ranksConfig])
+
+  // 6.5 Calculate Footer Summary (Total Records, Total Amount, Date Range)
+  const footerSummary = useMemo(() => {
+    if (sortedRecords.length === 0) return null
+
+    let totalAmt = 0
+    let minDate = null
+    let maxDate = null
+
+    sortedRecords.forEach((r) => {
+      let amt = 0
+      if (metricType === 'total-business' || metricType === 'monthly-business' || metricType === 'active-policies') {
+        amt = r.amount || 0
+      } else if (metricType === 'total-commissions') {
+        amt = r.netPaid || 0
+      } else if (metricType === 'approved-promotions') {
+        amt = r.rewardValue || 0
+      }
+      totalAmt += amt
+
+      const rawDate = r.date || r.startDate || r.joinDate || r.approvalDate || r.importDate
+      if (rawDate) {
+        const d = toDate(rawDate)
+        if (d && !isNaN(d.getTime())) {
+          if (!minDate || d < minDate) minDate = d
+          if (!maxDate || d > maxDate) maxDate = d
+        }
+      }
+    })
+
+    return {
+      totalRecords: sortedRecords.length,
+      totalAmount: totalAmt,
+      dateRange: minDate && maxDate ? `${fmtDate(minDate)} to ${fmtDate(maxDate)}` : '—'
+    }
+  }, [sortedRecords, metricType])
 
   // 7. Calculate Monthly subtotal chart data (MTD Monthly Business only)
   const monthlyChartData = useMemo(() => {
@@ -334,10 +382,12 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           iconColor: 'text-[#A3906B]',
           headers: [
             { label: 'Date', key: 'date' },
-            { label: 'Agent Name', key: 'agent' },
-            { label: 'Client Name', key: 'client' },
             { label: 'Policy Number', key: 'policyId' },
-            { label: 'Amount', key: 'amount' },
+            { label: 'Customer Name', key: 'client' },
+            { label: 'Agent Name', key: 'agent' },
+            { label: 'Plan Code', key: 'planCode' },
+            { label: 'Monthly Amount', key: 'monthlyAmount' },
+            { label: 'Business Volume Added', key: 'amount' },
             { label: 'Running Total', key: 'runningTotal' },
           ],
         }
@@ -347,10 +397,12 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           iconColor: 'text-[#7A8E6E]',
           headers: [
             { label: 'Date', key: 'date' },
-            { label: 'Agent Name', key: 'agent' },
-            { label: 'Client Name', key: 'client' },
             { label: 'Policy Number', key: 'policyId' },
-            { label: 'Amount', key: 'amount' },
+            { label: 'Customer', key: 'client' },
+            { label: 'Agent', key: 'agent' },
+            { label: 'Plan Code', key: 'planCode' },
+            { label: 'Business Volume', key: 'amount' },
+            { label: 'Source', key: 'source' },
           ],
         }
       case 'total-commissions':
@@ -358,10 +410,13 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           title: 'Commissions Ledgers Activity',
           iconColor: 'text-[#BF8955]',
           headers: [
+            { label: 'Date', key: 'date' },
             { label: 'Agent Name', key: 'agent' },
-            { label: 'Payout Date', key: 'date' },
-            { label: 'Policy Reference', key: 'policyRef' },
-            { label: 'Commission', key: 'amount' },
+            { label: 'Payout ID', key: 'payoutId' },
+            { label: 'Gross Commission', key: 'grossCommission' },
+            { label: 'TDS (5%)', key: 'tds' },
+            { label: 'Admin Charge (5%)', key: 'adminCharge' },
+            { label: 'Net Paid', key: 'netPaid' },
             { label: 'Status', key: 'status' },
           ],
         }
@@ -545,32 +600,68 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
                     <tbody>
                       {paginatedRecords.map((r) => {
                         // Render Row dynamically depending on metricType
-                        if (metricType === 'total-business' || metricType === 'monthly-business') {
+                        if (metricType === 'total-business') {
                           return (
                             <tr key={r.id} className="hover:bg-navy-2/20">
                               <td className="font-mono text-ink-2">{r.date ? fmtDate(r.date) : '—'}</td>
-                              <td className="font-semibold text-ink-1">{r.agent}</td>
+                              <td className="font-mono font-semibold text-gold hover:underline">
+                                <Link to={`/admin/policies/${r.id}`} onClick={onClose}>
+                                  {r.policyId}
+                                </Link>
+                              </td>
                               <td className="text-ink-1 font-medium">{r.client}</td>
-                              <td className="font-mono text-gold">{r.policyId}</td>
+                              <td className="font-semibold text-ink-1">{r.agent}</td>
+                              <td className="font-semibold uppercase text-ink-2">{r.planCode}</td>
+                              <td className="font-mono text-ink-1">{r.monthlyAmount > 0 ? formatINR(r.monthlyAmount) : '—'}</td>
                               <td className="font-semibold text-ink-1 font-mono">{formatINR(r.amount)}</td>
-                              {metricType === 'total-business' && (
-                                <td className="font-bold text-gold-tan font-mono">{formatINR(r.runningTotal)}</td>
-                              )}
+                              <td className="font-bold text-gold-tan font-mono">{formatINR(r.runningTotal)}</td>
+                            </tr>
+                          )
+                        }
+
+                        if (metricType === 'monthly-business') {
+                          return (
+                            <tr key={r.id} className="hover:bg-navy-2/20">
+                              <td className="font-mono text-ink-2">{r.date ? fmtDate(r.date) : '—'}</td>
+                              <td className="font-mono font-semibold text-gold hover:underline">
+                                <Link to={`/admin/policies/${r.id}`} onClick={onClose}>
+                                  {r.policyId}
+                                </Link>
+                              </td>
+                              <td className="text-ink-1 font-medium">{r.client}</td>
+                              <td className="font-semibold text-ink-1">{r.agent}</td>
+                              <td className="font-semibold uppercase text-ink-2">{r.planCode}</td>
+                              <td className="font-semibold text-ink-1 font-mono">{formatINR(r.amount)}</td>
+                              <td>
+                                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
+                                  r.source === 'Manual' ? 'bg-gold/10 text-gold-1' : 'bg-ok/10 text-ok'
+                                }`}>
+                                  {r.source}
+                                </span>
+                              </td>
                             </tr>
                           )
                         }
 
                         if (metricType === 'total-commissions') {
                           return (
-                            <tr key={r.id} className="hover:bg-navy-2/20">
-                              <td className="font-semibold text-ink-1">{r.agent}</td>
+                            <tr 
+                              key={r.id} 
+                              className="hover:bg-navy-2/30 cursor-pointer"
+                              onClick={() => {
+                                onClose()
+                                navigate(`/admin/commission-bill/${r.id}`)
+                              }}
+                            >
                               <td className="font-mono text-ink-2">{r.date ? fmtDate(r.date) : '—'}</td>
-                              <td className="font-mono text-gold">{r.policyRef}</td>
-                              <td className="font-semibold text-gold font-mono">{formatINR(r.amount)}</td>
+                              <td className="font-semibold text-ink-1">{r.agent}</td>
+                              <td className="font-mono text-gold hover:underline">{r.payoutId}</td>
+                              <td className="font-semibold text-ink-1 font-mono">{formatINR(r.grossCommission)}</td>
+                              <td className="font-mono text-danger">{formatINR(r.tds)}</td>
+                              <td className="font-mono text-danger">{formatINR(r.adminCharge)}</td>
+                              <td className="font-bold text-ok font-mono">{formatINR(r.netPaid)}</td>
                               <td>
-                                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
-                                  r.status === 'paid' ? 'bg-ok/10 text-ok' : 'bg-gold-1/10 text-gold-1'
-                                }`}>
+                                <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase bg-ok/10 text-ok">
                                   {r.status}
                                 </span>
                               </td>
@@ -689,6 +780,26 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
                 >
                   Next <IChevron size={12} />
                 </button>
+              </div>
+            )}
+
+            {/* Metric Footer Summary Panel */}
+            {!loading && footerSummary && (
+              <div className="mt-4 grid grid-cols-3 gap-4 border-t border-navy-4/70 bg-navy-2/30 p-3.5 rounded-card text-xs">
+                <div>
+                  <span className="text-ink-2 font-semibold block uppercase text-[10px] tracking-wider">Total Records</span>
+                  <span className="text-sm font-bold font-serif text-ink-1 mt-0.5 block">{footerSummary.totalRecords}</span>
+                </div>
+                <div>
+                  <span className="text-ink-2 font-semibold block uppercase text-[10px] tracking-wider">Total Amount / Value</span>
+                  <span className="text-sm font-bold font-serif text-gold mt-0.5 block">
+                    {metricType === 'active-agents' || metricType === 'import-errors' ? '—' : formatINR(footerSummary.totalAmount)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-ink-2 font-semibold block uppercase text-[10px] tracking-wider">Date Range Scope</span>
+                  <span className="text-sm font-bold font-serif text-ink-1 mt-0.5 block">{footerSummary.dateRange}</span>
+                </div>
               </div>
             )}
           </motion.div>
