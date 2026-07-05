@@ -334,6 +334,15 @@ export default function ImportData() {
           }
         })
 
+        // === DEBUG: log per-row validation results ===
+        processed.forEach(row => {
+          if (!row.valid) {
+            console.warn(`[ImportData] Row ${row.rowNum} INVALID:`, row.errors)
+          } else {
+            console.info(`[ImportData] Row ${row.rowNum} valid:`, row.customerId, row.agentCode, row.planCode)
+          }
+        })
+
         setDuplicatesCount(dups)
         setErrorsCount(errs)
         setData(processed)
@@ -751,9 +760,19 @@ export default function ImportData() {
                       {row.valid ? (
                         <span className="text-ok font-semibold flex items-center gap-1"><ICheck size={14} /> Ready</span>
                       ) : (
-                        <span className="text-danger font-semibold flex items-center gap-1" title={row.errors.join('; ')}>
-                          <IAlert size={14} /> Invalid ({row.errors.length})
-                        </span>
+                        <div className="space-y-1">
+                          <span className="text-danger font-semibold flex items-center gap-1">
+                            <IAlert size={14} /> Invalid ({row.errors.length})
+                          </span>
+                          <ul className="text-[10px] text-danger/90 space-y-0.5 pl-1">
+                            {row.errors.map((e, ei) => (
+                              <li key={ei} className="flex items-start gap-1">
+                                <span className="mt-0.5 shrink-0">•</span>
+                                <span>{e}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </td>
                   </tr>
