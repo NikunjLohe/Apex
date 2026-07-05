@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { startOfMonth, startOfDay, subMonths, format } from 'date-fns'
@@ -17,11 +17,13 @@ import {
 import MyEarnings from './earnings/MyEarnings'
 import { useRanks } from '../contexts/RanksContext'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import MetricDetailModal from '../components/dashboard/MetricDetailModal'
 
 export default function Dashboard() {
   const { profile, isSuperAdmin } = useAuth()
   const { can } = usePermission()
   const { getRank } = useRanks()
+  const [activeMetricType, setActiveMetricType] = useState(null)
 
   // ── All hooks MUST be declared before any conditional return ──────────────
   // Load pre-calculated summary document
@@ -66,6 +68,7 @@ export default function Dashboard() {
     if (loading) return []
     return [
       {
+        type: 'total-business',
         label: 'Total Business Volume',
         value: formatINR(stats.totalBusiness),
         icon: <ITrophy size={19} />,
@@ -75,6 +78,7 @@ export default function Dashboard() {
         footerLeft: 'Total premium sales',
       },
       {
+        type: 'monthly-business',
         label: 'MTD Monthly Business',
         value: formatINR(stats.monthlyBusiness),
         icon: <ICash size={19} />,
@@ -84,6 +88,7 @@ export default function Dashboard() {
         footerLeft: 'Monthly targets metrics',
       },
       {
+        type: 'total-commissions',
         label: 'Total Paid Commissions',
         value: formatINR(stats.totalCommission),
         icon: <ICash size={19} />,
@@ -136,7 +141,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <div className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 ${c.borderLeftClass}`}>
+            <div 
+              onClick={() => setActiveMetricType(c.type)}
+              className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all ${c.borderLeftClass}`}
+            >
               <div>
                 <div className="flex items-center justify-between">
                   <span className={`flex h-9 w-9 items-center justify-center rounded-[8px] border ${c.iconBgClass}`}>
@@ -209,22 +217,34 @@ export default function Dashboard() {
 
       {/* Today's Import validations grid info */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">
-        <div className="card p-4 border-l-2 border-l-gold-1">
+        <div 
+          onClick={() => setActiveMetricType('active-agents')}
+          className="card p-4 border-l-2 border-l-gold-1 cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all"
+        >
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Active Agents</span>
           <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{stats.activeAgents}</span>
         </div>
-        <div className="card p-4 border-l-2 border-l-ok">
+        <div 
+          onClick={() => setActiveMetricType('active-policies')}
+          className="card p-4 border-l-2 border-l-ok cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all"
+        >
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Active Policies</span>
           <span className="text-xl font-bold font-serif text-ok mt-1 block">{stats.activePlans}</span>
         </div>
-        <div className="card p-4 border-l-2 border-l-gold">
+        <div 
+          onClick={() => setActiveMetricType('approved-promotions')}
+          className="card p-4 border-l-2 border-l-gold cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all"
+        >
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Approved Promotions</span>
           <span className="text-xl font-bold font-serif text-gold-1 mt-1 block">{stats.promotionsCount}</span>
         </div>
-        <Link to="/admin/import/history" className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 block">
+        <div 
+          onClick={() => setActiveMetricType('import-errors')}
+          className="card p-4 border-l-2 border-l-danger hover:bg-navy-2/30 cursor-pointer hover:border-gold-1/30 hover:scale-[1.01] transition-all block"
+        >
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">Pending Import Errors</span>
           <span className="text-xl font-bold font-serif text-danger mt-1 block">{stats.pendingImportErrors}</span>
-        </Link>
+        </div>
       </div>
 
       {/* Grid distributions panels */}
@@ -395,6 +415,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Metric Detail Modal */}
+      <MetricDetailModal
+        open={activeMetricType !== null}
+        metricType={activeMetricType}
+        onClose={() => setActiveMetricType(null)}
+      />
     </div>
   )
 }
