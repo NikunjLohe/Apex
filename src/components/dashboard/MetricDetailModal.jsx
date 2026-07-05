@@ -239,41 +239,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
     }
   }, [open, loading, metricType, plans.data, payouts.data, users.data, promotions.data, imports.data, branchMap, ranksConfig])
 
-  // 6.5 Calculate Footer Summary (Total Records, Total Amount, Date Range)
-  const footerSummary = useMemo(() => {
-    if (sortedRecords.length === 0) return null
-
-    let totalAmt = 0
-    let minDate = null
-    let maxDate = null
-
-    sortedRecords.forEach((r) => {
-      let amt = 0
-      if (metricType === 'total-business' || metricType === 'monthly-business' || metricType === 'active-policies') {
-        amt = r.amount || 0
-      } else if (metricType === 'total-commissions') {
-        amt = r.netPaid || 0
-      } else if (metricType === 'approved-promotions') {
-        amt = r.rewardValue || 0
-      }
-      totalAmt += amt
-
-      const rawDate = r.date || r.startDate || r.joinDate || r.approvalDate || r.importDate
-      if (rawDate) {
-        const d = toDate(rawDate)
-        if (d && !isNaN(d.getTime())) {
-          if (!minDate || d < minDate) minDate = d
-          if (!maxDate || d > maxDate) maxDate = d
-        }
-      }
-    })
-
-    return {
-      totalRecords: sortedRecords.length,
-      totalAmount: totalAmt,
-      dateRange: minDate && maxDate ? `${fmtDate(minDate)} to ${fmtDate(maxDate)}` : '—'
-    }
-  }, [sortedRecords, metricType])
 
   // 7. Calculate Monthly subtotal chart data (MTD Monthly Business only)
   const monthlyChartData = useMemo(() => {
@@ -341,6 +306,42 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       return sortOrder === 'asc' ? numA - numB : numB - numA
     })
   }, [filteredRecords, sortField, sortOrder])
+
+  // 9.5 Calculate Footer Summary (Total Records, Total Amount, Date Range)
+  const footerSummary = useMemo(() => {
+    if (sortedRecords.length === 0) return null
+
+    let totalAmt = 0
+    let minDate = null
+    let maxDate = null
+
+    sortedRecords.forEach((r) => {
+      let amt = 0
+      if (metricType === 'total-business' || metricType === 'monthly-business' || metricType === 'active-policies') {
+        amt = r.amount || 0
+      } else if (metricType === 'total-commissions') {
+        amt = r.netPaid || 0
+      } else if (metricType === 'approved-promotions') {
+        amt = r.rewardValue || 0
+      }
+      totalAmt += amt
+
+      const rawDate = r.date || r.startDate || r.joinDate || r.approvalDate || r.importDate
+      if (rawDate) {
+        const d = toDate(rawDate)
+        if (d && !isNaN(d.getTime())) {
+          if (!minDate || d < minDate) minDate = d
+          if (!maxDate || d > maxDate) maxDate = d
+        }
+      }
+    })
+
+    return {
+      totalRecords: sortedRecords.length,
+      totalAmount: totalAmt,
+      dateRange: minDate && maxDate ? `${fmtDate(minDate)} to ${fmtDate(maxDate)}` : '—'
+    }
+  }, [sortedRecords, metricType])
 
   // 10. Paginate records
   const paginatedRecords = useMemo(() => {
