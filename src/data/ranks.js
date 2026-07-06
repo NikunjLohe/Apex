@@ -21,7 +21,7 @@ export const RANKS = [
   { rank: 15, code: 'VP', name: 'Vice President' },
   { rank: 16, code: 'SVP', name: 'Senior Vice President' },
   { rank: 17, code: 'EVP', name: 'Executive Vice President' },
-  { rank: 18, code: 'MD', name: 'Managing Director' },
+  { rank: 18, code: 'MGD', name: 'Managing Director' },
 ]
 
 export const getRank = (rank) => RANKS[(Number(rank) || 1) - 1] || RANKS[0]

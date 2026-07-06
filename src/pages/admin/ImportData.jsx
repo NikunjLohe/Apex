@@ -75,7 +75,7 @@ export default function ImportData() {
           // Fallback for new installations or QA environments
           setCommissionsConfig({
             RD1Y: {
-              1: { AO: 8, SAO: 10, DO: 12, SDO: 14, ADO: 16, CADO: 18, BM: 20, SBM: 21, ABM: 22, RBM: 23, ZBM: 24, DBM: 25, NBM: 26, GM: 27, CGM: 28, VP: 29, SVP: 30, ED: 31 }
+              1: { AO: 8, AM: 10, ADM: 12, DM: 14, SDM: 16, CM: 18, AGM: 20, GM: 21, ZM: 22, ED: 23, SED: 24, MD: 25, CMD: 26, AVP: 27, VP: 28, SVP: 29, EVP: 30, MGD: 31 }
             }
           })
         }
@@ -83,7 +83,7 @@ export default function ImportData() {
         console.warn('Commissions config skipped:', err)
         setCommissionsConfig({
           RD1Y: {
-            1: { AO: 8, SAO: 10, DO: 12, SDO: 14, ADO: 16, CADO: 18, BM: 20, SBM: 21, ABM: 22, RBM: 23, ZBM: 24, DBM: 25, NBM: 26, GM: 27, CGM: 28, VP: 29, SVP: 30, ED: 31 }
+            1: { AO: 8, AM: 10, ADM: 12, DM: 14, SDM: 16, CM: 18, AGM: 20, GM: 21, ZM: 22, ED: 23, SED: 24, MD: 25, CMD: 26, AVP: 27, VP: 28, SVP: 29, EVP: 30, MGD: 31 }
           }
         })
       }
