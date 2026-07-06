@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth, createUserWithEmailAndPassword, setPersistence, inMemoryPersistence } from 'firebase/auth'
-import { collection, getDocs, writeBatch, doc, serverTimestamp, getDoc, query, where } from 'firebase/firestore'
+import { collection, getDocs, writeBatch, doc, serverTimestamp, getDoc, query, where, deleteDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
 import { updateDashboardSummary } from '../../lib/summary'
@@ -313,6 +313,115 @@ export default function SeedDemo() {
     }
   }
 
+  const generateQAHierarchy = async () => {
+    setLoading(true)
+    try {
+      log('--- GENERATING QA HIERARCHY ---')
+      // Check if it exists
+      const qaCheck = await getDocs(query(collection(db, 'users'), where('name', '==', 'QA Rank 1')))
+      if (!qaCheck.empty) {
+        toast.error('QA hierarchy already exists.')
+        log('Aborted: QA hierarchy already exists.')
+        setLoading(false)
+        return
+      }
+
+      // We need a fresh secondary auth app to create users
+      const appName = 'apex-qa-secondary'
+      const app = getApps().find(a => a.name === appName) || initializeApp(firebaseConfig, appName)
+      const secondaryAuth = getAuth(app)
+      await setPersistence(secondaryAuth, inMemoryPersistence)
+
+      // Fetch config for branches and counters
+      const [branchesSnap, configSnap] = await Promise.all([
+        getDocs(collection(db, 'branches')),
+        getDoc(doc(db, 'config', 'ranks'))
+      ])
+      const branches = branchesSnap.docs.map(d => d.id)
+      const branchId = branches.length > 0 ? branches[0] : null
+      
+      let agentCounter = 1000 // Start from a distinct number for QA
+      
+      let previousAgentUid = null
+      let previousAgentCode = null
+      
+      // Build 18 -> 1
+      for (let rankNum = 18; rankNum >= 1; rankNum--) {
+        const code = `QA${agentCounter++}`
+        const randId = Math.floor(Math.random() * 99999)
+        const email = `qa_rank${rankNum}_${randId}@apex.test`
+        const pw = '123456'
+        const name = `QA Rank ${rankNum}`
+        const phone = `90${randomInt(10000000, 99999999)}`
+        
+        log(`Creating ${name} (Rank ${rankNum})...`)
+        
+        const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, pw)
+        const uid = userCred.user.uid
+        
+        const agentData = {
+          name, email, phone,
+          rank: rankNum,
+          sponsorCode: code,
+          referredBy: previousAgentUid,
+          branchId,
+          status: 'active',
+          isSuperAdmin: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }
+        
+        // Write instantly so the next agent can sponsor correctly if needed
+        const batch = writeBatch(db)
+        batch.set(doc(db, 'users', uid), agentData)
+        await batch.commit()
+        
+        previousAgentUid = uid
+        previousAgentCode = code
+      }
+      
+      log('QA Hierarchy generation complete! 18 agents created.')
+      toast.success('QA Hierarchy generated successfully')
+    } catch (err) {
+      console.error(err)
+      toast.error('QA Gen failed: ' + err.message)
+      log('ERROR: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const deleteQAHierarchy = async () => {
+    setLoading(true)
+    try {
+      log('--- DELETING QA HIERARCHY ---')
+      const usersSnap = await getDocs(collection(db, 'users'))
+      const qaDocs = usersSnap.docs.filter(d => d.data().name && d.data().name.startsWith('QA Rank'))
+      
+      if (qaDocs.length === 0) {
+        toast.error('No QA hierarchy found to delete.')
+        log('No QA hierarchy found.')
+        setLoading(false)
+        return
+      }
+
+      const batch = writeBatch(db)
+      qaDocs.forEach(d => {
+        batch.delete(doc(db, 'users', d.id))
+      })
+      await batch.commit()
+      
+      log(`Deleted ${qaDocs.length} QA agents from Firestore.`)
+      toast.success('QA Hierarchy deleted')
+    } catch (err) {
+      console.error(err)
+      toast.error('QA Delete failed: ' + err.message)
+      log('ERROR: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -337,6 +446,30 @@ export default function SeedDemo() {
       >
         {loading ? 'Seeding Database...' : 'Run Demo Data Seeder (v3)'}
       </button>
+
+      {/* QA Verification Utilities */}
+      <div className="border border-navy-4 bg-navy-3 rounded p-5 space-y-4 mt-8">
+        <div>
+          <h2 className="text-xl font-bold text-ink-1">Live QA Demo Utility</h2>
+          <p className="text-sm text-ink-2 mt-1">Generates an isolated 18-rank hierarchy to test live Commission Engine payouts.</p>
+        </div>
+        <div className="flex gap-4">
+          <button 
+            onClick={generateQAHierarchy}
+            disabled={loading}
+            className="btn btn-outline border-gold text-gold-1 hover:bg-gold-1 hover:text-navy-1 flex-1"
+          >
+            Generate 18 Rank Demo Hierarchy
+          </button>
+          <button 
+            onClick={deleteQAHierarchy}
+            disabled={loading}
+            className="btn btn-outline border-red-500 text-red-500 hover:bg-red-500 hover:text-white flex-1"
+          >
+            Delete QA Demo Hierarchy
+          </button>
+        </div>
+      </div>
 
       {logs.length > 0 && (
         <div className="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded h-64 overflow-y-auto">
