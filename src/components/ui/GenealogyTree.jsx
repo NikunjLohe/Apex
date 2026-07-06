@@ -79,11 +79,12 @@ export default function GenealogyTree({ rootId = null }) {
   const searchDebounce = useRef(null)
 
   // ── Zoom / Pan ──
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(0.7)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0 })
   const containerRef = useRef(null)
+  const canvasRef = useRef(null)
 
   // ── Merge nodes into cache ──
   const mergeNodes = useCallback((nodes) => {
@@ -120,6 +121,21 @@ export default function GenealogyTree({ rootId = null }) {
       }))
       mergeNodes(children.map(c => ({ ...c, childrenLoaded: false })))
       setExpandedNodes(new Set([rootId]))
+
+      // Auto-fit: centre the tree in the canvas after a short paint delay
+      setTimeout(() => {
+        const canvas = containerRef.current
+        const content = canvasRef.current
+        if (!canvas || !content) return
+        const cw = canvas.clientWidth
+        const ch = canvas.clientHeight
+        const tw = content.scrollWidth
+        const th = content.scrollHeight
+        const fitZoom = Math.min(0.9, Math.min(cw / (tw + 80), ch / (th + 80)))
+        const centeredZoom = Math.max(0.3, fitZoom)
+        setZoom(centeredZoom)
+        setPan({ x: (cw - tw * centeredZoom) / 2, y: 20 })
+      }, 120)
     })()
   }, [rootId])
 
@@ -244,9 +260,21 @@ export default function GenealogyTree({ rootId = null }) {
   }, [nodeCache, expandedNodes, treeRootId])
 
   // ── Zoom / Pan handlers ──
-  const zoomIn = () => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))
-  const zoomOut = () => setZoom(z => Math.max(0.3, parseFloat((z - 0.1).toFixed(1))))
+  const zoomIn  = () => setZoom(z => Math.min(2,   parseFloat((z + 0.1).toFixed(1))))
+  const zoomOut = () => setZoom(z => Math.max(0.2, parseFloat((z - 0.1).toFixed(1))))
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }) }
+  const fitView = () => {
+    const canvas  = containerRef.current
+    const content = canvasRef.current
+    if (!canvas || !content) return
+    const cw = canvas.clientWidth
+    const ch = canvas.clientHeight
+    const tw = content.scrollWidth
+    const th = content.scrollHeight
+    const fitZoom = Math.max(0.2, Math.min(0.95, Math.min(cw / (tw + 80), ch / (th + 80))))
+    setZoom(fitZoom)
+    setPan({ x: (cw - tw * fitZoom) / 2, y: 20 })
+  }
 
   const handleMouseDown = (e) => {
     if (e.target.closest('button') || e.target.closest('input')) return
@@ -259,18 +287,34 @@ export default function GenealogyTree({ rootId = null }) {
   }
   const handleMouseUp = () => setIsDragging(false)
 
-  // Wheel zoom
-  const handleWheel = (e) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -0.1 : 0.1
-    setZoom(z => Math.min(2, Math.max(0.3, parseFloat((z + delta).toFixed(1)))))
-  }
+  // ── Wheel: Ctrl+scroll = zoom, plain scroll = vertical pan ──
+  const handleWheel = useCallback((e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      setZoom(z => Math.min(2, Math.max(0.2, parseFloat((z + delta).toFixed(1)))))
+    } else {
+      // allow natural vertical scroll – do NOT prevent default
+      setPan(p => ({ ...p, y: p.y - e.deltaY * 0.8 }))
+    }
+  }, [])
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
+    // passive:false only needed when we call preventDefault (Ctrl+wheel path),
+    // but we need non-passive to be able to prevent it conditionally.
+    const handler = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        const delta = e.deltaY > 0 ? -0.1 : 0.1
+        setZoom(z => Math.min(2, Math.max(0.2, parseFloat((z + delta).toFixed(1)))))
+      } else {
+        setPan(p => ({ ...p, y: p.y - e.deltaY * 0.8 }))
+      }
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
   }, [])
 
   // ── Render a single tree node recursively ──
@@ -374,7 +418,7 @@ export default function GenealogyTree({ rootId = null }) {
   const isInitializing = !treeRootId || !nodeCache[treeRootId]
 
   return (
-    <div className="relative card overflow-hidden bg-navy-2 border border-navy-4 h-[600px] flex flex-col">
+    <div className="relative card overflow-hidden bg-navy-2 border border-navy-4 h-[700px] flex flex-col">
       {/* Controls & Search header */}
       <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2.5 items-center w-[calc(100%-2rem)]">
 
@@ -422,12 +466,15 @@ export default function GenealogyTree({ rootId = null }) {
 
         {/* Zoom Controls */}
         <div className="flex items-center gap-1.5 bg-navy-3/95 border border-navy-4 rounded-card px-2 py-1 shadow-md">
-          <button onClick={zoomOut} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom Out">−</button>
+          <button onClick={zoomOut} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom Out (or Ctrl+Scroll)">−</button>
           <span className="text-[10px] font-mono font-bold text-ink-2 px-1 w-12 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={zoomIn} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom In">+</button>
+          <button onClick={zoomIn} className="btn-ghost p-1 text-ink-2 hover:text-gold" title="Zoom In (or Ctrl+Scroll)">+</button>
           <div className="h-4 w-px bg-navy-4 mx-1" />
-          <button onClick={resetView} className="text-[10px] font-bold uppercase tracking-wider text-gold hover:underline px-1.5">Reset</button>
+          <button onClick={fitView} className="text-[10px] font-bold uppercase tracking-wider text-gold-1 hover:text-gold hover:underline px-1.5" title="Fit all nodes in view">Fit</button>
+          <div className="h-4 w-px bg-navy-4 mx-1" />
+          <button onClick={resetView} className="text-[10px] font-bold uppercase tracking-wider text-ink-2 hover:text-gold hover:underline px-1.5">Reset</button>
         </div>
+        <span className="hidden sm:inline text-[10px] text-ink-2/60 ml-1">Drag to pan · Ctrl+scroll to zoom</span>
 
         {/* Loading indicator */}
         {isInitializing && (
@@ -439,6 +486,7 @@ export default function GenealogyTree({ rootId = null }) {
       <div
         ref={containerRef}
         className={`flex-1 overflow-hidden relative select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{ touchAction: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -446,10 +494,13 @@ export default function GenealogyTree({ rootId = null }) {
       >
         {!isInitializing ? (
           <div
-            className="absolute origin-top-left transition-transform duration-75 flex justify-center p-20"
+            ref={canvasRef}
+            className="absolute origin-top-left flex justify-center p-16"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              minWidth: 'max-content'
+              transformOrigin: '0 0',
+              minWidth: 'max-content',
+              transition: isDragging ? 'none' : 'transform 0.08s ease-out',
             }}
           >
             {renderNode(treeRootId)}
