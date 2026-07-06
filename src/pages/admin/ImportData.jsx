@@ -71,9 +71,21 @@ export default function ImportData() {
         const commSnap = await getDoc(doc(db, 'config', 'commissions'))
         if (commSnap.exists() && commSnap.data().commissions) {
           setCommissionsConfig(commSnap.data().commissions)
+        } else {
+          // Fallback for new installations or QA environments
+          setCommissionsConfig({
+            RD1Y: {
+              1: { AO: 8, SAO: 10, DO: 12, SDO: 14, ADO: 16, CADO: 18, BM: 20, SBM: 21, ABM: 22, RBM: 23, ZBM: 24, DBM: 25, NBM: 26, GM: 27, CGM: 28, VP: 29, SVP: 30, ED: 31 }
+            }
+          })
         }
       } catch (err) {
         console.warn('Commissions config skipped:', err)
+        setCommissionsConfig({
+          RD1Y: {
+            1: { AO: 8, SAO: 10, DO: 12, SDO: 14, ADO: 16, CADO: 18, BM: 20, SBM: 21, ABM: 22, RBM: 23, ZBM: 24, DBM: 25, NBM: 26, GM: 27, CGM: 28, VP: 29, SVP: 30, ED: 31 }
+          }
+        })
       }
 
       try {
