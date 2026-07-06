@@ -315,6 +315,7 @@ export default function SeedDemo() {
 
   const generateQAHierarchy = async () => {
     setLoading(true)
+    const createdAgents = []
     try {
       log('--- GENERATING QA HIERARCHY ---')
       // Check if it exists
@@ -326,66 +327,81 @@ export default function SeedDemo() {
         return
       }
 
-      // We need a fresh secondary auth app to create users
+      // We need a fresh secondary auth app to create users without logging out the admin
       const appName = 'apex-qa-secondary'
       const app = getApps().find(a => a.name === appName) || initializeApp(firebaseConfig, appName)
       const secondaryAuth = getAuth(app)
       await setPersistence(secondaryAuth, inMemoryPersistence)
 
-      // Fetch config for branches and counters
-      const [branchesSnap, configSnap] = await Promise.all([
-        getDocs(collection(db, 'branches')),
-        getDoc(doc(db, 'config', 'ranks'))
-      ])
+      // Fetch config for branches
+      const branchesSnap = await getDocs(collection(db, 'branches'))
       const branches = branchesSnap.docs.map(d => d.id)
       const branchId = branches.length > 0 ? branches[0] : null
-      
-      let agentCounter = 1000 // Start from a distinct number for QA
-      
+
       let previousAgentUid = null
-      let previousAgentCode = null
-      
-      // Build 18 -> 1
+
+      // Build from Rank 18 DOWN to Rank 1 (Rank 18 = root, Rank 1 = leaf seller)
       for (let rankNum = 18; rankNum >= 1; rankNum--) {
-        const code = `QA${agentCounter++}`
-        const randId = Math.floor(Math.random() * 99999)
+        const randId = Math.floor(10000 + Math.random() * 89999) // 5-digit for uniqueness
+        const code = `QA${String(rankNum).padStart(2, '0')}` // QA01 … QA18 for readability
         const email = `qa_rank${rankNum}_${randId}@apex.test`
-        const pw = '123456'
+        const pw = 'QADemo@123'
         const name = `QA Rank ${rankNum}`
         const phone = `90${randomInt(10000000, 99999999)}`
-        
-        log(`Creating ${name} (Rank ${rankNum})...`)
-        
-        const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, pw)
-        const uid = userCred.user.uid
-        
+
+        log(`[${19 - rankNum}/18] Creating ${name} (email: ${email})...`)
+
+        let uid = null
+        try {
+          // ─── KEY FIX: 700ms delay prevents Firebase Auth rate-limit (too-many-requests) ───
+          if (rankNum < 18) {
+            await new Promise(resolve => setTimeout(resolve, 700))
+          }
+          const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, pw)
+          uid = userCred.user.uid
+          log(`  ✅ Auth created: ${uid}`)
+        } catch (authErr) {
+          log(`  ❌ Auth FAILED for Rank ${rankNum}: ${authErr.code || authErr.message}`)
+          throw authErr // bubble up to outer catch
+        }
+
         const agentData = {
           name, email, phone,
           rank: rankNum,
           sponsorCode: code,
-          referredBy: previousAgentUid,
+          referredBy: previousAgentUid,   // Points to the higher-ranked agent (parent in tree)
           branchId,
           status: 'active',
           isSuperAdmin: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         }
-        
-        // Write instantly so the next agent can sponsor correctly if needed
+
         const batch = writeBatch(db)
         batch.set(doc(db, 'users', uid), agentData)
         await batch.commit()
-        
+        log(`  ✅ Firestore written. sponsorCode: ${code}, referredBy: ${previousAgentUid || 'none (root)'}`)
+
+        createdAgents.push({ rankNum, name, email, pw, code, uid, referredBy: previousAgentUid })
         previousAgentUid = uid
-        previousAgentCode = code
       }
-      
-      log('QA Hierarchy generation complete! 18 agents created.')
-      toast.success('QA Hierarchy generated successfully')
+
+      log('')
+      log('══════════════════════════════════════')
+      log('   QA HIERARCHY COMPLETE — 18 AGENTS')
+      log('══════════════════════════════════════')
+      log('Password for ALL accounts: QADemo@123')
+      log('')
+      createdAgents.forEach(a => {
+        log(`Rank ${a.rankNum}: ${a.email}`)
+      })
+      log('══════════════════════════════════════')
+      toast.success('QA Hierarchy generated successfully — 18 agents created!')
     } catch (err) {
       console.error(err)
-      toast.error('QA Gen failed: ' + err.message)
-      log('ERROR: ' + err.message)
+      const created = createdAgents.length
+      toast.error(`QA Gen failed after creating ${created} agents: ${err.message}`)
+      log(`ERROR after ${created} agents: ${err.message}`)
     } finally {
       setLoading(false)
     }
