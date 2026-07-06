@@ -47,125 +47,52 @@ export function calculateCommissions({
   const entries = []
   
   let currentAgent = baseAgent
-  let lastProcessedRankNum = 0
-  let maxRateEncountered = 0
-
   const activeRanks = (ranksList && ranksList.length > 0) ? ranksList : DEFAULT_RANKS
 
-  // The maximum rank number available in the system
-  const maxRankNum = Math.max(...activeRanks.map(r => Number(r.rank)))
-
-  // Traverse the upline (Sponsor Hierarchy)
+  // Traverse the upline (Sponsor Hierarchy) all the way to the top
   while (currentAgent) {
     const currentRankNum = Number(currentAgent.rank) || 1
-    
-    // Process only if the agent is at a higher rank or if it's the direct agent (rank processing logic)
-    if (currentRankNum > lastProcessedRankNum || currentAgent.id === baseAgent.id) {
+    const currentRankObj = activeRanks.find(r => Number(r.rank) === currentRankNum)
+    const rankCode = currentRankObj?.code || 'AO'
+    const rankRate = getRate(rankCode)
+
+    if (rankRate > 0) {
+      const isSeller = (currentAgent.id === baseAgent.id)
       
-      const startLoopRank = Math.max(lastProcessedRankNum + 1, 1)
-      const endLoopRank = currentRankNum
-
-      // For direct agent, we just process their rank directly
-      if (currentAgent.id === baseAgent.id) {
-        const currentRankObj = activeRanks.find(r => Number(r.rank) === currentRankNum)
-        const rankCode = currentRankObj?.code || 'AO'
-        const rankRate = getRate(rankCode)
-        const diffRate = Math.max(0, rankRate - maxRateEncountered)
+      entries.push({
+        agentId: currentAgent.id,
+        agentName: currentAgent.name,
+        sponsorCode: currentAgent.sponsorCode || '',
+        receivingRank: currentRankNum,
+        receivingRankCode: rankCode,
         
-        if (diffRate > 0) {
-          entries.push({
-            agentId: currentAgent.id,
-            agentName: currentAgent.name,
-            sponsorCode: currentAgent.sponsorCode || '',
-            receivingRank: currentRankNum,
-            receivingRankCode: rankCode,
-            
-            customerId: customer.id,
-            customerName: customer.name,
-            customerAccount: customer.account,
-            policyId: policyInfo.id,
-            policyNumber: policyInfo.number,
-            planCode: code,
-            planType: isRDPlan ? 'RD' : 'FD',
-            policyYear: yr,
-            installment: 1, 
-            
-            businessAmount: businessAmount,
-            percentage: diffRate * 100,
-            amount: businessAmount * diffRate,
-            
-            originalRank: baseAgent.rank,
-            originalAgentId: baseAgent.id,
-            
-            commissionType: 'direct',
-            compression: false,
-            compressionReason: `${rankCode} Commission (Direct)`,
-            compressedFromRank: null,
-            
-            month: monthNum,
-            year: yearNum,
-            calculationDate: serverTimestamp(),
-            status: 'unpaid',
-          })
-          maxRateEncountered = rankRate
-        }
-        lastProcessedRankNum = currentRankNum
-      } else {
-        // Upline agent logic: Loop through bypassed ranks to itemize compression
-        for (let r = startLoopRank; r <= endLoopRank; r++) {
-          const evalRankObj = activeRanks.find(rankItem => Number(rankItem.rank) === r)
-          if (!evalRankObj) continue
-          
-          const evalRankCode = evalRankObj.code
-          const evalRankRate = getRate(evalRankCode)
-          const diffRate = Math.max(0, evalRankRate - maxRateEncountered)
-
-          if (diffRate > 0) {
-            const isOwnCommission = (r === endLoopRank)
-            
-            entries.push({
-              agentId: currentAgent.id,
-              agentName: currentAgent.name,
-              sponsorCode: currentAgent.sponsorCode || '',
-              receivingRank: currentRankNum,
-              receivingRankCode: evalRankCode, // use the evaluated rank code for transparency
-              
-              customerId: customer.id,
-              customerName: customer.name,
-              customerAccount: customer.account,
-              policyId: policyInfo.id,
-              policyNumber: policyInfo.number,
-              planCode: code,
-              planType: isRDPlan ? 'RD' : 'FD',
-              policyYear: yr,
-              installment: 1, 
-              
-              businessAmount: businessAmount,
-              percentage: diffRate * 100,
-              amount: businessAmount * diffRate,
-              
-              originalRank: baseAgent.rank,
-              originalAgentId: baseAgent.id,
-              
-              commissionType: isOwnCommission ? 'differential_own' : 'compressed',
-              compression: !isOwnCommission,
-              compressionReason: isOwnCommission ? `${evalRankCode} Own Commission` : `${evalRankCode} Commission (Compressed)`,
-              compressedFromRank: isOwnCommission ? null : r,
-              
-              month: monthNum,
-              year: yearNum,
-              calculationDate: serverTimestamp(),
-              status: 'unpaid',
-            })
-            maxRateEncountered = evalRankRate
-          }
-        }
-        lastProcessedRankNum = currentRankNum
-      }
-    }
-
-    if (currentRankNum >= maxRankNum) {
-      break
+        customerId: customer.id,
+        customerName: customer.name,
+        customerAccount: customer.account,
+        policyId: policyInfo.id,
+        policyNumber: policyInfo.number,
+        planCode: code,
+        planType: isRDPlan ? 'RD' : 'FD',
+        policyYear: yr,
+        installment: 1, 
+        
+        businessAmount: businessAmount,
+        percentage: rankRate * 100,
+        amount: businessAmount * rankRate,
+        
+        originalRank: baseAgent.rank,
+        originalAgentId: baseAgent.id,
+        
+        commissionType: isSeller ? 'direct' : 'differential_own', // Direct for seller, Differential for upline
+        compression: false,
+        compressionReason: isSeller ? `${rankCode} Commission (Direct)` : `${rankCode} Commission (Differential)`,
+        compressedFromRank: null,
+        
+        month: monthNum,
+        year: yearNum,
+        calculationDate: serverTimestamp(),
+        status: 'unpaid',
+      })
     }
 
     if (currentAgent.referredBy && usersMap[currentAgent.referredBy]) {
