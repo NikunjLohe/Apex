@@ -141,7 +141,7 @@ export function RanksProvider({ children }) {
   }
 
   const value = useMemo(() => ({
-    ranksList,
+    ranksList: ranksList.length > 0 ? ranksList : DEFAULT_RANKS,
     config,
     getRank,
     rankCode,

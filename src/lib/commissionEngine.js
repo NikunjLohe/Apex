@@ -1,4 +1,5 @@
 import { serverTimestamp } from 'firebase/firestore'
+import { RANKS as DEFAULT_RANKS } from '../data/ranks.js'
 
 /**
  * calculateCommissions
@@ -49,8 +50,10 @@ export function calculateCommissions({
   let lastProcessedRankNum = 0
   let maxRateEncountered = 0
 
+  const activeRanks = (ranksList && ranksList.length > 0) ? ranksList : DEFAULT_RANKS
+
   // The maximum rank number available in the system
-  const maxRankNum = Math.max(...ranksList.map(r => Number(r.rank)))
+  const maxRankNum = Math.max(...activeRanks.map(r => Number(r.rank)))
 
   // Traverse the upline (Sponsor Hierarchy)
   while (currentAgent) {
@@ -64,7 +67,7 @@ export function calculateCommissions({
 
       // For direct agent, we just process their rank directly
       if (currentAgent.id === baseAgent.id) {
-        const currentRankObj = ranksList.find(r => Number(r.rank) === currentRankNum)
+        const currentRankObj = activeRanks.find(r => Number(r.rank) === currentRankNum)
         const rankCode = currentRankObj?.code || 'AO'
         const rankRate = getRate(rankCode)
         const diffRate = Math.max(0, rankRate - maxRateEncountered)
@@ -110,7 +113,7 @@ export function calculateCommissions({
       } else {
         // Upline agent logic: Loop through bypassed ranks to itemize compression
         for (let r = startLoopRank; r <= endLoopRank; r++) {
-          const evalRankObj = ranksList.find(rankItem => Number(rankItem.rank) === r)
+          const evalRankObj = activeRanks.find(rankItem => Number(rankItem.rank) === r)
           if (!evalRankObj) continue
           
           const evalRankCode = evalRankObj.code
