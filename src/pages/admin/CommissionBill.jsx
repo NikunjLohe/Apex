@@ -144,7 +144,7 @@ export default function CommissionBill() {
                   <td className="py-2 px-3 text-right font-semibold">{formatINR(c.amount)}</td>
                   <td className="py-2 px-3 text-center">
                     <span className="text-gray-800 text-[10px] font-bold block leading-tight">
-                      {c.commissionType || ((c.agentId === c.originalAgentId || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential')}
+                      {c.commissionType === 'Direct' || c.commissionType === 'direct' || c.commissionType === 'direct_own' || (!c.commissionType && !c.compression) ? 'Direct' : 'Upline Commission'}
                     </span>
                     {c.compression && c.receivingRankCode && (
                       <span className="text-gray-500 text-[9px] block mt-0.5">

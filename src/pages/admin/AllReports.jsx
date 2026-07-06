@@ -190,7 +190,7 @@ export default function AllReports() {
         'Cycle Month/Year': `${c.month}/${c.year}`,
         'Percentage (%)': Number(c.percentage || 0).toFixed(2),
         'Amount Earned': c.amount || 0,
-        'Commission Type': (c.commissionType === 'Direct' || c.commissionType === 'direct' || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential',
+        'Commission Type': (c.commissionType === 'Direct' || c.commissionType === 'direct' || (!c.commissionType && !c.compression)) ? 'Direct' : 'Upline Commission',
         'Payout Status': c.status,
       }))
     } else if (activeTab === 'payouts') {
@@ -513,7 +513,7 @@ export default function AllReports() {
                         <td className="font-mono font-bold text-gold">{formatINR(c.amount)}</td>
                         <td>
                           <span className="text-gray-800 text-[10px] font-bold block leading-tight">
-                            {c.commissionType || ((c.agentId === c.originalAgentId || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential')}
+                            {c.commissionType === 'Direct' || c.commissionType === 'direct' || c.commissionType === 'direct_own' || (!c.commissionType && !c.compression) ? 'Direct' : 'Upline Commission'}
                           </span>
                         </td>
                         <td>{c.month}/{c.year}</td>

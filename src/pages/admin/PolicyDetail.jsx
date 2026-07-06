@@ -104,7 +104,7 @@ export default function PolicyDetail() {
       
       let pct = 0
       let amt = 0
-      let type = 'Differential'
+      let type = 'Upline Commission'
       let skipped = false
       let skipReason = ''
       let agentName = '—'
@@ -114,7 +114,7 @@ export default function PolicyDetail() {
       if (entry) {
         pct = Number(entry.percentage) || 0
         amt = Number(entry.amount) || 0
-        type = entry.commissionType || (entry.compression ? 'Differential' : 'Direct')
+        type = (entry.commissionType === 'Direct' || entry.commissionType === 'direct') ? 'Direct' : 'Upline Commission'
         agentName = entry.agentName
         agentCode = entry.sponsorCode || usersMap[entry.agentId]?.sponsorCode || '—'
         docId = entry.id
@@ -124,8 +124,8 @@ export default function PolicyDetail() {
         if (agentInChain) {
           agentName = agentInChain.name
           agentCode = agentInChain.sponsorCode || '—'
-          // If the agent is in the chain but got no entry, they had 0 differential
-          skipReason = 'Skipped (0 Differential)'
+          // If the agent is in the chain but got no entry, they had 0 commission
+          skipReason = 'Skipped (0% Commission)'
         } else if (agent && rankNum < Number(agent.rank)) {
           skipReason = 'Skipped (Below Seller)'
         } else {
@@ -162,7 +162,7 @@ export default function PolicyDetail() {
         rankCode,
         amount: entry ? entry.amount : 0,
         percentage: entry ? entry.percentage : 0,
-        type: entry ? (entry.commissionType || (entry.compression ? 'Differential' : 'Direct')) : 'Skipped',
+        type: entry ? ((entry.commissionType === 'Direct' || entry.commissionType === 'direct') ? 'Direct' : 'Upline Commission') : 'Skipped',
         skipped: !entry
       }
     })
@@ -332,7 +332,7 @@ export default function PolicyDetail() {
                       <div className="flex items-center gap-2">
                         {node.skipped ? (
                           <span className="text-[9.5px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-navy-2 text-ink-2 border border-navy-4">
-                            Skipped (0 Differential)
+                            Skipped (0% Commission)
                           </span>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -446,7 +446,7 @@ export default function PolicyDetail() {
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase text-ink-2">Calculation Method</span>
-                      <span className="font-semibold text-ink-1">Differential Commission</span>
+                      <span className="font-semibold text-ink-1">Flat Per-Rank Commission</span>
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase text-ink-2">Maximum Configured Commission</span>
@@ -455,7 +455,7 @@ export default function PolicyDetail() {
                     <div className="col-span-2 border-t border-navy-4/50 pt-2.5">
                       <span className="block text-[10px] uppercase text-ink-2">Formula Explanation</span>
                       <p className="mt-1 leading-relaxed text-[11px]">
-                        The commission engine traverses the upline hierarchy starting from the seller. For each level, it determines the commission rate from the Commission Master and subtracts the maximum rate encountered so far: <code>diffRate = Math.max(0, currentRate - maxRateEncountered)</code>. If two rates are equal (such as SVP and EVP), the differential evaluates to 0% and the level is skipped, assuring full transparency and keeping payouts matching the client's official structures.
+                        The commission engine traverses the upline hierarchy starting from the seller. For each level, it determines the commission rate configured in the Commission Master for that rank and pays out exactly that percentage. No deductions are made, and no ranks are skipped due to equal rate percentages, assuring full transparency.
                       </p>
                     </div>
                   </div>
