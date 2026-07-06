@@ -69,8 +69,11 @@ export default function ImportData() {
     ;(async () => {
       try {
         const commSnap = await getDoc(doc(db, 'config', 'commissions'))
-        if (commSnap.exists() && commSnap.data().commissions) {
-          setCommissionsConfig(commSnap.data().commissions)
+        const fetchedData = commSnap.exists() ? commSnap.data().commissions : null
+        
+        // Validate that the config isn't using old legacy keys (e.g. SAO instead of AM)
+        if (fetchedData && fetchedData.RD1Y && fetchedData.RD1Y[1] && fetchedData.RD1Y[1].AM !== undefined) {
+          setCommissionsConfig(fetchedData)
         } else {
           // Fallback for new installations or QA environments
           setCommissionsConfig({
