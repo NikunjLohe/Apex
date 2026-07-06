@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { fmtDate, formatINR } from '../../utils/format'
@@ -6,14 +6,26 @@ import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IUsers, ICash, IBuilding, ISettings } from '../../components/ui/icons'
 import { addYears } from 'date-fns'
+import { useRanks } from '../../contexts/RanksContext'
+import { where } from 'firebase/firestore'
 
 export default function PolicyDetail() {
   const { id } = useParams()
   const policyDoc = useDoc(id ? `plans/${id}` : null)
   const users = useCollection('users')
   const branches = useCollection('branches')
-
+  
   const p = policyDoc.data
+  const policyNumber = p?.policyNumber || ''
+  
+  const ledgerDoc = useCollection(
+    policyNumber ? 'commission_ledger' : null,
+    useMemo(() => [where('policyNumber', '==', policyNumber)], [policyNumber]),
+    policyNumber
+  )
+  
+  const { ranksList } = useRanks()
+  const [explainOpen, setExplainOpen] = useState(false)
 
   // Calculate maturity date if not explicitly in Firestore
   const maturityDate = useMemo(() => {
@@ -45,7 +57,125 @@ export default function PolicyDetail() {
     return p.fdAmount || 0
   }, [p])
 
-  const loading = policyDoc.loading || users.loading || branches.loading
+  const usersMap = useMemo(() => {
+    if (!users.data) return {}
+    const idMap = {}
+    users.data.forEach(u => {
+      idMap[u.id] = u
+    })
+    return idMap
+  }, [users.data])
+
+  const traversedChain = useMemo(() => {
+    if (!agent || !usersMap) return []
+    const chain = []
+    let cur = agent
+    while (cur) {
+      chain.push(cur)
+      if (cur.referredBy && usersMap[cur.referredBy]) {
+        cur = usersMap[cur.referredBy]
+      } else {
+        break
+      }
+    }
+    return chain
+  }, [agent, usersMap])
+
+  // Map each rank (1 to 18) to the parsed record or skipped state
+  const breakdownRows = useMemo(() => {
+    if (!ranksList || ranksList.length === 0) return []
+    const ledgerData = ledgerDoc.data || []
+    
+    // Sort ranks ascending
+    const sortedRanks = [...ranksList].sort((a, b) => Number(a.rank) - Number(b.rank))
+    
+    let runningTotalPct = 0
+    
+    return sortedRanks.map(r => {
+      const rankNum = Number(r.rank)
+      // Find matching ledger entry for this rank
+      const entry = ledgerData.find(c => {
+        const ag = usersMap[c.agentId]
+        return ag && Number(ag.rank) === rankNum
+      })
+      
+      // Find matching agent in the traversed sponsor chain
+      const agentInChain = traversedChain.find(a => Number(a.rank) === rankNum)
+      
+      let pct = 0
+      let amt = 0
+      let type = 'Differential'
+      let skipped = false
+      let skipReason = ''
+      let agentName = '—'
+      let agentCode = '—'
+      let docId = null
+      
+      if (entry) {
+        pct = Number(entry.percentage) || 0
+        amt = Number(entry.amount) || 0
+        type = entry.commissionType || (entry.compression ? 'Differential' : 'Direct')
+        agentName = entry.agentName
+        agentCode = entry.sponsorCode || usersMap[entry.agentId]?.sponsorCode || '—'
+        docId = entry.id
+        runningTotalPct += pct
+      } else {
+        skipped = true
+        if (agentInChain) {
+          agentName = agentInChain.name
+          agentCode = agentInChain.sponsorCode || '—'
+          // If the agent is in the chain but got no entry, they had 0 differential
+          skipReason = 'Skipped (0 Differential)'
+        } else if (agent && rankNum < Number(agent.rank)) {
+          skipReason = 'Skipped (Below Seller)'
+        } else {
+          skipReason = 'Skipped (No Agent at Rank)'
+        }
+      }
+      
+      return {
+        rank: rankNum,
+        rankCode: r.code,
+        rankName: r.name,
+        agentName,
+        agentCode,
+        type,
+        percentage: pct,
+        amount: amt,
+        runningTotalPct,
+        skipped,
+        skipReason,
+        docId
+      }
+    })
+  }, [ranksList, ledgerDoc.data, usersMap, traversedChain, agent])
+
+  const timelineData = useMemo(() => {
+    return traversedChain.map(agent => {
+      const entry = (ledgerDoc.data || []).find(c => c.agentId === agent.id)
+      const rankObj = ranksList.find(r => Number(r.rank) === Number(agent.rank))
+      const rankCode = rankObj ? rankObj.code : `Rank ${agent.rank}`
+      return {
+        name: agent.name,
+        code: agent.sponsorCode,
+        rank: agent.rank,
+        rankCode,
+        amount: entry ? entry.amount : 0,
+        percentage: entry ? entry.percentage : 0,
+        type: entry ? (entry.commissionType || (entry.compression ? 'Differential' : 'Direct')) : 'Skipped',
+        skipped: !entry
+      }
+    })
+  }, [traversedChain, ledgerDoc.data, ranksList])
+
+  // Summary card metrics
+  const paidRanks = useMemo(() => breakdownRows.filter(r => !r.skipped), [breakdownRows])
+  const totalDistributed = useMemo(() => paidRanks.reduce((sum, r) => sum + r.percentage, 0), [paidRanks])
+  const totalPaid = useMemo(() => paidRanks.reduce((sum, r) => sum + r.amount, 0), [paidRanks])
+  const highestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[paidRanks.length - 1] : null, [paidRanks])
+  const lowestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[0] : null, [paidRanks])
+
+  const loading = policyDoc.loading || users.loading || branches.loading || ledgerDoc.loading
 
   if (loading) {
     return (
@@ -169,6 +299,168 @@ export default function PolicyDetail() {
                   <span className="font-mono bg-navy-2 px-1.5 py-0.5 rounded text-ink-2">Yearly-Tiered Breakdown</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Commission Allocation Breakdown */}
+          <div className="card p-5 space-y-6">
+            <div className="border-b border-navy-4/50 pb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <ISettings size={16} /> Commission Allocation Breakdown
+                </h3>
+                <p className="text-[11px] text-ink-2 mt-0.5">Real-time sponsor hierarchy calculations from the live ledger database.</p>
+              </div>
+            </div>
+
+            {/* Visual Commission Timeline */}
+            {timelineData.length > 0 && (
+              <div className="bg-navy-2/30 border border-navy-4 rounded-card p-5 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">Commission Payout Flow Timeline</h4>
+                <div className="flex flex-col space-y-3.5 relative pl-4 border-l-2 border-navy-4">
+                  {timelineData.map((node, index) => (
+                    <div key={index} className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      {/* Timeline Dot Indicator */}
+                      <span className={`absolute -left-[21px] top-1.5 h-2 w-2 rounded-full border ${node.skipped ? 'bg-navy-3 border-ink-2' : 'bg-gold-1 border-gold-1'} ring-4 ring-navy-1`} />
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono bg-navy-2 px-1.5 py-0.5 rounded text-[10px] text-gold-1 font-bold">{node.rankCode}</span>
+                        <span className="font-semibold text-ink-1">{node.name}</span>
+                        <span className="text-[10px] text-ink-2 font-mono">({node.code})</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {node.skipped ? (
+                          <span className="text-[9.5px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-navy-2 text-ink-2 border border-navy-4">
+                            Skipped (0 Differential)
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9.5px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-gold-1/10 text-gold-1 border border-gold-1/25">
+                              {node.type}
+                            </span>
+                            <span className="font-mono text-gold font-bold">+{Number(node.percentage).toFixed(2)}%</span>
+                            <span className="font-mono font-bold text-ink-1">({formatINR(node.amount)})</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Breakdown Table */}
+            <div className="overflow-x-auto rounded border border-navy-4 bg-navy-2/20">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-navy-4 bg-navy-2/65 text-[10px] uppercase font-bold tracking-wider text-ink-2">
+                    <th className="py-2.5 px-3">Rank</th>
+                    <th className="py-2.5 px-3">Rank Name</th>
+                    <th className="py-2.5 px-3">Agent Name</th>
+                    <th className="py-2.5 px-3">Agent Code</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3 text-right">Commission %</th>
+                    <th className="py-2.5 px-3 text-right">Commission Amount</th>
+                    <th className="py-2.5 px-3 text-right">Running Total %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-navy-4">
+                  {breakdownRows.map((row) => (
+                    <tr key={row.rank} className={`hover:bg-navy-2/30 transition-colors ${row.skipped ? 'text-ink-2/60 bg-navy-2/5' : 'text-ink-1 font-medium'}`}>
+                      <td className="py-3 px-3 font-mono">{row.rank}</td>
+                      <td className="py-3 px-3 uppercase text-[10.5px] font-semibold text-gold-tan">{row.rankCode} - {row.rankName}</td>
+                      <td className="py-3 px-3">{row.agentName}</td>
+                      <td className="py-3 px-3 font-mono">{row.agentCode}</td>
+                      <td className="py-3 px-3">
+                        {row.skipped ? (
+                          <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-navy-2 text-ink-2/70 border border-navy-4">
+                            {row.skipReason}
+                          </span>
+                        ) : (
+                          <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${row.type === 'Direct' ? 'bg-gold-1/10 text-gold-1 border border-gold-1/25' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                            {row.type}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono">{Number(row.percentage).toFixed(2)}%</td>
+                      <td className="py-3 px-3 text-right font-mono font-semibold text-gold">{row.amount > 0 ? formatINR(row.amount) : '₹0'}</td>
+                      <td className="py-3 px-3 text-right font-mono">{Number(row.runningTotalPct).toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Summary Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-navy-2/25 border border-navy-4 rounded-card p-5">
+              <div className="col-span-full border-b border-navy-4/50 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">Commission Summary</h4>
+              </div>
+              <div className="space-y-1.5">
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Records</span>
+                <span className="text-xl font-bold font-serif text-ink-1 block">{paidRanks.length}</span>
+              </div>
+              <div className="space-y-1.5">
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Distributed</span>
+                <span className="text-xl font-bold font-serif text-gold block">{Number(totalDistributed).toFixed(2)}%</span>
+              </div>
+              <div className="space-y-1.5">
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Commission Paid</span>
+                <span className="text-xl font-bold font-serif text-ink-1 block">{formatINR(totalPaid)}</span>
+              </div>
+              <div className="space-y-1.5 border-t border-navy-4/50 pt-2 sm:border-0 sm:pt-0">
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Highest Rank Paid</span>
+                <span className="text-xs font-semibold text-ink-1 uppercase block">
+                  {highestRankObj ? `${highestRankObj.rank} (${highestRankObj.rankCode})` : '—'}
+                </span>
+              </div>
+              <div className="space-y-1.5 border-t border-navy-4/50 pt-2 sm:border-0 sm:pt-0">
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Lowest Rank Paid</span>
+                <span className="text-xs font-semibold text-ink-1 uppercase block">
+                  {lowestRankObj ? `${lowestRankObj.rank} (${lowestRankObj.rankCode})` : '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Explanation Collapsible Panel */}
+            <div className="border border-navy-4 rounded-card overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setExplainOpen(!explainOpen)}
+                className="w-full flex items-center justify-between bg-navy-2/30 p-4 hover:bg-navy-2/50 transition-colors text-left"
+              >
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-1">How was this commission calculated?</span>
+                <span className="text-xs text-gold-1 font-bold">{explainOpen ? 'Hide' : 'Show Details'}</span>
+              </button>
+              {explainOpen && (
+                <div className="p-4 bg-navy-3 border-t border-navy-4 space-y-3.5 text-xs text-ink-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="block text-[10px] uppercase text-ink-2">Business Volume</span>
+                      <span className="font-semibold text-ink-1 font-mono">{formatINR(businessValue)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase text-ink-2">Plan Product</span>
+                      <span className="font-semibold text-ink-1 uppercase font-mono">{p.type}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase text-ink-2">Calculation Method</span>
+                      <span className="font-semibold text-ink-1">Differential Commission</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase text-ink-2">Maximum Configured Commission</span>
+                      <span className="font-semibold text-ink-1 font-mono">{highestRankObj ? `${Number(highestRankObj.percentage).toFixed(2)}%` : '—'}</span>
+                    </div>
+                    <div className="col-span-2 border-t border-navy-4/50 pt-2.5">
+                      <span className="block text-[10px] uppercase text-ink-2">Formula Explanation</span>
+                      <p className="mt-1 leading-relaxed text-[11px]">
+                        The commission engine traverses the upline hierarchy starting from the seller. For each level, it determines the commission rate from the Commission Master and subtracts the maximum rate encountered so far: <code>diffRate = Math.max(0, currentRate - maxRateEncountered)</code>. If two rates are equal (such as SVP and EVP), the differential evaluates to 0% and the level is skipped, assuring full transparency and keeping payouts matching the client's official structures.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
