@@ -512,6 +512,8 @@ export default function ImportData() {
               sponsorCode: comm.sponsorCode,
               planCode: row.planCode,
               type: 'commission',
+              commissionType: comm.commissionType === 'direct' ? 'Direct' : 'Differential',
+              originalAgentId: comm.originalAgentId,
               percentage: comm.percentage,
               amount: comm.amount,
               businessAmount: baseAmount,

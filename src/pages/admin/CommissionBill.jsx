@@ -140,11 +140,11 @@ export default function CommissionBill() {
                   <td className="py-2 px-3 font-mono">{c.policyNumber}</td>
                   <td className="py-2 px-3">{c.customerName}</td>
                   <td className="py-2 px-3 text-right">{formatINR(c.businessAmount)}</td>
-                  <td className="py-2 px-3 text-center">{c.percentage}%</td>
+                  <td className="py-2 px-3 text-center">{Number(c.percentage || 0).toFixed(2)}%</td>
                   <td className="py-2 px-3 text-right font-semibold">{formatINR(c.amount)}</td>
                   <td className="py-2 px-3 text-center">
                     <span className="text-gray-800 text-[10px] font-bold block leading-tight">
-                      {c.compressionReason || (c.compression ? 'Roll-up' : 'Direct')}
+                      {c.commissionType || ((c.agentId === c.originalAgentId || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential')}
                     </span>
                     {c.compression && c.receivingRankCode && (
                       <span className="text-gray-500 text-[9px] block mt-0.5">

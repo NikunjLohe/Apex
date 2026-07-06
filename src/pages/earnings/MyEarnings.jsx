@@ -391,10 +391,10 @@ export default function MyEarnings() {
                     <td className="text-ink-2 font-semibold uppercase">{log.planCode || '—'}</td>
                     <td>
                       <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block">
-                        {log.compressionReason || log.commissionType || '—'}
+                        {log.commissionType || ((log.agentId === log.originalAgentId || (!log.commissionType && !log.compression)) ? 'Direct' : 'Differential')}
                       </span>
                     </td>
-                    <td className="text-ink-2 font-mono">{log.percentage ? `${log.percentage}%` : '—'}</td>
+                    <td className="text-ink-2 font-mono">{log.percentage ? `${Number(log.percentage).toFixed(2)}%` : '—'}</td>
                     <td className="text-right font-bold text-gold">{formatINR(log.amount)}</td>
                   </tr>
                 ))}

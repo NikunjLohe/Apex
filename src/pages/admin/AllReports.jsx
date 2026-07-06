@@ -188,9 +188,9 @@ export default function AllReports() {
         'Policy No.': c.policyNumber,
         'Product': c.planCode,
         'Cycle Month/Year': `${c.month}/${c.year}`,
-        'Percentage (%)': c.percentage || 0,
+        'Percentage (%)': Number(c.percentage || 0).toFixed(2),
         'Amount Earned': c.amount || 0,
-        'Commission Type': c.compressionReason || (c.compression ? 'Roll-up' : 'Direct'),
+        'Commission Type': (c.commissionType === 'Direct' || c.commissionType === 'direct' || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential',
         'Payout Status': c.status,
       }))
     } else if (activeTab === 'payouts') {
@@ -509,11 +509,11 @@ export default function AllReports() {
                         </td>
                         <td className="font-mono text-ink-2">{c.policyNumber}</td>
                         <td className="font-semibold text-ink-1 uppercase">{c.planCode}</td>
-                        <td className="font-mono text-ink-2">{c.percentage}%</td>
+                        <td className="font-mono text-ink-2">{Number(c.percentage || 0).toFixed(2)}%</td>
                         <td className="font-mono font-bold text-gold">{formatINR(c.amount)}</td>
                         <td>
                           <span className="text-gray-800 text-[10px] font-bold block leading-tight">
-                            {c.compressionReason || (c.compression ? 'Roll-up' : 'Direct')}
+                            {c.commissionType || ((c.agentId === c.originalAgentId || (!c.commissionType && !c.compression)) ? 'Direct' : 'Differential')}
                           </span>
                         </td>
                         <td>{c.month}/{c.year}</td>
