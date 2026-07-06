@@ -87,10 +87,37 @@ export default function Settings() {
 
   // Load initial promotion rules
   useEffect(() => {
-    if (promotionsData?.rules) {
-      setPromotionsState(promotionsData.rules)
+    if (promotionsLoading) return
+    const DEFAULT_PROMOTION_RULES = {
+      AO: { businessTarget: 0, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 400, mfaTarget: 20000, pb: 0, pbTarget: 0, ta: 0, cmd: 3000, cmdTarget: 300000 },
+      AM: { businessTarget: 50000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 500, mfaTarget: 40000, pb: 0, pbTarget: 0, ta: 500, cmd: 9000, cmdTarget: 900000 },
+      ADM: { businessTarget: 150000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 600, mfaTarget: 60000, pb: 0, pbTarget: 0, ta: 1000, cmd: 15000, cmdTarget: 1500000 },
+      DM: { businessTarget: 300000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 750, mfaTarget: 80000, pb: 3000, pbTarget: 200000, ta: 1000, cmd: 25000, cmdTarget: 2500000 },
+      SDM: { businessTarget: 500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1000, mfaTarget: 200000, pb: 4000, pbTarget: 500000, ta: 1500, cmd: 40000, cmdTarget: 4000000 },
+      CM: { businessTarget: 750000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1500, mfaTarget: 300000, pb: 6000, pbTarget: 800000, ta: 1500, cmd: 60000, cmdTarget: 6000000 },
+      AGM: { businessTarget: 1500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2000, mfaTarget: 400000, pb: 7000, pbTarget: 1000000, ta: 2000, cmd: 80000, cmdTarget: 8000000 },
+      GM: { businessTarget: 2000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2500, mfaTarget: 600000, pb: 8000, pbTarget: 1500000, ta: 2500, cmd: 100000, cmdTarget: 10000000 },
+      ZM: { businessTarget: 3000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3000, mfaTarget: 800000, pb: 9000, pbTarget: 2000000, ta: 2500, cmd: 150000, cmdTarget: 15000000 },
+      ED: { businessTarget: 4500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3500, mfaTarget: 1000000, pb: 10000, pbTarget: 3000000, ta: 3000, cmd: 200000, cmdTarget: 20000000 },
+      SED: { businessTarget: 6000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 4000, mfaTarget: 1200000, pb: 15000, pbTarget: 4000000, ta: 3000, cmd: 225000, cmdTarget: 30000000 },
+      MD: { businessTarget: 7500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 5000, mfaTarget: 1500000, pb: 20000, pbTarget: 5000000, ta: 3500, cmd: 300000, cmdTarget: 40000000 },
+      CMD: { businessTarget: 9000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 6000, mfaTarget: 1800000, pb: 25000, pbTarget: 6000000, ta: 3500, cmd: 412500, cmdTarget: 55000000 },
+      AVP: { businessTarget: 12000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 7500, mfaTarget: 2100000, pb: 32500, pbTarget: 7500000, ta: 4500, cmd: 525000, cmdTarget: 70000000 },
+      VP: { businessTarget: 15000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 9000, mfaTarget: 2500000, pb: 40000, pbTarget: 9000000, ta: 6000, cmd: 675000, cmdTarget: 90000000 },
+      SVP: { businessTarget: 18000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 12000, mfaTarget: 3000000, pb: 50000, pbTarget: 10500000, ta: 7000, cmd: 550000, cmdTarget: 110000000 },
+      EVP: { businessTarget: 21000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 15000, mfaTarget: 3500000, pb: 60000, pbTarget: 12000000, ta: 9000, cmd: 750000, cmdTarget: 150000000 },
+      MGD: { businessTarget: 25000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 20000, mfaTarget: 4000000, pb: 75000, pbTarget: 13500000, ta: 12000, cmd: 1000000, cmdTarget: 200000000 },
     }
-  }, [promotionsData])
+
+    if (promotionsData?.rules && Object.keys(promotionsData.rules).length > 0) {
+      setPromotionsState(promotionsData.rules)
+    } else {
+      setPromotionsState(DEFAULT_PROMOTION_RULES)
+      // Seed directly to Firestore so the fields do not stay empty
+      setDoc(doc(db, 'config', 'promotions'), { rules: DEFAULT_PROMOTION_RULES, updatedAt: serverTimestamp() })
+        .catch(err => console.warn('Auto-seed config/promotions error:', err))
+    }
+  }, [promotionsData, promotionsLoading])
 
   const RANKS = config.RANKS
 
@@ -739,62 +766,158 @@ export default function Settings() {
             <div className="flex items-center justify-between pb-2 border-b border-navy-4/50">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
-                  <ITrophy size={16} /> Promotion Transition Configurations
+                  <ITrophy size={16} /> Promotion Transition Configurations & Allowances
                 </h3>
-                <p className="text-[11px] text-ink-2 mt-0.5">Configure targets (Lifetime BV) and downline promotion structures for rank advancements.</p>
+                <p className="text-[11px] text-ink-2 mt-0.5">Configure targets (Lifetime BV), downline requirements, and monthly allowances (MFA, PB, TA, CMD) for all ranks.</p>
               </div>
               <button type="button" onClick={handleSavePromotions} disabled={savingPromotions} className="btn-gold py-1.5 px-4 text-xs">
                 {savingPromotions ? 'Saving...' : 'Save Promotion Rules'}
               </button>
             </div>
 
-            <div className="border border-navy-4 rounded-card overflow-hidden">
-              <table className="tbl text-xs">
+            <div className="border border-navy-4 rounded-card overflow-x-auto">
+              <table className="tbl text-xs whitespace-nowrap min-w-[1200px]">
                 <thead>
                   <tr>
-                    <th>Transition Rank Target</th>
+                    <th>Rank</th>
+                    <th>Next Rank Transition</th>
                     <th>Target Lifetime BV (₹)</th>
-                    <th className="text-center">Required Promoted Downline Rank</th>
-                    <th className="text-center">Required Promoted Count</th>
+                    <th className="text-center">Required Downline Promotee</th>
+                    <th className="text-center">Required Count</th>
+                    <th>MFA Target (Monthly BV)</th>
+                    <th>MFA Reward (₹)</th>
+                    <th>PB Target (Monthly BV)</th>
+                    <th>PB Reward (₹)</th>
+                    <th>TA Reward (₹)</th>
+                    <th>CMD Target (Weighted)</th>
+                    <th>CMD Reward (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {currentRanks.filter(r => r.rank > 1).map((r) => {
-                    const rule = promotionsState[r.code] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
+                  {currentRanks.map((r) => {
+                    const rule = promotionsState[r.code] || { 
+                      businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '',
+                      mfa: 0, mfaTarget: 0, pb: 0, pbTarget: 0, ta: 0, cmd: 0, cmdTarget: 0
+                    }
+                    const isRank1 = r.rank === 1
                     return (
-                      <tr key={r.rank}>
+                      <tr key={r.rank} className="hover:bg-navy-2/20">
                         <td className="font-semibold text-ink-1 uppercase">
-                          {currentRanks.find(x => x.rank === r.rank - 1)?.code || currentRanks[0]?.code || 'AO'} &rarr; {r.code}
+                          {r.code}
                           <div className="text-[10px] text-ink-2 font-normal mt-0.5">{r.name}</div>
+                        </td>
+                        <td className="text-ink-2">
+                          {isRank1 ? (
+                            <span className="text-[10px] italic text-ink-2/50">— Entry Rank —</span>
+                          ) : (
+                            <span className="font-mono text-[10px]">
+                              {currentRanks.find(x => x.rank === r.rank - 1)?.code || 'AO'} &rarr; {r.code}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-1">
+                          {isRank1 ? (
+                            <span className="text-[10px] text-ink-2/50 block text-center">—</span>
+                          ) : (
+                            <input 
+                              type="number" 
+                              className="field font-mono py-1 px-2 max-w-[100px]" 
+                              value={rule.businessTarget || ''} 
+                              placeholder="e.g. 50000" 
+                              onChange={(e) => handlePromoRuleChange(r.code, 'businessTarget', e.target.value)} 
+                            />
+                          )}
+                        </td>
+                        <td className="p-1">
+                          {isRank1 ? (
+                            <span className="text-[10px] text-ink-2/50 block text-center">—</span>
+                          ) : (
+                            <select 
+                              className="field py-1 max-w-[100px] mx-auto block text-xs" 
+                              value={rule.requiredPromotedRank || ''}
+                              onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedRank', e.target.value)}
+                            >
+                              <option value="">— None —</option>
+                              {currentRanks.filter(x => x.rank < r.rank).map(x => (
+                                <option key={x.rank} value={x.code}>{x.code}</option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                        <td className="p-1 text-center">
+                          {isRank1 ? (
+                            <span className="text-[10px] text-ink-2/50 block text-center">—</span>
+                          ) : (
+                            <input 
+                              type="number" 
+                              className="field font-mono py-1 px-2 max-w-[60px] mx-auto block text-center" 
+                              value={rule.requiredPromotedCount || ''} 
+                              placeholder="0"
+                              onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedCount', e.target.value)} 
+                            />
+                          )}
                         </td>
                         <td className="p-1">
                           <input 
                             type="number" 
-                            className="field font-mono py-1.5 max-w-[160px]" 
-                            value={rule.businessTarget || ''} 
-                            placeholder="e.g. 50000" 
-                            onChange={(e) => handlePromoRuleChange(r.code, 'businessTarget', e.target.value)} 
+                            className="field font-mono py-1 px-2 max-w-[100px]" 
+                            value={rule.mfaTarget || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'mfaTarget', e.target.value)} 
                           />
                         </td>
                         <td className="p-1">
-                          <select 
-                            className="field py-1 max-w-[160px] mx-auto block" 
-                            value={rule.requiredPromotedRank || ''}
-                            onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedRank', e.target.value)}
-                          >
-                            <option value="">— None —</option>
-                            {currentRanks.filter(x => x.rank < r.rank).map(x => (
-                              <option key={x.rank} value={x.code}>{x.code}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-1 text-center">
                           <input 
                             type="number" 
-                            className="field font-mono py-1.5 max-w-[100px] mx-auto block text-center" 
-                            value={rule.requiredPromotedCount || ''} 
-                            placeholder="0"
-                            onChange={(e) => handlePromoRuleChange(r.code, 'requiredPromotedCount', e.target.value)} 
+                            className="field font-mono py-1 px-2 max-w-[80px]" 
+                            value={rule.mfa || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'mfa', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[100px]" 
+                            value={rule.pbTarget || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'pbTarget', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[80px]" 
+                            value={rule.pb || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'pb', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[80px]" 
+                            value={rule.ta || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'ta', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[100px]" 
+                            value={rule.cmdTarget || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'cmdTarget', e.target.value)} 
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[80px]" 
+                            value={rule.cmd || ''} 
+                            placeholder="0" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'cmd', e.target.value)} 
                           />
                         </td>
                       </tr>
@@ -874,60 +997,15 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-4">
-              <div>
-                <label className="label">MFA Amount</label>
-                <input type="number" className="field" value={editingRank.mfa} onChange={(e) => setEditingRank({ ...editingRank, mfa: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label className="label">MFA Target (Monthly BV)</label>
-                <input type="number" className="field" value={editingRank.mfaTarget || ''} onChange={(e) => setEditingRank({ ...editingRank, mfaTarget: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label className="label">Travel Allowance (TA)</label>
-                <input type="number" className="field" value={editingRank.ta} onChange={(e) => setEditingRank({ ...editingRank, ta: Number(e.target.value) })} />
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input 
-                  type="checkbox" 
-                  id="recruitPerm" 
-                  className="accent-gold-1 h-4 w-4" 
-                  checked={editingRank.recruitPermission} 
-                  onChange={(e) => setEditingRank({ ...editingRank, recruitPermission: e.target.checked })} 
-                />
-                <label htmlFor="recruitPerm" className="text-xs font-semibold text-ink-1">Recruitment</label>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label">Performance Bonus Target (Monthly BV)</label>
-                <input type="number" className="field" value={editingRank.pbTarget} onChange={(e) => setEditingRank({ ...editingRank, pbTarget: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label className="label">Performance Bonus Reward Amount</label>
-                <input type="number" className="field" value={editingRank.pbAmount} onChange={(e) => setEditingRank({ ...editingRank, pbAmount: Number(e.target.value) })} />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="label">Promotion Target (Lifetime BV)</label>
-                <input type="number" className="field" value={editingRank.promoTarget} onChange={(e) => setEditingRank({ ...editingRank, promoTarget: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label className="label">CMD Award Target</label>
-                <input type="number" className="field" value={editingRank.cmdTarget} onChange={(e) => setEditingRank({ ...editingRank, cmdTarget: Number(e.target.value) })} />
-              </div>
-              <div>
-                <label className="label">CMD Award Amount</label>
-                <input type="number" className="field" value={editingRank.cmdAmount} onChange={(e) => setEditingRank({ ...editingRank, cmdAmount: Number(e.target.value) })} />
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Promotion Criteria / Description</label>
-              <textarea className="field h-16 resize-none text-xs" placeholder="Criteria rules description..." value={editingRank.promoDesc} onChange={(e) => setEditingRank({ ...editingRank, promoDesc: e.target.value })} />
+            <div className="flex items-center gap-2 pt-2 pb-2">
+              <input 
+                type="checkbox" 
+                id="recruitPerm" 
+                className="accent-gold-1 h-4 w-4" 
+                checked={editingRank.recruitPermission} 
+                onChange={(e) => setEditingRank({ ...editingRank, recruitPermission: e.target.checked })} 
+              />
+              <label htmlFor="recruitPerm" className="text-xs font-semibold text-ink-1">Recruitment Permission (Allow recruiting new members at this rank)</label>
             </div>
 
             {/* MDA and FD Slabs */}
