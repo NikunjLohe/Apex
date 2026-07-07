@@ -335,37 +335,6 @@ function AgentDashboard() {
     }
   }, [promotionsConfig, metrics, nextRankObj, myRank, config])
 
-  if (loading) return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <SkeletonStats count={4} />
-      <SkeletonTable rows={4} cols={4} />
-    </div>
-  )
-
-  const getGreeting = () => {
-    const hr = new Date().getHours()
-    if (hr < 12) return 'Good Morning'
-    if (hr < 17) return 'Good Afternoon'
-    return 'Good Evening'
-  }
-
-  const currentDateStr = format(new Date(), 'EEEE, MMMM d, yyyy')
-  const currentTimeStr = format(new Date(), 'hh:mm a')
-
-  const getRelativeTime = (dateInput) => {
-    if (!dateInput) return '—'
-    const d = toDate(dateInput)
-    const diffMs = new Date() - d
-    const diffMins = Math.floor(diffMs / 60000)
-    if (diffMins < 1) return 'Just Now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    const diffHrs = Math.floor(diffMins / 60)
-    if (diffHrs < 24) return `${diffHrs}h ago`
-    const diffDays = Math.floor(diffHrs / 24)
-    if (diffDays === 1) return 'Yesterday'
-    return format(d, 'MMM d, yyyy')
-  }
-
   // Construct unified recent activity
   const recentActivity = useMemo(() => {
     const list = []
@@ -409,6 +378,37 @@ function AgentDashboard() {
     // Sort descending by date
     return list.sort((a, b) => toDate(b.date) - toDate(a.date)).slice(0, 6)
   }, [myPolicies.data, myCommissions.data, directTeam.data])
+
+  if (loading) return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <SkeletonStats count={4} />
+      <SkeletonTable rows={4} cols={4} />
+    </div>
+  )
+
+  const getGreeting = () => {
+    const hr = new Date().getHours()
+    if (hr < 12) return 'Good Morning'
+    if (hr < 17) return 'Good Afternoon'
+    return 'Good Evening'
+  }
+
+  const currentDateStr = format(new Date(), 'EEEE, MMMM d, yyyy')
+  const currentTimeStr = format(new Date(), 'hh:mm a')
+
+  const getRelativeTime = (dateInput) => {
+    if (!dateInput) return '—'
+    const d = toDate(dateInput)
+    const diffMs = new Date() - d
+    const diffMins = Math.floor(diffMs / 60000)
+    if (diffMins < 1) return 'Just Now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHrs = Math.floor(diffMins / 60)
+    if (diffHrs < 24) return `${diffHrs}h ago`
+    const diffDays = Math.floor(diffHrs / 24)
+    if (diffDays === 1) return 'Yesterday'
+    return format(d, 'MMM d, yyyy')
+  }
 
   const canRecruit = can(CAP.RECRUIT)
 
