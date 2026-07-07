@@ -19,7 +19,7 @@ export function Protected({ children, capability, ignorePasswordForce }) {
   const { can } = usePermission()
   const location = useLocation()
 
-  if (authLoading || (isAuthenticated && profileLoading && !profile)) return <FullLoader />
+  if (authLoading || (isAuthenticated && (profileLoading || !profile))) return <FullLoader />
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
   if (!ignorePasswordForce && profile?.mustChangePassword && location.pathname !== '/change-password') {
     return <Navigate to="/change-password" replace />

@@ -30,6 +30,11 @@ export function AuthProvider({ children }) {
     }
     return onAuthStateChanged(auth, (u) => {
       setUser(u)
+      if (u) {
+        setProfileLoading(true)
+      } else {
+        setProfileLoading(false)
+      }
       setAuthLoading(false)
     })
   }, [])
@@ -37,6 +42,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setProfile(null)
+      setProfileLoading(false)
       return undefined
     }
     setProfileLoading(true)
