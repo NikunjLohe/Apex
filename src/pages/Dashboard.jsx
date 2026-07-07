@@ -12,7 +12,7 @@ import StatusBadge from '../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../components/ui/LoadingSkeleton'
 import {
   IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard,
-  IBuilding, INetwork, IClock, ITrophy
+  IBuilding, INetwork, IClock, ITrophy, ISettings
 } from '../components/ui/icons'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -342,100 +342,167 @@ function AgentDashboard() {
     </div>
   )
 
+  const getGreeting = () => {
+    const hr = new Date().getHours()
+    if (hr < 12) return 'Good Morning'
+    if (hr < 17) return 'Good Afternoon'
+    return 'Good Evening'
+  }
+
+  const currentDateStr = format(new Date(), 'EEEE, MMMM d, yyyy')
+  const currentTimeStr = format(new Date(), 'hh:mm a')
+
+  const getRelativeTime = (dateInput) => {
+    if (!dateInput) return '—'
+    const d = toDate(dateInput)
+    const diffMs = new Date() - d
+    const diffMins = Math.floor(diffMs / 60000)
+    if (diffMins < 1) return 'Just Now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHrs = Math.floor(diffMins / 60)
+    if (diffHrs < 24) return `${diffHrs}h ago`
+    const diffDays = Math.floor(diffHrs / 24)
+    if (diffDays === 1) return 'Yesterday'
+    return format(d, 'MMM d, yyyy')
+  }
+
+  // Construct unified recent activity
+  const recentActivity = useMemo(() => {
+    const list = []
+    
+    // 1. Policies
+    ;(myPolicies.data || []).forEach(p => {
+      list.push({
+        id: `policy-${p.id}`,
+        type: 'policy',
+        title: 'New Policy Generated',
+        desc: `Policy #${p.policyNumber} for ${p.customerName || 'Customer'}`,
+        date: p.createdAt,
+        badge: '🟢 Active'
+      })
+    })
+
+    // 2. Commissions
+    ;(myCommissions.data || []).forEach(c => {
+      list.push({
+        id: `comm-${c.id}`,
+        type: 'commission',
+        title: 'Commission Credited',
+        desc: `Earned ${c.percentage?.toFixed(2)}% (${formatINR(c.amount)}) for Policy #${c.policyNumber}`,
+        date: c.calculationDate,
+        badge: '🔵 Paid'
+      })
+    })
+
+    // 3. Team members
+    ;(directTeam.data || []).forEach(m => {
+      list.push({
+        id: `team-${m.id}`,
+        type: 'member',
+        title: 'New Team Member Joined',
+        desc: `${m.name} (${m.sponsorCode}) joined your downline`,
+        date: m.createdAt,
+        badge: '🟣 Promoted'
+      })
+    })
+
+    // Sort descending by date
+    return list.sort((a, b) => toDate(b.date) - toDate(a.date)).slice(0, 6)
+  }, [myPolicies.data, myCommissions.data, directTeam.data])
+
   const canRecruit = can(CAP.RECRUIT)
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-navy-4/50">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-ink-2">APEX Performance Portal</p>
-          <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-ink-1 mt-0.5 tracking-tight">
-            {profile?.name || 'Agent'}
-          </h2>
-          <p className="text-xs text-ink-2 mt-0.5">
-            <span className="font-mono text-gold-tan font-semibold">{agentCode}</span>
-            {' · '}
-            <span className="font-semibold text-ink-1">{rankObj?.name || 'Rank ' + myRank}</span>
-          </p>
-        </div>
-        {/* Quick Actions */}
-        <div className="flex flex-wrap gap-2">
-          <Link to="/customers/new" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-3 flex items-center gap-1.5"><IPlus size={13} /> Add Customer</Link>
-          <Link to="/payments/collect" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3 flex items-center gap-1.5"><ICash size={13} /> Collect Payment</Link>
-          <Link to="/my-downline" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3 flex items-center gap-1.5"><INetwork size={13} /> My Downline</Link>
-          <Link to="/my-earnings" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3 flex items-center gap-1.5"><ITrophy size={13} /> My Earnings</Link>
-          {canRecruit && (
-            <Link to="/my-downline" className="btn-ghost border border-gold-1/30 text-gold-tan hover:border-gold-1 py-2 text-xs uppercase font-bold tracking-wider px-3 flex items-center gap-1.5"><IUsers size={13} /> Add Member</Link>
-          )}
-        </div>
-      </div>
-
-      {/* ── Profile + Business Summary ───────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
-
-        {/* Profile Card */}
-        <div className="card p-5 space-y-3 lg:col-span-1">
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-1.5"><IUsers size={13} /> My Profile</h3>
-          <div className="space-y-2.5 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-gold-1/20 flex items-center justify-center text-gold-tan font-bold text-lg border border-gold-1/30">
-                {(profile?.name || 'A')[0].toUpperCase()}
-              </div>
-              <div>
-                <p className="font-bold text-ink-1 text-sm">{profile?.name}</p>
-                <p className="font-mono text-gold-tan text-[10px]">{agentCode}</p>
-              </div>
+      {/* ── Welcome Section ────────────────────────────────────────── */}
+      <div className="card p-6 bg-navy-3 border border-navy-4 relative overflow-hidden">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gold-1/5 blur-2xl" />
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="font-serif text-2xl md:text-3xl font-extrabold text-ink-1 tracking-tight">
+                {getGreeting()}, {profile?.name || 'Agent'} 👋
+              </h2>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online
+              </span>
             </div>
-            {[
-              { label: 'Sponsor', value: sponsorData?.name || '—', sub: sponsorData?.sponsorCode },
-              { label: 'Current Rank', value: rankObj?.name },
-              { label: 'Next Rank', value: nextRankObj?.name || 'Top Rank ✓' },
-              { label: 'Branch', value: profile?.branchName || profile?.branch || '—' },
-            ].map(r => (
-              <div key={r.label} className="flex justify-between items-start gap-2">
-                <span className="text-ink-2 shrink-0">{r.label}</span>
-                <div className="text-right">
-                  <span className="font-semibold text-ink-1 block">{r.value}</span>
-                  {r.sub && <span className="font-mono text-[9px] text-gold-tan">{r.sub}</span>}
-                </div>
+            <p className="text-xs text-ink-2">Welcome back to APEX Branch Operations Portal.</p>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-ink-2 border-t border-navy-4/50 pt-4 lg:border-0 lg:pt-0">
+            <div>
+              <span className="block text-[9px] uppercase tracking-wider text-ink-3">Current Rank</span>
+              <span className="font-semibold text-ink-1 uppercase font-mono">{rankObj?.name || 'AO'}</span>
+            </div>
+            <div>
+              <span className="block text-[9px] uppercase tracking-wider text-ink-3">Agent Code</span>
+              <span className="font-semibold text-gold-tan font-mono">{agentCode}</span>
+            </div>
+            <div>
+              <span className="block text-[9px] uppercase tracking-wider text-ink-3">Branch</span>
+              <span className="font-semibold text-ink-1">{profile?.branchName || profile?.branch || '—'}</span>
+            </div>
+            {sponsorData && (
+              <div>
+                <span className="block text-[9px] uppercase tracking-wider text-ink-3">Sponsor</span>
+                <span className="font-semibold text-ink-1">{sponsorData.name} ({sponsorData.sponsorCode})</span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Business + Team + Earnings KPIs */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <KpiCard label="Personal Business"  value={formatINR(metrics.personalBusiness)}   icon={<IBuilding size={16} />} accentColor="#A3906B" badge="TOTAL" />
-            <KpiCard label="Monthly Business"   value={formatINR(metrics.monthBusiness)}       icon={<ICalendar size={16} />} accentColor="#7A8E6E" badge="MTD" />
-            <KpiCard label="Active Customers"   value={metrics.activeCustomers}                icon={<IUsers size={16} />}   accentColor="#60A5FA" badge="ACTIVE" />
-            <KpiCard label="Active Policies"    value={metrics.activePolicies}                 icon={<IDoc size={16} />}     accentColor="#F59E0B" badge="LIVE" />
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <KpiCard label="Month Earnings"     value={formatINR(metrics.monthEarnings)}       icon={<ICash size={16} />}    accentColor="#10B981" badge="THIS MONTH" />
-            <KpiCard label="Last Month Earnings" value={formatINR(metrics.lastMonthEarnings)}  icon={<ICash size={16} />}    accentColor="#8B5CF6" badge="LAST MONTH" />
-            <KpiCard label="Pending Payout"     value={formatINR(metrics.pendingPayout)}        icon={<IClock size={16} />}   accentColor="#EF4444" badge="PENDING" />
-            <KpiCard label="Lifetime Earnings"  value={formatINR(metrics.lifetimeEarnings)}    icon={<ITrophy size={16} />}  accentColor="#A3906B" badge="LIFETIME" />
+            )}
+            <div>
+              <span className="block text-[9px] uppercase tracking-wider text-ink-3">Current Date</span>
+              <span className="font-semibold text-ink-1">{currentDateStr}</span>
+            </div>
+            <div>
+              <span className="block text-[9px] uppercase tracking-wider text-ink-3">Last Login</span>
+              <span className="font-semibold text-ink-1 font-mono">{profile?.lastLogin ? fmtDate(profile.lastLogin) : 'Just Now'}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Team Summary ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* ── Today's Summary Row ────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: 'Direct Team Members', value: directTeam.data?.length || 0, color: '#60A5FA' },
-          { label: 'Total Team Members',  value: totalTeam.data?.length  || 0, color: '#A3906B' },
-          { label: 'Active Customers',    value: metrics.activeCustomers,       color: '#10B981' },
-          { label: 'Active Policies',     value: metrics.activePolicies,        color: '#F59E0B' },
+          { label: 'Personal Business', value: formatINR(metrics.personalBusiness), color: 'border-t-gold-1' },
+          { label: 'Team Business', value: formatINR(profile?.teamBusiness || profile?.stats?.teamBusiness || 0), color: 'border-t-emerald-500' },
+          { label: 'MTD Commissions', value: formatINR(metrics.monthEarnings), color: 'border-t-cyan-500' },
+          { label: 'Lifetime Commissions', value: formatINR(metrics.lifetimeEarnings), color: 'border-t-violet-500' },
+          { label: 'Active Customers', value: metrics.activeCustomers, color: 'border-t-amber-500' },
+          { label: 'Active Team Members', value: totalTeam.data?.length || 0, color: 'border-t-rose-500' }
         ].map((c, i) => (
-          <motion.div key={c.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.06 }}
-            className="card p-4 text-center" style={{ borderTopColor: c.color, borderTopWidth: 3 }}>
-            <p className="text-2xl font-bold font-serif text-ink-1">{c.value}</p>
-            <p className="text-[10px] font-semibold text-ink-2 uppercase tracking-wider mt-1">{c.label}</p>
+          <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+            className={`card p-4 border-t-4 ${c.color} bg-navy-3 flex flex-col justify-between h-24`}>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-ink-2 block leading-snug">{c.label}</span>
+            <span className="text-lg font-bold font-serif text-ink-1 block mt-2">{c.value}</span>
           </motion.div>
         ))}
+      </div>
+
+      {/* ── Quick Actions Card ───────────────────────────────────────── */}
+      <div className="card p-5 space-y-4">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-1.5">
+          <ISettings size={13} /> Quick Actions
+        </h3>
+        <div className="flex flex-wrap gap-3">
+          {canRecruit && (
+            <Link to="/my-downline" className="btn-gold py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <IPlus size={14} /> Add Member
+            </Link>
+          )}
+          <Link to="/my-downline" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <INetwork size={14} /> My Downline
+          </Link>
+          <Link to="/my-earnings" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <ITrophy size={14} /> My Earnings
+          </Link>
+          <Link to="/my-downline" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <IUsers size={14} /> Genealogy Tree
+          </Link>
+          <Link to="/reports/collections" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <IDoc size={14} /> My Reports
+          </Link>
+        </div>
       </div>
 
       {/* ── My Next Promotion ────────────────────────────────────────── */}
@@ -521,81 +588,45 @@ function AgentDashboard() {
         </div>
       </div>
 
-      {/* ── Recent Activity Feeds ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-
-        {/* Latest Customers */}
-        <div className="card p-5 space-y-3">
-          <div className="flex items-center justify-between pb-1.5 border-b border-navy-4/50">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5"><IUsers size={13} /> Latest Customers</h3>
-            <Link to="/customers" className="text-[10px] font-bold text-gold hover:underline">All →</Link>
-          </div>
-          {(myCustomers.data || []).length > 0 ? (
-            <div className="space-y-2.5">
-              {myCustomers.data.slice(0, 5).map(c => (
-                <div key={c.id} className="flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-semibold text-ink-1">{c.name}</p>
-                    <p className="text-[9px] text-ink-2 font-mono">{c.customerId || c.pan}</p>
-                  </div>
-                  <span className="text-[10px] text-ink-2">{c.createdAt ? fmtDate(c.createdAt) : '—'}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-ink-2 italic text-center py-3">No customers yet.</p>
-          )}
+      {/* ── Recent Activity Feed ──────────────────────────────────────── */}
+      <div className="card p-5 space-y-4">
+        <div className="flex items-center justify-between pb-1.5 border-b border-navy-4/50">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5">
+            <IClock size={13} /> Recent Activity Feed
+          </h3>
         </div>
-
-        {/* Latest Policies */}
-        <div className="card p-5 space-y-3">
-          <div className="flex items-center justify-between pb-1.5 border-b border-navy-4/50">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5"><IDoc size={13} /> Latest Policies</h3>
-            <Link to="/reports/collections" className="text-[10px] font-bold text-gold hover:underline">All →</Link>
-          </div>
-          {(myPolicies.data || []).length > 0 ? (
-            <div className="space-y-2.5">
-              {myPolicies.data.slice(0, 5).map(p => (
-                <div key={p.id} className="flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-semibold text-ink-1 font-mono">{p.policyNumber || '—'}</p>
-                    <p className="text-[9px] text-ink-2">{p.customerName}</p>
+        {recentActivity.length > 0 ? (
+          <div className="divide-y divide-navy-4">
+            {recentActivity.map((act) => (
+              <div key={act.id} className="py-3 flex items-center justify-between text-xs hover:bg-navy-2/20 px-2 rounded transition-all">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-ink-1">{act.title}</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-navy-2 border border-navy-4 text-ink-2">
+                      {act.badge}
+                    </span>
                   </div>
-                  <span className="font-semibold text-gold-tan">{formatINR(p.totalAmount || p.businessVolume || 0)}</span>
+                  <p className="text-ink-2">{act.desc}</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-ink-2 italic text-center py-3">No policies yet.</p>
-          )}
-        </div>
-
-        {/* Latest Commissions */}
-        <div className="card p-5 space-y-3">
-          <div className="flex items-center justify-between pb-1.5 border-b border-navy-4/50">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan flex items-center gap-1.5"><ICash size={13} /> Latest Commissions</h3>
-            <Link to="/my-earnings" className="text-[10px] font-bold text-gold hover:underline">All →</Link>
+                <span className="text-[10px] text-ink-3 font-mono">{getRelativeTime(act.date)}</span>
+              </div>
+            ))}
           </div>
-          {(myCommissions.data || []).length > 0 ? (
-            <div className="space-y-2.5">
-              {myCommissions.data.slice(0, 5).map(c => (
-                <div key={c.id} className="flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-semibold text-ink-1">{c.policyNumber || '—'}</p>
-                    <p className="text-[9px] text-ink-2 font-mono">{c.planCode} · {c.month}/{c.year}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-ok">{formatINR(c.amount)}</span>
-                    <p className="text-[9px] text-ink-2">{c.percentage?.toFixed(2)}%</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-ink-2 italic text-center py-3">No commissions yet.</p>
-          )}
-        </div>
+        ) : (
+          <div className="text-center py-8 space-y-2 border border-dashed border-navy-4 rounded bg-navy-2/10">
+            <p className="text-xs text-ink-2 italic">No recent activity yet.</p>
+            <p className="text-[10px] text-ink-3">Once new policies or commissions are generated they will appear here.</p>
+          </div>
+        )}
       </div>
+
+      {/* ── Dashboard Footer ────────────────────────────────────────── */}
+      <div className="border-t border-navy-4/50 pt-5 mt-8 flex flex-col sm:flex-row justify-between items-center gap-2 text-[10px] text-ink-3">
+        <span className="font-semibold">APEX Branch Operations Portal</span>
+        <span>Version 1.0</span>
+        <span>Last Updated: {currentDateStr} at {currentTimeStr}</span>
+      </div>
+
     </div>
   )
 }
