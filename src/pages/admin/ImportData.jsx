@@ -66,7 +66,7 @@ export default function ImportData() {
 
   // Fetch Excel Mapping & Master dependencies
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
         const commSnap = await getDoc(doc(db, 'config', 'commissions'))
         const fetchedData = commSnap.exists() ? commSnap.data().commissions : null

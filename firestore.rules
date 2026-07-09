@@ -19,13 +19,11 @@ service cloud.firestore {
 
     // Users: self read; admins read all; admins write.
     match /users/{uid} {
-      allow read, write: if true;
-      // allow a member to update limited self fields (not rank/role/super)
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      // allow a member to update limited self fields (not rank/role/super/etc)
       allow update: if request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['rank'])
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['isSuperAdmin'])
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['status'])
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAll(['branchId']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rank', 'isSuperAdmin', 'isAdmin', 'role', 'permissions', 'sponsorCode', 'sponsorId', 'branchId', 'branchAssignment', 'status', 'commissionConfig', 'promotionConfig', 'rewardConfig']);
     }
 
     // Branches: staff read; admins write.
@@ -34,13 +32,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Customers / plans / payments / receipts: any staff may read & write
-    // (branch employees onboard and collect). Tighten with branch checks later.
-    match /customers/{id} { allow read, write: if isStaff(); }
-    match /plans/{id}     { allow read, write: if isStaff(); }
-    match /payments/{id}  { allow read, write: if isStaff(); }
-    match /receipts/{id}  { allow read, write: if isStaff(); }
-    match /notifications/{id} { allow read, write: if isStaff(); }
+    // Customers / plans / payments / receipts
+    match /customers/{id} { 
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isStaff() && (isAdmin() || resource.data.enrolledBy == request.auth.uid);
+    }
+    match /plans/{id} { 
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isStaff() && (isAdmin() || resource.data.agentId == request.auth.uid);
+    }
+    match /payments/{id} { 
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isStaff() && (isAdmin() || resource.data.agentId == request.auth.uid);
+    }
+    match /receipts/{id} { 
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isStaff() && (isAdmin() || resource.data.generatedBy == request.auth.uid);
+    }
+    match /notifications/{id} { 
+      allow read, write: if isStaff(); 
+    }
     match /plans_master/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
     match /imports/{id}      { allow read, write: if isAdmin(); }
     match /policies/{id}     { allow read, write: if isStaff(); }
