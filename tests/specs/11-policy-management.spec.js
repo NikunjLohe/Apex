@@ -12,7 +12,10 @@ test.describe('Policy Management', () => {
     await expect(adminPage.locator('h1')).toHaveText(/Policies/)
     await expect(adminPage.locator('text=Something went wrong')).not.toBeVisible()
     
-    const hasRows = await adminPage.locator('tbody tr').first().isVisible({ timeout: TIMEOUTS.table }).catch(()=>false)
+    // Wait for loading skeleton to disappear
+    await adminPage.locator('.skeleton').first().waitFor({ state: 'hidden', timeout: TIMEOUTS.table }).catch(() => {})
+
+    const hasRows = await adminPage.locator('tbody tr').first().isVisible().catch(()=>false)
     const hasEmpty = await adminPage.locator('text=No policies').isVisible().catch(()=>false)
     expect(hasRows || hasEmpty).toBeTruthy()
   })

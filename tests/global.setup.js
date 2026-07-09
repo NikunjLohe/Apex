@@ -14,11 +14,6 @@ const AUTH_DIR = path.resolve('tests/.auth')
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true })
 
 async function loginAndSave(page, credentials, stateFile) {
-  if (credentials.email.includes('@apex.test')) {
-    console.log(`[setup] ⏭️ Skipping ${credentials.label} (Placeholder credentials detected)`)
-    return
-  }
-
   await page.goto('/login')
   await page.waitForSelector('input[type="email"]', { timeout: 20_000 })
 

@@ -41,8 +41,8 @@ export function can(rank, isSuperAdmin, capability) {
     case CAP.BRANCH_REPORTS:
     case CAP.MANAGE_DOWNLINE:
     case CAP.ZONE_REPORTS: return r >= 1 && r <= 18
-    // Admin pages — Super Admin only
-    case CAP.ADMIN:
+    // Admin pages — Rank 14–18
+    case CAP.ADMIN:        return r >= 14 && r <= 18
     case CAP.SUPER_ADMIN:  return false
     default:               return false
   }

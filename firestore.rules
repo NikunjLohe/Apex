@@ -58,7 +58,8 @@ service cloud.firestore {
 
     // App config (settings) — staff read, admin write.
     match /config/{doc} {
-      allow read, write: if true;
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
   }
 }

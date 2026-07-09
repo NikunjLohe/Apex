@@ -27,6 +27,12 @@ const TITLES = [
   ['/admin/overview', 'Overview'],
   ['/admin/all-reports', 'All Reports'],
   ['/admin/logs', 'System Logs'],
+  ['/admin/policies', 'Policies'],
+  ['/admin/payouts', 'Payout Engine'],
+  ['/admin/promotions', 'Promotions'],
+  ['/admin/import', 'Import Center'],
+  ['/admin/customers', 'Customers'],
+  ['/admin/commission-bill', 'Commission Bill'],
 ]
 
 function titleFor(pathname) {

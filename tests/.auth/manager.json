@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "firebase:authUser:AIzaSyD5fcJcJABzW5uv6POSxNA0oTzkZG8hNvU:[DEFAULT]",
+          "value": "{\"uid\":\"s7v5lDYeKRcZQqWi06HdrDu4Npb2\",\"email\":\"manager@apex.test\",\"emailVerified\":false,\"isAnonymous\":false,\"providerData\":[{\"providerId\":\"password\",\"uid\":\"manager@apex.test\",\"displayName\":null,\"email\":\"manager@apex.test\",\"phoneNumber\":null,\"photoURL\":null}],\"stsTokenManager\":{\"refreshToken\":\"AMf-vBzdel0z_hF9vFje2_gAV9lAH8rOoZ9zN2nueR_q1RZvyOKOgFKGPGLxnzcLjJLWbQi5_3jIFT5-vQ0t6RSygzdXJnGUqrLCAjjrksCSUScrYAPpEZlAPwJccqVpmuEpMEp-Nm5pxd1FlX-eyLE_1_vKXoxUI0Nw-hu8tNsF55jc6pE_MTcmXg54WoTJaIHbdTves-2y\",\"accessToken\":\"eyJhbGciOiJSUzI1NiIsImtpZCI6IjE2ZDM5Y2FiYTg2MWY1YzYwMmI3YjY0ODk5YjdhYTdhMWYxZmM4NmUiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vbWxtLTgwZjk3IiwiYXVkIjoibWxtLTgwZjk3IiwiYXV0aF90aW1lIjoxNzgzNTgzOTUyLCJ1c2VyX2lkIjoiczd2NWxEWWVLUmNaUXFXaTA2SGRyRHU0TnBiMiIsInN1YiI6InM3djVsRFllS1JjWlFxV2kwNkhkckR1NE5wYjIiLCJpYXQiOjE3ODM1ODM5NTIsImV4cCI6MTc4MzU4NzU1MiwiZW1haWwiOiJtYW5hZ2VyQGFwZXgudGVzdCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZmlyZWJhc2UiOnsiaWRlbnRpdGllcyI6eyJlbWFpbCI6WyJtYW5hZ2VyQGFwZXgudGVzdCJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.OLEqPBOSoiijUrhy8GJGBlHELOoZgD03uryrN33rGnQrYMa4LPl37r-vTj5Ez36oFWPs_JGChy2TMfXUAuWSsJwsGszhieGwSHPayadV_iSkFYhnHibP2jMdZEaTJ7uPq9hCgGeqGJEjSGhzNq_QOETk5tXhyHn7AwhYPVv2pjFK0T-GOHIuH1o0gWarzQE26gTiQMGUXCBsL7IWwf_W8FMSfWGXzwRIbbYDdAN1iG3g25F4SsndGJbIdV6SAzNLTo_-oaWp0s6c1EL8KKXCjDi3TNMHijMg7MT4pd_mjunIxmOz1hXRAxWIoyPWsddXaM7fv1ro_OHu_lB7ohBfSg\",\"expirationTime\":1783587552970},\"createdAt\":\"1783528693116\",\"lastLoginAt\":\"1783583865878\",\"apiKey\":\"AIzaSyD5fcJcJABzW5uv6POSxNA0oTzkZG8hNvU\",\"appName\":\"[DEFAULT]\"}"
+        }
+      ]
+    }
+  ]
+}
