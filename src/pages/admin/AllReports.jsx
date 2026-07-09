@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useCollection } from '../../hooks/useFirestore'
@@ -15,6 +16,7 @@ import { IReport, IUsers, IDoc, ICash, IClock, ITrophy, IDownload } from '../../
 
 export default function AllReports() {
   const { config: ranksConfig, getRank } = useRanks()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Load Firestore Collections
   const allUsers = useCollection('users')
@@ -25,15 +27,15 @@ export default function AllReports() {
   const allPromotions = useCollection('promotion_recommendations')
 
   // Tab State
-  const [activeTab, setActiveTab] = useState('agents')
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'agents')
 
   // Global Filters State
-  const [filterBranch, setFilterBranch] = useState('')
-  const [filterRank, setFilterRank] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterPlan, setFilterPlan] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [filterBranch, setFilterBranch] = useState(searchParams.get('branch') || '')
+  const [filterRank, setFilterRank] = useState(searchParams.get('rank') || '')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
+  const [filterPlan, setFilterPlan] = useState(searchParams.get('plan') || '')
+  const [dateFrom, setDateFrom] = useState(searchParams.get('from') || '')
+  const [dateTo, setDateTo] = useState(searchParams.get('to') || '')
 
   const loading = allUsers.loading || allBranches.loading || allPlans.loading || allCommissions.loading || allPayouts.loading || allPromotions.loading
 
@@ -129,7 +131,7 @@ export default function AllReports() {
     const agentSales = {}
 
     allPlans.data.forEach(p => {
-      const isRD = p.type?.toLowerCase().startsWith('rd')
+      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
       const amount = isRD ? (p.monthlyAmount * 12) : (p.fdAmount || 0)
 
       if (p.branchId && branchSales[p.branchId]) {
@@ -261,7 +263,7 @@ export default function AllReports() {
       y += 8
       policiesData.forEach(p => {
         if (y > 280) { doc.addPage(); y = 20 }
-        const isRD = p.type?.toLowerCase().startsWith('rd')
+        const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
         const val = isRD ? `${formatINR(p.monthlyAmount)} /mo` : formatINR(p.fdAmount)
         doc.text(`${p.policyNumber} - ${p.customerName}`, 14, y)
         doc.text(p.type || '—', 80, y)
@@ -461,7 +463,7 @@ export default function AllReports() {
                   </thead>
                   <tbody>
                     {policiesData.map(p => {
-                      const isRD = p.type?.toLowerCase().startsWith('rd')
+                      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
                       const val = isRD ? `${formatINR(p.monthlyAmount)} /mo` : formatINR(p.fdAmount)
                       return (
                         <tr key={p.id}>

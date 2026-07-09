@@ -78,7 +78,7 @@ export default function BranchDetail() {
   const branchStats = useMemo(() => {
     // Total branch business
     const totalBusiness = branchPlans.reduce((sum, p) => {
-      const isRD = p.type?.toLowerCase().startsWith('rd')
+      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
@@ -87,7 +87,7 @@ export default function BranchDetail() {
     const monthlyBusiness = branchPlans
       .filter(p => toDate(p.startDate) >= month0)
       .reduce((sum, p) => {
-        const isRD = p.type?.toLowerCase().startsWith('rd')
+        const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
         return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
       }, 0)
 
@@ -110,7 +110,7 @@ export default function BranchDetail() {
           return sd && sd.getMonth() + 1 === targetMonth && sd.getFullYear() === targetYear
         })
         .reduce((sum, p) => {
-          const isRD = p.type?.toLowerCase().startsWith('rd')
+          const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
           return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
         }, 0)
 
@@ -402,7 +402,7 @@ export default function BranchDetail() {
                   </thead>
                   <tbody>
                     {branchPlans.map(p => {
-                      const isRD = p.type?.toLowerCase().startsWith('rd')
+                      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
                       const val = isRD ? `${formatINR(p.monthlyAmount)} /mo` : formatINR(p.fdAmount)
                       return (
                         <tr key={p.id}>

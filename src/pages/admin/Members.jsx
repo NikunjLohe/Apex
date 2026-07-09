@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { where } from 'firebase/firestore'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useCollection, fetchCollection, useDoc } from '../../hooks/useFirestore'
 import { memberSchema } from '../../lib/schemas'
 import { createMember, updateMember } from '../../lib/admin'
@@ -18,9 +18,11 @@ import { IPlus, IUsers, ISearch, IClose, ICash, ITrophy, IShield } from '../../c
 import { computeEarnings } from '../../lib/earnings'
 
 export default function Members() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const members = useCollection('users')
   const branches = useCollection('branches')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(searchParams.get('q') || '')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
   const [modal, setModal] = useState(null) // { mode:'new'|'edit', member }
   const navigate = useNavigate()
   const { data: settings } = useDoc('config/settings')
@@ -28,9 +30,12 @@ export default function Members() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return members.data
-      .filter((m) => !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q) || m.sponsorCode?.toLowerCase().includes(q))
+      .filter((m) => {
+        if (filterStatus && m.status !== filterStatus) return false
+        return !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q) || m.sponsorCode?.toLowerCase().includes(q)
+      })
       .sort((a, b) => (b.rank || 0) - (a.rank || 0))
-  }, [members.data, search])
+  }, [members.data, search, filterStatus])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
@@ -49,9 +54,16 @@ export default function Members() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10" />
+        <div className="flex items-center gap-3 flex-1 min-w-[220px]">
+          <div className="relative flex-1">
+            <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10" />
+          </div>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="field w-40">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
         </div>
         <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm"><IPlus size={16} /> Add Member</button>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, doc, getDocs, getDoc, setDoc, writeBatch, serverTimestamp, query, where, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -15,8 +16,9 @@ import { ITrophy, ICheck, IAlert, IClock, IUsers, IDoc, IPlus } from '../../comp
 export default function Promotions() {
   const { profile } = useAuth()
   const { config: ranksConfig, getRank, nextRank } = useRanks()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || (searchParams.get('status') === 'approved' ? 'history' : 'dashboard'))
   const [selectedCycle, setSelectedCycle] = useState('Year ' + new Date().getFullYear())
   const [loading, setLoading] = useState(false)
   const [evaluating, setEvaluating] = useState(false)

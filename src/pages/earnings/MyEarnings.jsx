@@ -58,13 +58,14 @@ export default function MyEarnings() {
     const currYear = new Date().getFullYear()
 
     const monthPlans = ownPlans.data.filter(p => {
-      const start = p.startDate?.seconds ? new Date(p.startDate.seconds * 1000) : new Date(p.startDate)
+      const fallbackDate = p.startDate || p.date || p.createdAt
+      const start = fallbackDate?.seconds ? new Date(fallbackDate.seconds * 1000) : new Date(fallbackDate)
       if (isNaN(start.getTime())) return false
       return (start.getMonth() + 1 === currMonth) && (start.getFullYear() === currYear)
     })
 
     const monthlyBusinessVolume = monthPlans.reduce((sum, p) => {
-      const isRD = p.type?.toLowerCase().startsWith('rd')
+      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
@@ -84,7 +85,7 @@ export default function MyEarnings() {
 
     // Sum of all-time business volume
     const lifetimeBusinessVolume = ownPlans.data.reduce((sum, p) => {
-      const isRD = p.type?.toLowerCase().startsWith('rd')
+      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
       return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
     }, 0)
 
@@ -424,7 +425,7 @@ export default function MyEarnings() {
                 </thead>
                 <tbody>
                   {stats.recentPolicies.map(p => {
-                    const isRD = p.type?.toLowerCase().startsWith('rd')
+                    const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
                     return (
                       <tr key={p.id}>
                         <td className="font-mono text-gold font-semibold">{p.policyNumber}</td>

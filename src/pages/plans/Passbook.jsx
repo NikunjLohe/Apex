@@ -26,7 +26,7 @@ export default function Passbook() {
     if (!plan) return []
     const byInst = {}
     payments.data.forEach((p) => { byInst[p.installmentNumber] = p })
-    const start = toDate(plan.startDate) || new Date()
+    const start = toDate(plan.startDate || plan.date || plan.createdAt) || new Date()
     const today = new Date()
     const total = isRD(plan.type) ? plan.totalInstallments : 1
     const out = []
@@ -91,7 +91,7 @@ export default function Passbook() {
               <Row k="Paid" v={`${plan.paidInstallments}/${plan.totalInstallments}`} />
               <Row k="Total Paid" v={formatINR(plan.totalPaid || 0)} />
               <Row k="Maturity" v={formatINR(plan.maturityAmount || 0)} />
-              <Row k="Start" v={fmtDate(plan.startDate)} />
+              <Row k="Start" v={fmtDate(plan.startDate || plan.date || plan.createdAt)} />
               <Row k="Matures" v={fmtDate(plan.maturityDate)} />
             </dl>
           </div>

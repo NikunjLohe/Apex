@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { useCollection } from '../../hooks/useFirestore'
 import { fmtDate, formatINR } from '../../utils/format'
@@ -12,9 +12,10 @@ const PAGE_SIZE = 25
 
 export default function Policies() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState(searchParams.get('q') || '')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [limitCount, setLimitCount] = useState(PAGE_SIZE)
 
   const constraints = useMemo(() => {
@@ -117,7 +118,7 @@ export default function Policies() {
                 </thead>
                 <tbody>
                   {filtered.map((p) => {
-                    const isRDPlan = p.planType === 'RD' || p.type?.toLowerCase().startsWith('rd')
+                    const isRDPlan = p.planType === 'RD' || (p.planType || p.type || '').toLowerCase().startsWith('rd')
                     return (
                       <tr 
                         key={p.id} 

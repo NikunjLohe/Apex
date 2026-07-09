@@ -18,12 +18,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar
 } from 'recharts'
-import MetricDetailModal from '../components/dashboard/MetricDetailModal'
 import { useRanks } from '../contexts/RanksContext'
 
 // ─── Super Admin Dashboard (unchanged) ───────────────────────────────────────
 function SuperAdminDashboard() {
-  const [activeMetricType, setActiveMetricType] = useState(null)
   const { data: summary, loading: summaryLoading } = useDoc('system_summaries/dashboard')
   const recentUsers    = useCollection('users',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-users')
   const recentImports  = useCollection('imports', [orderBy('importDate',   'desc'), limit(3)], 'recent-imports')
@@ -56,10 +54,12 @@ function SuperAdminDashboard() {
     </div>
   )
 
+  const mtdFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  
   const cards = [
-    { type: 'total-business',    label: 'Total Business Volume',  value: formatINR(stats.totalBusiness),   icon: <ITrophy size={19} />, borderLeftClass: 'border-l-[4.5px] border-l-[#A3906B]', iconBgClass: 'bg-[#F9F7F3] border-[#EDE9E0] text-[#A3906B]', badge: 'LIFETIME' },
-    { type: 'monthly-business',  label: 'MTD Monthly Business',   value: formatINR(stats.monthlyBusiness), icon: <ICash size={19} />,   borderLeftClass: 'border-l-[4.5px] border-l-[#8FA382]', iconBgClass: 'bg-[#F4F6F2] border-[#E8ECE5] text-[#7A8E6E]', badge: 'THIS MONTH' },
-    { type: 'total-commissions', label: 'Total Paid Commissions', value: formatINR(stats.totalCommission), icon: <ICash size={19} />,   borderLeftClass: 'border-l-[4.5px] border-l-[#D29E6B]', iconBgClass: 'bg-[#FAF6F2] border-[#F2ECE5] text-[#BF8955]', badge: 'COMMISSIONS' },
+    { type: 'total-business',    label: 'Total Business Volume',  value: formatINR(stats.totalBusiness),   icon: <ITrophy size={19} />, borderLeftClass: 'border-l-[4.5px] border-l-[#A3906B]', iconBgClass: 'bg-[#F9F7F3] border-[#EDE9E0] text-[#A3906B]', badge: 'LIFETIME', link: '/admin/all-reports?tab=business' },
+    { type: 'monthly-business',  label: 'MTD Monthly Business',   value: formatINR(stats.monthlyBusiness), icon: <ICash size={19} />,   borderLeftClass: 'border-l-[4.5px] border-l-[#8FA382]', iconBgClass: 'bg-[#F4F6F2] border-[#E8ECE5] text-[#7A8E6E]', badge: 'THIS MONTH', link: `/admin/all-reports?tab=business&from=${mtdFrom}` },
+    { type: 'total-commissions', label: 'Total Paid Commissions', value: formatINR(stats.totalCommission), icon: <ICash size={19} />,   borderLeftClass: 'border-l-[4.5px] border-l-[#D29E6B]', iconBgClass: 'bg-[#FAF6F2] border-[#F2ECE5] text-[#BF8955]', badge: 'COMMISSIONS', link: '/admin/all-reports?tab=payouts&status=paid' },
   ]
 
   return (
@@ -78,7 +78,7 @@ function SuperAdminDashboard() {
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <div onClick={() => setActiveMetricType(c.type)} className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all ${c.borderLeftClass}`}>
+            <Link to={c.link} className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all block ${c.borderLeftClass}`}>
               <div>
                 <div className="flex items-center justify-between">
                   <span className={`flex h-9 w-9 items-center justify-center rounded-[8px] border ${c.iconBgClass}`}>{c.icon}</span>
@@ -87,7 +87,7 @@ function SuperAdminDashboard() {
                 <p className="mt-4 text-xs font-semibold text-ink-2 tracking-wide">{c.label}</p>
                 <p className="text-2xl font-bold font-serif text-ink-1 mt-1 leading-none">{c.value}</p>
               </div>
-            </div>
+            </Link>
           </motion.div>
         ))}
       </div>
@@ -132,19 +132,17 @@ function SuperAdminDashboard() {
 
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
         {[
-          { type: 'active-agents',      label: 'Active Agents',       value: stats.activeAgents,        color: 'border-l-gold-1' },
-          { type: 'active-policies',    label: 'Active Policies',     value: stats.activePlans,         color: 'border-l-ok' },
-          { type: 'approved-promotions',label: 'Approved Promotions', value: stats.promotionsCount,     color: 'border-l-gold' },
-          { type: 'import-errors',      label: 'Pending Import Errors',value: stats.pendingImportErrors,color: 'border-l-danger' },
+          { type: 'active-agents',      label: 'Active Agents',       value: stats.activeAgents,        color: 'border-l-gold-1', link: '/admin/members?status=active' },
+          { type: 'active-policies',    label: 'Active Policies',     value: stats.activePlans,         color: 'border-l-ok', link: '/admin/policies?status=active' },
+          { type: 'approved-promotions',label: 'Approved Promotions', value: stats.promotionsCount,     color: 'border-l-gold', link: '/admin/promotions?status=approved' },
+          { type: 'import-errors',      label: 'Pending Import Errors',value: stats.pendingImportErrors,color: 'border-l-danger', link: '/admin/import/history' },
         ].map((c) => (
-          <div key={c.type} onClick={() => setActiveMetricType(c.type)} className={`card p-4 border-l-2 ${c.color} cursor-pointer hover:bg-navy-2/30 transition-all`}>
+          <Link to={c.link} key={c.type} className={`card p-4 border-l-2 ${c.color} cursor-pointer hover:bg-navy-2/30 transition-all block`}>
             <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2 block">{c.label}</span>
             <span className="text-xl font-bold font-serif text-ink-1 mt-1 block">{c.value}</span>
-          </div>
+          </Link>
         ))}
       </div>
-
-      <MetricDetailModal open={activeMetricType !== null} metricType={activeMetricType} onClose={() => setActiveMetricType(null)} />
     </div>
   )
 }
@@ -267,10 +265,18 @@ function AgentDashboard() {
     const activeCustomers = customers.length
 
     // Personal business = sum of totalAmount from all my sold policies
-    const personalBusiness  = policies.reduce((s, p) => s + (p.totalAmount || p.businessVolume || 0), 0)
+    const personalBusiness  = policies.reduce((s, p) => {
+      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
+      const vol = p.totalAmount || p.businessVolume || (isRD ? (p.monthlyAmount * 12) : p.fdAmount) || 0
+      return s + vol
+    }, 0)
     const monthBusiness     = policies
-      .filter(p => toDate(p.createdAt) >= monthStart)
-      .reduce((s, p) => s + (p.totalAmount || p.businessVolume || 0), 0)
+      .filter(p => toDate(p.startDate || p.date || p.createdAt) >= monthStart)
+      .reduce((s, p) => {
+        const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
+        const vol = p.totalAmount || p.businessVolume || (isRD ? (p.monthlyAmount * 12) : p.fdAmount) || 0
+        return s + vol
+      }, 0)
 
     const pendingPayout = (pendingPayouts.data || []).reduce((s, p) => s + (p.totalPayable || 0), 0)
     const lastPaidPayout = (myPayouts.data || []).find(p => p.status === 'paid')
@@ -282,8 +288,12 @@ function AgentDashboard() {
       const mo = startOfMonth(d)
       const moEnd = startOfMonth(subMonths(d, -1))
       const biz = policies
-        .filter(p => { const cd = toDate(p.createdAt); return cd >= mo && cd < moEnd })
-        .reduce((s, p) => s + (p.totalAmount || p.businessVolume || 0), 0)
+        .filter(p => { const cd = toDate(p.startDate || p.date || p.createdAt); return cd >= mo && cd < moEnd })
+        .reduce((s, p) => {
+          const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
+          const vol = p.totalAmount || p.businessVolume || (isRD ? (p.monthlyAmount * 12) : p.fdAmount) || 0
+          return s + vol
+        }, 0)
       const earn = commissions
         .filter(c => { const cd = toDate(c.calculationDate); return cd >= mo && cd < moEnd })
         .reduce((s, c) => s + (c.amount || 0), 0)
@@ -346,7 +356,7 @@ function AgentDashboard() {
         type: 'policy',
         title: 'New Policy Generated',
         desc: `Policy #${p.policyNumber} for ${p.customerName || 'Customer'}`,
-        date: p.createdAt,
+        date: p.startDate || p.date || p.createdAt,
         badge: '🟢 Active'
       })
     })
@@ -464,17 +474,18 @@ function AgentDashboard() {
       {/* ── Today's Summary Row ────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: 'Personal Business', value: formatINR(metrics.personalBusiness), color: 'border-t-gold-1' },
-          { label: 'Team Business', value: formatINR(profile?.teamBusiness || profile?.stats?.teamBusiness || 0), color: 'border-t-emerald-500' },
-          { label: 'MTD Commissions', value: formatINR(metrics.monthEarnings), color: 'border-t-cyan-500' },
-          { label: 'Lifetime Commissions', value: formatINR(metrics.lifetimeEarnings), color: 'border-t-violet-500' },
-          { label: 'Active Customers', value: metrics.activeCustomers, color: 'border-t-amber-500' },
-          { label: 'Active Team Members', value: totalTeam.data?.length || 0, color: 'border-t-rose-500' }
+          { label: 'Personal Business', value: formatINR(metrics.personalBusiness), color: 'border-t-gold-1', link: '/reports/collections' },
+          { label: 'Team Business', value: formatINR(profile?.teamBusiness || profile?.stats?.teamBusiness || 0), color: 'border-t-emerald-500', link: '/my-downline' },
+          { label: 'MTD Commissions', value: formatINR(metrics.monthEarnings), color: 'border-t-cyan-500', link: '/my-earnings' },
+          { label: 'Lifetime Commissions', value: formatINR(metrics.lifetimeEarnings), color: 'border-t-violet-500', link: '/my-earnings' },
+          { label: 'Active Customers', value: metrics.activeCustomers, color: 'border-t-amber-500', link: '/customers' },
+          { label: 'Active Team Members', value: totalTeam.data?.length || 0, color: 'border-t-rose-500', link: '/my-downline?status=active' }
         ].map((c, i) => (
-          <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            className={`card p-4 border-t-4 ${c.color} bg-navy-3 flex flex-col justify-between h-24`}>
-            <span className="text-[9px] font-bold uppercase tracking-wider text-ink-2 block leading-snug">{c.label}</span>
-            <span className="text-lg font-bold font-serif text-ink-1 block mt-2">{c.value}</span>
+          <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+            <Link to={c.link} className={`card p-4 border-t-4 ${c.color} bg-navy-3 flex flex-col justify-between h-24 hover:bg-navy-2/50 transition-all block`}>
+              <span className="text-[9px] font-bold uppercase tracking-wider text-ink-2 block leading-snug">{c.label}</span>
+              <span className="text-lg font-bold font-serif text-ink-1 block mt-2">{c.value}</span>
+            </Link>
           </motion.div>
         ))}
       </div>
