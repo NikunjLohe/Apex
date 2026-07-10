@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useCollection } from '../../hooks/useFirestore'
 import { paymentSchema } from '../../lib/schemas'
 import { recordPayment } from '../../lib/payments'
+import { isRD } from '../../data/compensation'
 import { formatINR, fmtDate, toDate, daysBetween } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -128,16 +129,34 @@ function PlanPicker({ customer, onBack, onSelect }) {
             const due = toDate(p.nextDueDate)
             const overdue = due && due < new Date()
             const daysLate = overdue ? daysBetween(new Date(), due) : 0
+            
+            const isRDPlan = isRD(p.type)
+            const isFullyPaid = isRDPlan 
+              ? (p.paidInstallments || 0) >= (p.totalInstallments || 1)
+              : (p.paidInstallments || 0) >= 1
+              
+            const fullyPaidMsg = isRDPlan ? 'This policy has been fully paid.' : 'This Fixed Deposit has already been paid.'
+
             return (
-              <button key={p.id} type="button" onClick={() => onSelect(p)} className="card p-4 text-left transition-colors hover:border-gold-1/50">
+              <button 
+                key={p.id} 
+                type="button" 
+                onClick={() => onSelect(p)} 
+                disabled={isFullyPaid}
+                className={`card p-4 text-left transition-colors ${isFullyPaid ? 'opacity-60 cursor-not-allowed bg-navy-2/30' : 'hover:border-gold-1/50'}`}
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-ink-1">{p.type}</span>
-                  <StatusBadge status={overdue ? 'overdue' : 'active'} />
+                  <StatusBadge status={isFullyPaid ? 'matured' : overdue ? 'overdue' : 'active'} />
                 </div>
                 <p className="mt-1 text-sm text-ink-2">{formatINR(p.monthlyAmount || p.fdAmount)} · {p.paidInstallments}/{p.totalInstallments}</p>
-                <p className={`mt-1 text-xs ${overdue ? 'text-danger' : 'text-ink-2'}`}>
-                  Next due {fmtDate(p.nextDueDate)}{overdue ? ` · ${daysLate}d overdue` : ''}
-                </p>
+                {isFullyPaid ? (
+                  <p className="mt-2 text-xs font-medium text-ok">{fullyPaidMsg}</p>
+                ) : (
+                  <p className={`mt-1 text-xs ${overdue ? 'text-danger' : 'text-ink-2'}`}>
+                    Next due {fmtDate(p.nextDueDate)}{overdue ? ` · ${daysLate}d overdue` : ''}
+                  </p>
+                )}
               </button>
             )
           })}

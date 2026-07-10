@@ -41,6 +41,15 @@ export async function recordPayment({ plan, customer, agent, form }) {
     const planSnap = await tx.get(planRef)
     if (!planSnap.exists()) throw new Error('Plan not found')
     const p = planSnap.data()
+    const isRDPlan = isRD(p.type)
+
+    if (isRDPlan && (p.paidInstallments || 0) >= (p.totalInstallments || 1)) {
+      throw new Error('This policy has been fully paid.')
+    }
+    if (!isRDPlan && (p.paidInstallments || 0) >= 1) {
+      const typeName = p.type.toUpperCase().startsWith('PENS') ? 'Pension' : 'Fixed Deposit'
+      throw new Error(`This ${typeName} has already been paid.`)
+    }
 
     const installmentNumber = (p.paidInstallments || 0) + 1
     const newTotalPaid = (p.totalPaid || 0) + Number(form.amount)
@@ -51,7 +60,6 @@ export async function recordPayment({ plan, customer, agent, form }) {
     const calculationDate = new Date()
     const monthNum = paidDate.getMonth() + 1
     const yearNum = paidDate.getFullYear()
-    const isRDPlan = isRD(p.type)
     
     // Prevent duplicate commission for installment 1 if it was already generated (e.g., via Excel Import)
     const skipCommission = (installmentNumber === 1 && p.commissionCalculated === true)
