@@ -39,6 +39,7 @@ export default defineConfig({
     // ── Setup: creates persistent auth states ──────────────────────────────
     {
       name: 'setup',
+      testDir: './tests',
       testMatch: /global\.setup\.js/,
     },
 
@@ -50,7 +51,7 @@ export default defineConfig({
         storageState: 'tests/.auth/superadmin.json',
       },
       dependencies: ['setup'],
-      testIgnore: ['**/auth.spec.js'],
+      testIgnore: ['**/01-auth.spec.js', '**/02-role-permissions.spec.js'],
     },
 
     // ── Auth tests (no saved state — start unauthenticated) ───────────────

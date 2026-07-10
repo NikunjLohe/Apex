@@ -85,9 +85,7 @@ test.describe('Authentication', () => {
   test('AUTH-011 | Session persists after page reload', async ({ page }) => {
     const login = new LoginPage(page)
     await login.loginAndWaitForDashboard(CREDENTIALS.superAdmin.email, CREDENTIALS.superAdmin.password)
-    const urlBefore = page.url()
     await page.reload()
-    await page.waitForLoadState('networkidle')
-    await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 })
+    await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 })
   })
 })

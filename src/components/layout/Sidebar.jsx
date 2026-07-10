@@ -50,7 +50,8 @@ const ADMIN_GROUPS = [
   {
     title: 'Operations',
     items: [
-      { to: '/admin/import',     label: 'Import Center',  Icon: IDoc,    cap: CAP.SUPER_ADMIN },
+      { to: '/admin/import',     label: 'New Business',   Icon: IDoc,    cap: CAP.SUPER_ADMIN },
+      { to: '/admin/payment-import', label: 'Payment Engine', Icon: ICash, cap: CAP.SUPER_ADMIN },
       { to: '/admin/payouts',    label: 'Payout Engine',  Icon: ICash,   cap: CAP.SUPER_ADMIN },
       { to: '/admin/promotions', label: 'Promotion Engine', Icon: ITrophy, cap: CAP.SUPER_ADMIN },
     ],

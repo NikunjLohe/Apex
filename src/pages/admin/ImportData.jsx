@@ -25,7 +25,8 @@ import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IPlus, IClock, IAlert, ICheck, IClose } from '../../components/ui/icons'
 import { Link } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
-import { calculateCommissions } from '../../lib/commissionEngine'
+import { recordPayment } from '../../lib/payments'
+import { computePlan } from '../../lib/calc'
 
 const DEFAULT_MDA = []
 const DEFAULT_FD_PENSION = []
@@ -423,6 +424,7 @@ export default function ImportData() {
     for (let i = 0; i < validRows.length; i += batchSize) {
       const chunk = validRows.slice(i, i + batchSize)
       const batch = writeBatch(db)
+      const createdPolicies = []
 
       for (const row of chunk) {
         try {
@@ -445,26 +447,41 @@ export default function ImportData() {
             createdAt: serverTimestamp(),
           })
 
-          // 2. Create Policy (Plan doc)
+          // 2. Compute plan fields and Create Policy (Plan doc)
           const policyRef = doc(collection(db, 'plans'))
           const isRDPlan = row.planType === 'RD'
           const calculatedAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
+
+          const computed = computePlan({
+            type: row.planCode,
+            monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
+            fdAmount: !isRDPlan ? row.totalAmount : 0,
+            startDate: row.startDate || new Date(),
+            ranksConfig,
+          })
 
           batch.set(policyRef, {
             customerId: customerDocId,
             customerName: row.customerName,
             customerAccount: row.customerId,
             policyNumber: row.policyNumber,
+            planAccountNumber: row.policyNumber,
             agentId: agentRef.id,
             agentName: agentRef.name,
             branchId: agentRef.branchId || null,
             type: row.planCode,
             planType: row.planType,
-            monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
-            fdAmount: !isRDPlan ? row.totalAmount : 0,
-            startDate: row.startDate,
+            monthlyAmount: computed.monthlyAmount,
+            fdAmount: computed.fdAmount,
+            totalInstallments: computed.totalInstallments,
+            paidInstallments: 0,
+            startDate: computed.startDate,
+            maturityDate: computed.maturityDate,
+            nextDueDate: computed.startDate,
             status: 'active',
-            commissionCalculated: true,
+            totalPaid: 0,
+            maturityAmount: computed.maturityAmount,
+            ratePct: computed.ratePct,
             createdAt: serverTimestamp(),
           })
 
@@ -477,67 +494,53 @@ export default function ImportData() {
             recentImportDate: serverTimestamp(),
           })
 
-          // 4. Calculate Commissions (Hierarchical with compression)
-          const calculationDate = new Date()
-          const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
-          const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
-          const baseAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
-          
-          const commissionResults = calculateCommissions({
-            businessAmount: baseAmount,
-            plan: {
-              planCode: row.planCode,
-              planType: row.planType,
-              policyYear: 1
-            },
-            baseAgent: agentRef,
-            usersMap,
-            commissionMaster: commissionsConfig,
-            ranksList: ranksList,
-            customer: { id: customerDocId, name: row.customerName, account: row.customerId },
-            policyInfo: { id: policyRef.id, number: row.policyNumber },
-            monthNum,
-            yearNum
+          createdPolicies.push({
+            row,
+            policyId: policyRef.id,
+            customerId: customerDocId,
+            isRDPlan,
+            calculatedAmount,
           })
-
-          // Create ledger entries for each beneficiary
-          commissionResults.forEach(comm => {
-            const ledgerRef = doc(collection(db, 'commission_ledger'))
-            batch.set(ledgerRef, {
-              policyId: policyRef.id,
-              policyNumber: row.policyNumber,
-              customerName: row.customerName,
-              agentId: comm.agentId,
-              agentName: comm.agentName,
-              sponsorCode: comm.sponsorCode,
-              planCode: row.planCode,
-              type: 'commission',
-              commissionType: comm.commissionType === 'direct' ? 'Direct' : 'Differential',
-              originalAgentId: comm.originalAgentId,
-              percentage: comm.percentage,
-              amount: comm.amount,
-              businessAmount: baseAmount,
-              originalRank: comm.originalRank,
-              compression: comm.compression,
-              month: monthNum,
-              year: yearNum,
-              status: 'unpaid',
-              createdAt: serverTimestamp()
-            })
-            totalImportedCommissions += comm.amount
-          })
-
-          totalImportedBusiness += calculatedAmount
-          successCount++
         } catch (err) {
-          console.error('Failed importing row:', row, err)
+          console.error('Failed processing row for batch:', row, err)
           failedCount++
-          logs.push({ row: row.rowNum, level: 'error', message: `Database write failure: ${err.message}` })
+          logs.push({ row: row.rowNum, level: 'error', message: `Pre-processing error: ${err.message}` })
         }
       }
 
       try {
         await batch.commit()
+
+        // 4. Record Payment atomically for each created policy
+        await Promise.all(createdPolicies.map(async ({ row, policyId, customerId, isRDPlan, calculatedAmount }) => {
+          try {
+            const planRef = doc(db, 'plans', policyId)
+            const planSnap = await getDoc(planRef)
+            if (!planSnap.exists()) {
+              throw new Error('Plan not found after commit')
+            }
+            const p = planSnap.data()
+
+            await recordPayment({
+              plan: { id: policyId, ...p },
+              customer: { id: customerId, name: row.customerName, accountNumber: row.customerId },
+              agent: p.agentId ? { uid: p.agentId, name: p.agentName } : null,
+              form: {
+                amount: calculatedAmount,
+                paymentMode: 'bank_transfer',
+                transactionRef: 'INITIAL_IMPORT',
+                paidDate: row.startDate || new Date(),
+              }
+            })
+
+            totalImportedBusiness += calculatedAmount
+            successCount++
+          } catch (err) {
+            console.error('Failed to record payment for row:', row, err)
+            failedCount++
+            logs.push({ row: row.rowNum, level: 'error', message: `Initial payment recording failed: ${err.message}` })
+          }
+        }))
       } catch (err) {
         console.error('Batch commit failed:', err)
         failedCount += chunk.length

@@ -31,6 +31,7 @@ const BranchDetail = lazy(() => import('./pages/admin/BranchDetail'))
 const Overview = lazy(() => import('./pages/admin/Overview'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const ImportData = lazy(() => import('./pages/admin/ImportData'))
+const PaymentImport = lazy(() => import('./pages/admin/PaymentImport'))
 const ImportHistory = lazy(() => import('./pages/admin/ImportHistory'))
 const Payouts = lazy(() => import('./pages/admin/Payouts'))
 const CommissionBill = lazy(() => import('./pages/admin/CommissionBill'))
@@ -115,6 +116,7 @@ export default function App() {
               <Route path="/admin/branches" element={<Protected capability={CAP.ADMIN}><Branches /></Protected>} />
               <Route path="/admin/branches/:id" element={<Protected capability={CAP.ADMIN}><BranchDetail /></Protected>} />
               <Route path="/admin/import" element={<Protected capability={CAP.ADMIN}><ImportData /></Protected>} />
+              <Route path="/admin/payment-import" element={<Protected capability={CAP.ADMIN}><PaymentImport /></Protected>} />
               <Route path="/admin/import/history" element={<Protected capability={CAP.ADMIN}><ImportHistory /></Protected>} />
               <Route path="/admin/payouts" element={<Protected capability={CAP.ADMIN}><Payouts /></Protected>} />
               <Route path="/admin/commission-bill/:id" element={<Protected capability={CAP.ADMIN}><CommissionBill /></Protected>} />

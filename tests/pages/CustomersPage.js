@@ -12,7 +12,7 @@ export class CustomersPage {
 
   async goto() {
     await this.page.goto('/customers')
-    await this.page.waitForLoadState('networkidle')
+    await this.searchInput.waitFor({ timeout: 15_000 })
   }
 
   async search(term) {
@@ -27,7 +27,6 @@ export class CustomersPage {
 
   async openFirstRow() {
     await this.tableRows.first().click()
-    await this.page.waitForLoadState('networkidle')
   }
 }
 
