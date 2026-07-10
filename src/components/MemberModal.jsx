@@ -54,7 +54,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
     return 1
   }, [isEdit, m?.rank])
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm({
     resolver: zodResolver(memberSchema),
     defaultValues: {
       name: m?.name || '',
@@ -73,6 +73,8 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       panNumber: m?.panNumber || '',
     },
   })
+
+  const sponsorCodeInputVal = watch('sponsorCodeInput')
 
   // Fetch performance data if in edit mode
   useEffect(() => {
@@ -127,15 +129,32 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
+  const selectedSponsor = useMemo(() => {
+    if (!isSuperAdmin) return null
+    if (!sponsorCodeInputVal || !members) return null
+    const clean = sponsorCodeInputVal.trim().toUpperCase()
+    return members.find(u => u.sponsorCode?.toUpperCase() === clean) || null
+  }, [sponsorCodeInputVal, members, isSuperAdmin])
+
   // Filter allowed ranks
   const activeRanks = useMemo(() => {
     let list = RANKS.filter(r => r.status !== 'inactive' || r.rank === m?.rank)
-    if (!isSuperAdmin && profile?.rank) {
+    if (isSuperAdmin) {
+      if (selectedSponsor) {
+        list = list.filter(r => r.rank < selectedSponsor.rank || r.rank === m?.rank)
+      } else {
+        if (isEdit && m?.rank) {
+          list = list.filter(r => r.rank === m.rank)
+        } else {
+          return []
+        }
+      }
+    } else if (profile?.rank) {
       // Agent may ONLY recruit ranks strictly BELOW their own rank
       list = list.filter(r => r.rank < profile.rank)
     }
     return list
-  }, [RANKS, m?.rank, isSuperAdmin, profile?.rank])
+  }, [RANKS, m?.rank, isSuperAdmin, selectedSponsor, profile?.rank, isEdit])
 
   const submit = async (form) => {
     setSaving(true)
@@ -176,20 +195,23 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         finalReferredBy = profile?.uid || null
       } else {
         const sponsorCodeInput = form.sponsorCodeInput?.trim()
-        if (sponsorCodeInput) {
-          if (isEdit && sponsorCodeInput === m.sponsorCode) {
-            toast.error('Agent cannot sponsor themselves')
-            setSaving(false)
-            return
-          }
-          const sponsorObj = (members || []).find(u => u.sponsorCode === sponsorCodeInput)
-          if (!sponsorObj) {
-            toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
-            setSaving(false)
-            return
-          }
-          finalReferredBy = sponsorObj.id
+        if (!sponsorCodeInput) {
+          toast.error('Sponsor ID is required')
+          setSaving(false)
+          return
         }
+        if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
+          toast.error('Agent cannot sponsor themselves')
+          setSaving(false)
+          return
+        }
+        const sponsorObj = (members || []).find(u => u.sponsorCode?.toUpperCase() === sponsorCodeInput.toUpperCase())
+        if (!sponsorObj) {
+          toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
+          setSaving(false)
+          return
+        }
+        finalReferredBy = sponsorObj.id
       }
 
       form.referredBy = finalReferredBy
@@ -334,9 +356,18 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                 </div>
                 <div>
                   <label className="label">Rank</label>
-                  <select className="field" {...register('rank', { valueAsNumber: true })}>
-                    {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
+                  <select 
+                    className="field" 
+                    disabled={!selectedSponsor}
+                    {...register('rank', { valueAsNumber: true })}
+                  >
+                    {!selectedSponsor ? (
+                      <option value="">— Enter a valid Sponsor ID first —</option>
+                    ) : (
+                      activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)
+                    )}
                   </select>
+                  {errors.rank && <p className="err">{errors.rank.message}</p>}
                 </div>
               </>
             ) : (
@@ -382,10 +413,19 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                 <label className="label">Sponsor ID</label>
                 <input 
                   className="field font-mono uppercase" 
-                  placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001 (leave blank for top)`}
+                  placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
                   autoComplete="off"
                   {...register('sponsorCodeInput')} 
                 />
+                {selectedSponsor ? (
+                  <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
+                    ✓ Sponsor: {selectedSponsor.name} ({getRank(selectedSponsor.rank).code})
+                  </p>
+                ) : sponsorCodeInputVal?.trim() ? (
+                  <p className="text-danger text-[10px] mt-1 font-semibold">
+                    ✗ Invalid Sponsor ID
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div>
@@ -732,18 +772,37 @@ export default function MemberModal({ modal, branches, members, settings, onClos
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Rank</label>
-                  <select className="field" disabled={!isSuperAdmin} {...register('rank')}>
-                    {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
+                  <select 
+                    className="field" 
+                    disabled={!isSuperAdmin || (!selectedSponsor && !isEdit)} 
+                    {...register('rank', { valueAsNumber: true })}
+                  >
+                    {!selectedSponsor && !isEdit ? (
+                      <option value="">— Enter a valid Sponsor ID first —</option>
+                    ) : (
+                      activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)
+                    )}
                   </select>
+                  {errors.rank && <p className="err">{errors.rank.message}</p>}
                 </div>
                 <div>
                   <label className="label">Sponsor ID (Agent Code)</label>
                   <input 
                     className="field font-mono uppercase" 
-                    placeholder="e.g. AG000001 (leave blank for top)" 
+                    placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`} 
                     disabled={!isSuperAdmin}
                     {...register('sponsorCodeInput')} 
                   />
+                  {isSuperAdmin && selectedSponsor && (
+                    <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
+                      ✓ Sponsor: {selectedSponsor.name} ({getRank(selectedSponsor.rank).code})
+                    </p>
+                  )}
+                  {isSuperAdmin && !selectedSponsor && sponsorCodeInputVal?.trim() && (
+                    <p className="text-danger text-[10px] mt-1 font-semibold">
+                      ✗ Invalid Sponsor ID
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

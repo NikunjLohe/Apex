@@ -130,4 +130,62 @@ test.describe('Handover Verification Spec', () => {
     expect(pageContent).not.toContain('Recruit Agent')
     console.log('PASS: Recruit Agent button successfully hidden in My Downline page for Rank 1 agent!')
   })
+
+  test('Verify Super Admin Add Member validation rules and sponsor requirements', async ({ superAdminPage }) => {
+    // 1. Visit Members page
+    await superAdminPage.goto(ROUTES.members)
+    await superAdminPage.waitForSelector('table.tbl')
+
+    // Find a valid sponsor code from the list
+    const agentCodeCell = superAdminPage.locator('tbody tr td').filter({ hasText: /^[A-Z]+\d+/i }).first()
+    const validSponsorCode = (await agentCodeCell.innerText()).trim()
+    console.log(`Found a valid sponsor code in table: ${validSponsorCode}`)
+
+    await superAdminPage.click('button:has-text("Add Member")')
+    await superAdminPage.waitForSelector('text=Add member')
+
+    // 2. Verify Sponsor ID is initially blank
+    const sponsorInput = superAdminPage.locator('input[name="sponsorCodeInput"]')
+    await expect(sponsorInput).toHaveValue('')
+
+    // 3. Attempt creation with blank sponsor and check error toast
+    const uniquePhone = '97' + Math.floor(10000000 + Math.random() * 90000000)
+    const uniquePan = `PANSV${Math.floor(1000 + Math.random() * 9000)}X`
+    await superAdminPage.fill('input[name="name"]', 'Super Admin Child Agent')
+    await superAdminPage.fill('input[name="phone"]', uniquePhone)
+    await superAdminPage.fill('input[name="panNumber"]', uniquePan)
+
+    await superAdminPage.click('button:has-text("Create")')
+    const errToast = superAdminPage.locator('[role="status"]:has-text("Sponsor ID is required")').first()
+    await expect(errToast).toBeVisible({ timeout: 10000 })
+    console.log('PASS: Blank Sponsor ID successfully rejected!')
+
+    // 4. Fill invalid sponsor ID and verify indicator
+    await sponsorInput.fill('INVALID')
+    const invalidText = superAdminPage.locator('text=Invalid Sponsor ID')
+    await expect(invalidText).toBeVisible()
+    console.log('PASS: Invalid Sponsor ID text feedback verified!')
+
+    // 5. Fill a valid sponsor ID and verify confirmation text and rank dropdown limits
+    await sponsorInput.fill(validSponsorCode)
+    const validText = superAdminPage.locator('text=Sponsor:')
+    await expect(validText).toBeVisible()
+    console.log('PASS: Sponsor name confirmation resolved successfully!')
+
+    // Verify Rank dropdown has values and is enabled
+    const rankDropdown = superAdminPage.locator('select[name="rank"]')
+    await expect(rankDropdown).toBeEnabled()
+    
+    // Choose rank and create successfully
+    await rankDropdown.selectOption({ index: 0 })
+    await superAdminPage.click('button:has-text("Create")')
+
+    // Wait for the credentials welcome popup
+    await superAdminPage.waitForSelector('text=Agent Onboarded Successfully', { timeout: 20000 })
+    console.log('Super Admin successfully recruited agent under valid sponsor!')
+
+    // Click Copy Credentials to close
+    await superAdminPage.click('button:has-text("Copy Credentials")')
+    await superAdminPage.waitForSelector('text=Credentials copied to clipboard')
+  })
 })
