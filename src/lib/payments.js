@@ -34,7 +34,7 @@ export async function recordPayment({ plan, customer, agent, form }) {
 
   const usersMap = {}
   usersSnap.forEach(d => { usersMap[d.id] = { id: d.id, ...d.data() } })
-  const commissionMaster = configSnap.exists() ? configSnap.data() : {}
+  const commissionMaster = configSnap.exists() ? (configSnap.data().commissions || configSnap.data()) : {}
   const ranksList = ranksSnap.exists() ? (ranksSnap.data().ranks || []) : []
 
   await runTransaction(db, async (tx) => {
