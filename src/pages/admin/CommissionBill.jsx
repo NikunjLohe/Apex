@@ -526,7 +526,7 @@ export default function CommissionBill() {
                           <span className="block font-medium">{c.originalAgentId ? (usersMap[c.originalAgentId]?.name || '—') : c.agentName}</span>
                           <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{c.sponsorCode || '—'}</span>
                         </td>
-                        <td className="py-3 px-3 text-center font-mono">{(Number(c.percentage || 0) * 100).toFixed(1)}%</td>
+                        <td className="py-3 px-3 text-center font-mono">{Number(c.percentage || 0).toFixed(2)}%</td>
                         <td className="py-3 px-3 text-right font-bold text-gray-800">{formatINR(c.amount)}</td>
                         <td className="py-3 px-3 text-center uppercase">
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
@@ -567,7 +567,7 @@ export default function CommissionBill() {
                                       {lvl.isOccupied ? (
                                         <div className="truncate">
                                           <span className={lvl.isReceiver ? 'text-gold-900 font-black' : 'text-gray-900'}>{lvl.agentName}</span>
-                                          {lvl.amount > 0 && <span className="text-[9px] text-green-600 font-bold block mt-0.5">+{formatINR(lvl.amount)} ({(Number(lvl.percentage) * 100).toFixed(1)}%)</span>}
+                                          {lvl.amount > 0 && <span className="text-[9px] text-green-600 font-bold block mt-0.5">+{formatINR(lvl.amount)} ({Number(lvl.percentage || 0).toFixed(2)}%)</span>}
                                         </div>
                                       ) : <span>—</span>}
                                     </div>
@@ -719,7 +719,7 @@ export default function CommissionBill() {
                               <td className="py-2.5 px-3 font-medium">{rInfo.code} - {rInfo.name}</td>
                               <td className="py-2.5 px-3">{lvl.agentName}</td>
                               <td className="py-2.5 px-3 font-mono">{lvl.sponsorCode || lvl.agentCode || '—'}</td>
-                              <td className="py-2.5 px-3 text-center font-mono">{(Number(lvl.percentage || 0) * 100).toFixed(1)}%</td>
+                              <td className="py-2.5 px-3 text-center font-mono">{Number(lvl.percentage || 0).toFixed(2)}%</td>
                               <td className="py-2.5 px-3 text-right font-bold text-gray-800">{formatINR(lvl.amount)}</td>
                               <td className="py-2.5 px-3 text-center uppercase"><span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{lvl.commissionType === 'Direct' || lvl.commissionType === 'direct' || lvl.commissionType === 'direct_own' ? 'Direct' : 'Upline Commission'}</span></td>
                               <td className="py-2.5 px-3 text-center uppercase"><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${lvl.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{lvl.status}</span></td>

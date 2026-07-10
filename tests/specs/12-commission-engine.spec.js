@@ -12,8 +12,8 @@ test.describe('Commission Engine', () => {
     await expect(agentPage.locator('h1')).toHaveText(/Earnings/)
     
     // Check for KPI cards showing earnings amounts
-    await expect(agentPage.locator('text=Unpaid')).toBeVisible()
-    await expect(agentPage.locator('text=Paid')).toBeVisible()
+    await expect(agentPage.locator('text=Pending Commission').first()).toBeVisible()
+    await expect(agentPage.locator('text=Paid Commission').first()).toBeVisible()
   })
 
   test('COM-002 | Agent can see commission ledger', async ({ agentPage }) => {

@@ -21,10 +21,10 @@ test.describe('Settings Module', () => {
   test('SET-003 | Settings page has required tabs', async ({ adminPage }) => {
     await adminPage.goto(ROUTES.settings)
     
-    await expect(adminPage.locator('text=Company Info')).toBeVisible()
+    await expect(adminPage.locator('text=System Settings')).toBeVisible()
     await expect(adminPage.locator('text=Rank Master')).toBeVisible()
     await expect(adminPage.locator('text=Plan Master')).toBeVisible()
-    await expect(adminPage.locator('text=Commissions')).toBeVisible()
+    await expect(adminPage.locator('text=Commission Master')).toBeVisible()
   })
 
 })

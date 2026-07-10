@@ -616,7 +616,7 @@ export default function MyEarnings() {
                         {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}
                       </span>
                     </td>
-                    <td className="text-ink-2 font-mono">{log.percentage ? `${(Number(log.percentage) * 100).toFixed(1)}%` : '—'}</td>
+                    <td className="text-ink-2 font-mono">{log.percentage ? `${Number(log.percentage).toFixed(2)}%` : '—'}</td>
                     <td className="text-right font-bold text-gold">{formatINR(log.amount)}</td>
                     <td className="text-center">
                       <button
@@ -741,7 +741,7 @@ export default function MyEarnings() {
                         </div>
                         <div>
                           <span className="text-gray-500 block uppercase">Configured %</span>
-                          <span className="font-bold text-gray-800 text-xs block mt-0.5">{(Number(selectedComm.percentage || 0) * 100).toFixed(1)}%</span>
+                          <span className="font-bold text-gray-800 text-xs block mt-0.5">{Number(selectedComm.percentage || 0).toFixed(2)}%</span>
                         </div>
                         <div>
                           <span className="text-gray-500 block uppercase">Commission Earned</span>
@@ -832,7 +832,7 @@ export default function MyEarnings() {
                                       <span className={isReceiver ? 'text-gold-900 font-black' : 'text-gray-900'}>{c.agentName}</span>
                                       <span className="text-[9px] text-gray-400 font-mono block">{c.sponsorCode || '—'}</span>
                                     </td>
-                                    <td className="py-2 px-3 text-center font-mono">{(Number(c.percentage || 0) * 100).toFixed(1)}%</td>
+                                    <td className="py-2 px-3 text-center font-mono">{Number(c.percentage || 0).toFixed(2)}%</td>
                                     <td className="py-2 px-3 text-right font-bold text-gray-800">{formatINR(c.amount)}</td>
                                     <td className="py-2 px-3 text-center uppercase">
                                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">

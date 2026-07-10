@@ -57,6 +57,8 @@ export default function Settings() {
   const [selectedYear, setSelectedYear] = useState(1)
   const [commissionsState, setCommissionsState] = useState({})
   const [savingCommissions, setSavingCommissions] = useState(false)
+  const [focusedRankCode, setFocusedRankCode] = useState(null)
+  const [tempRateValue, setTempRateValue] = useState('')
 
   // Promotion rules state
   const [promotionsState, setPromotionsState] = useState({})
@@ -729,7 +731,11 @@ export default function Settings() {
                     </thead>
                     <tbody>
                       {currentRanks.map((r) => {
-                        const rate = commissionsState[selectedPlanCode]?.[selectedYear]?.[r.code] || 0
+                        const rate = commissionsState[selectedPlanCode]?.[selectedYear]?.[r.code] ?? 0
+                        const isFocused = focusedRankCode === r.code
+                        const displayValue = isFocused 
+                          ? tempRateValue 
+                          : (rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '0.00')
                         return (
                           <tr key={r.rank}>
                             <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
@@ -738,11 +744,21 @@ export default function Settings() {
                               <div className="relative w-36">
                                 <input 
                                   type="number" 
-                                  step="0.1" 
+                                  step="0.01" 
                                   className="field font-mono py-1 text-center w-full pr-7" 
-                                  value={rate || ''} 
-                                  placeholder="0.0" 
-                                  onChange={(e) => handleCommissionChange(r.code, e.target.value)} 
+                                  value={displayValue} 
+                                  placeholder="0.00" 
+                                  onFocus={() => {
+                                    setFocusedRankCode(r.code)
+                                    setTempRateValue(rate ? rate.toString() : '')
+                                  }}
+                                  onBlur={() => {
+                                    setFocusedRankCode(null)
+                                  }}
+                                  onChange={(e) => {
+                                    setTempRateValue(e.target.value)
+                                    handleCommissionChange(r.code, e.target.value)
+                                  }} 
                                 />
                                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[10px] font-bold">%</span>
                               </div>
