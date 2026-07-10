@@ -53,8 +53,11 @@ export async function recordPayment({ plan, customer, agent, form }) {
     const yearNum = paidDate.getFullYear()
     const isRDPlan = isRD(p.type)
     
+    // Prevent duplicate commission for installment 1 if it was already generated (e.g., via Excel Import)
+    const skipCommission = (installmentNumber === 1 && p.commissionCalculated === true)
+
     // Only generate FD/Pension commission on the first payment
-    if (isRDPlan || installmentNumber === 1) {
+    if (!skipCommission && (isRDPlan || installmentNumber === 1)) {
       const baseAgent = p.agentId && usersMap[p.agentId] ? usersMap[p.agentId] : null
       if (baseAgent) {
         const commissionResults = calculateCommissions({
