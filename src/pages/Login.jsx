@@ -4,6 +4,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../firebase'
 import Logo from '../components/ui/Logo'
 
 const friendly = (code) =>
@@ -16,6 +18,23 @@ const friendly = (code) =>
     'auth/network-request-failed': 'Network error. Check your connection.',
   })[code] || `Login failed (${code || 'unknown error'})`
 
+const ROUTE_CAPS = [
+  ['/admin/overview', 'superAdmin'],
+  ['/admin/all-reports', 'superAdmin'],
+  ['/admin/logs', 'superAdmin'],
+  ['/admin/members', 'admin'],
+  ['/admin/branches', 'admin'],
+  ['/admin/settings', 'admin'],
+  ['/admin/policies', 'admin'],
+  ['/admin/payouts', 'admin'],
+  ['/admin/promotions', 'admin'],
+  ['/admin/import', 'admin'],
+  ['/admin/customers', 'admin'],
+  ['/my-earnings', 'agentOnly'],
+  ['/my-downline', 'agentOnly'],
+  ['/cmd-awards', 'agentOnly'],
+]
+
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -26,15 +45,36 @@ export default function Login() {
     defaultValues: { remember: true },
   })
 
-  const redirect = () => navigate(location.state?.from?.pathname || '/dashboard', { replace: true })
-
   const submit = async ({ email, password, remember }) => {
     setIsSubmitting(true)
     const toastId = toast.loading('Authenticating security credentials...')
     try {
-      await loginWithEmail(email.trim(), password, remember)
+      const cred = await loginWithEmail(email.trim(), password, remember)
+      
+      // Perform security check to make sure redirect destination is allowed
+      let allowed = true
+      const targetPath = location.state?.from?.pathname
+      if (targetPath) {
+        const userDoc = await getDoc(doc(db, 'users', cred.user.uid))
+        const userData = userDoc.exists() ? userDoc.data() : null
+        const r = Number(userData?.rank) || 0
+        const isSuper = Boolean(userData?.isSuperAdmin)
+        
+        const match = ROUTE_CAPS.find(([p]) => targetPath.startsWith(p))
+        if (match) {
+          const cap = match[1]
+          if (cap === 'superAdmin') {
+            allowed = isSuper
+          } else if (cap === 'admin') {
+            allowed = isSuper || (r >= 14 && r <= 18)
+          } else if (cap === 'agentOnly') {
+            allowed = !isSuper && r >= 1
+          }
+        }
+      }
+
       toast.success('Access Granted. Welcome to APEX.', { id: toastId })
-      redirect()
+      navigate(allowed ? (targetPath || '/dashboard') : '/dashboard', { replace: true })
     } catch (e) {
       console.error('[APEX login error]', e)
       toast.error(friendly(e.code), { id: toastId })
