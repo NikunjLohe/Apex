@@ -70,6 +70,8 @@ export default function Settings() {
       headOffice: settingsData?.headOffice || '',
       supportPhone: settingsData?.supportPhone || '',
       receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
+      agentPrefix: settingsData?.agentPrefix || 'KB',
+      agentEmailDomain: settingsData?.agentEmailDomain || 'apex.local',
       enableAgentAlerts: settingsData?.enableAgentAlerts ?? true,
       enablePayoutAlerts: settingsData?.enablePayoutAlerts ?? true,
       enablePromoAlerts: settingsData?.enablePromoAlerts ?? true,
@@ -434,6 +436,16 @@ export default function Settings() {
                   <div>
                     <label className="label">Receipt footer</label>
                     <input className="field" value={systemForm.receiptFooter} onChange={(e) => setSystemForm({ ...systemForm, receiptFooter: e.target.value })} />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label">New Agent Code Prefix</label>
+                    <input className="field font-mono uppercase" maxLength={5} value={systemForm.agentPrefix} onChange={(e) => setSystemForm({ ...systemForm, agentPrefix: e.target.value.toUpperCase() })} />
+                  </div>
+                  <div>
+                    <label className="label">Auto-Generated Email Domain</label>
+                    <input className="field font-mono" placeholder="apex.local" value={systemForm.agentEmailDomain} onChange={(e) => setSystemForm({ ...systemForm, agentEmailDomain: e.target.value.toLowerCase() })} />
                   </div>
                 </div>
               </div>

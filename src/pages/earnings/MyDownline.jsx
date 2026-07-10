@@ -1,6 +1,4 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { getDoc, getDocs, doc, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -8,8 +6,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useCollection, useDoc } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import { useRanks } from '../../contexts/RanksContext'
-import { memberSchema } from '../../lib/schemas'
-import { createMember } from '../../lib/admin'
 import { formatINR, fmtDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -20,6 +16,7 @@ import { INetwork, IPlus, ITrophy, IDashboard, IUsers, IDownload } from '../../c
 import GenealogyTree from '../../components/ui/GenealogyTree'
 import * as xlsx from 'xlsx'
 import { useSearchParams } from 'react-router-dom'
+import MemberModal from '../../components/MemberModal'
 
 export default function MyDownline() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -78,7 +75,7 @@ export default function MyDownline() {
 
   const [activeTab, setActiveTab] = useState('members')
   const [showRecruit, setShowRecruit] = useState(false)
-  const [recruiting, setRecruiting] = useState(false)
+  const allUsers = useCollection('users')
   const [promoRules, setPromoRules] = useState(null)
 
   // Filters
@@ -92,14 +89,7 @@ export default function MyDownline() {
   const [exporting, setExporting] = useState(false)
   const [exportOption, setExportOption] = useState('Entire Downline')
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
-    resolver: zodResolver(memberSchema),
-    defaultValues: {
-      name: '', email: '', phone: '', rank: 1,
-      branchId: profile?.branchId || '', referredBy: uid || '', sponsorCode: '',
-      status: 'active', password: '', address: '', dob: '',
-    }
-  })
+
 
   useEffect(() => {
     (async () => {
@@ -161,53 +151,7 @@ export default function MyDownline() {
     return found?.name || '—'
   }
 
-  const handleRecruit = async (data) => {
-    setRecruiting(true)
-    try {
-      if (data.panNumber) data.panNumber = data.panNumber.toUpperCase()
 
-      const allSnaps = await getDocs(collection(db, 'users'))
-      const allUsers = allSnaps.docs.map(d => d.data())
-      
-      const existingPanUser = allUsers.find(u => u.panNumber === data.panNumber)
-      if (existingPanUser) {
-        toast.error('PAN number is already registered')
-        setRecruiting(false)
-        return
-      }
-
-      let maxId = 0
-      allUsers.forEach(member => {
-        if (member.sponsorCode) {
-          const numStr = member.sponsorCode.replace(/^[A-Z]+/i, '')
-          const num = parseInt(numStr, 10)
-          if (!isNaN(num) && num > maxId) maxId = num
-        }
-      })
-      const nextId = maxId + 1
-      const prefix = settings?.agentPrefix || 'KB'
-      data.sponsorCode = `${prefix}${String(nextId).padStart(6, '0')}`
-      data.referredBy = uid || ''
-      data.branchId = profile?.branchId || ''
-      data.rank = 1
-      data.status = 'active'
-
-      const tempPassword = data.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
-      await createMember(data, tempPassword)
-      
-      if (data.password) {
-        toast.success('Agent recruited successfully!')
-      } else {
-        toast.success(`Agent recruited! Temp password: ${tempPassword}`, { duration: 10000 })
-      }
-      reset()
-      setShowRecruit(false)
-    } catch (e) {
-      toast.error(e.code === 'auth/email-already-in-use' ? 'Email already in use' : e.message || 'Could not recruit agent')
-    } finally {
-      setRecruiting(false)
-    }
-  }
 
   // Filter Data
   const filteredDownline = useMemo(() => {
@@ -364,7 +308,7 @@ export default function MyDownline() {
           <p className="text-xs text-ink-2">Manage your sponsored agents, monitor genealogy trees, and view team business summaries.</p>
         </div>
         
-        {can(CAP.RECRUIT) && (
+        {can(CAP.RECRUIT) && profile?.rank > 1 && (
           <button
             type="button"
             onClick={() => setShowRecruit(true)}
@@ -597,59 +541,13 @@ export default function MyDownline() {
       )}
 
       {showRecruit && (
-        <ConfirmDialog 
-          open 
-          title="Recruit New Agent" 
-          confirmLabel="Recruit" 
-          loading={recruiting} 
-          onConfirm={handleSubmit(handleRecruit)} 
-          onClose={() => { reset(); setShowRecruit(false) }}
-        >
-          <form className="mt-3 space-y-3" onSubmit={handleSubmit(handleRecruit)}>
-            <div>
-              <label className="label">Full name</label>
-              <input className="field" {...register('name')} />
-              {errors.name && <p className="err">{errors.name.message}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Email</label>
-                <input className="field" type="email" {...register('email')} />
-                {errors.email && <p className="err">{errors.email.message}</p>}
-              </div>
-              <div>
-                <label className="label">Phone</label>
-                <input className="field" maxLength={10} {...register('phone')} />
-                {errors.phone && <p className="err">{errors.phone.message}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Date of Birth</label>
-                <input className="field" type="date" {...register('dob')} />
-                {errors.dob && <p className="err">{errors.dob.message}</p>}
-              </div>
-              <div>
-                <label className="label">PAN Number</label>
-                <input className="field font-mono uppercase" maxLength={10} placeholder="ABCDE1234F" {...register('panNumber')} />
-                {errors.panNumber && <p className="err">{errors.panNumber.message}</p>}
-              </div>
-            </div>
-            <div>
-              <label className="label">Temporary Password (optional)</label>
-              <input className="field" type="password" placeholder="Auto if blank" {...register('password')} />
-              {errors.password && <p className="err">{errors.password.message}</p>}
-            </div>
-            <div>
-              <label className="label">Address</label>
-              <textarea className="field h-16 resize-none" {...register('address')} />
-              {errors.address && <p className="err">{errors.address.message}</p>}
-            </div>
-            <p className="text-[11px] text-ink-2 italic bg-navy-2/30 p-2.5 rounded border border-navy-4">
-              Note: The recruited agent will join with the rank of <strong>AO (Administrative Officer)</strong> in your downline network.
-            </p>
-          </form>
-        </ConfirmDialog>
+        <MemberModal
+          modal={{ mode: 'new' }}
+          branches={branches || []}
+          members={allUsers.data || []}
+          settings={settings}
+          onClose={() => setShowRecruit(false)}
+        />
       )}
     </div>
   )

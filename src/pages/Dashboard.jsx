@@ -496,7 +496,7 @@ function AgentDashboard() {
           <ISettings size={13} /> Quick Actions
         </h3>
         <div className="flex flex-wrap gap-3">
-          {canRecruit && (
+          {canRecruit && profile?.rank > 1 && (
             <Link to="/my-downline" className="btn-gold py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
               <IPlus size={14} /> Add Member
             </Link>

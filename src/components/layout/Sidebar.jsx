@@ -22,8 +22,6 @@ const AGENT_GROUPS = [
     items: [
       { to: '/customers',          label: 'My Customers', Icon: IUsers, cap: null },
       { to: '/reports/collections', label: 'Collections',  Icon: IReport, cap: null },
-      { to: '/reports/defaulters',  label: 'Defaulters',   Icon: IAlert,  cap: null },
-      { to: '/reports/maturities',  label: 'Maturities',   Icon: ICalendar, cap: null },
     ],
   },
 ]
