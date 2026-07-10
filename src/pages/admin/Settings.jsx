@@ -743,21 +743,23 @@ export default function Settings() {
                             <td className="p-1 flex justify-center">
                               <div className="relative w-36">
                                 <input 
-                                  type="number" 
-                                  step="0.01" 
+                                  type="text" 
                                   className="field font-mono py-1 text-center w-full pr-7" 
                                   value={displayValue} 
                                   placeholder="0.00" 
                                   onFocus={() => {
                                     setFocusedRankCode(r.code)
-                                    setTempRateValue(rate ? rate.toString() : '')
+                                    setTempRateValue(rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '')
                                   }}
                                   onBlur={() => {
                                     setFocusedRankCode(null)
                                   }}
                                   onChange={(e) => {
-                                    setTempRateValue(e.target.value)
-                                    handleCommissionChange(r.code, e.target.value)
+                                    const val = e.target.value
+                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                      setTempRateValue(val)
+                                      handleCommissionChange(r.code, val)
+                                    }
                                   }} 
                                 />
                                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[10px] font-bold">%</span>
