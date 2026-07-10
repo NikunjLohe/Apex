@@ -1,10 +1,11 @@
-import { doc, collection, runTransaction, serverTimestamp } from 'firebase/firestore'
+import { doc, collection, runTransaction, serverTimestamp, getDocs, getDoc } from 'firebase/firestore'
 import { addMonths } from 'date-fns'
 import { db } from '../firebase'
 import { generateReceiptNumber } from './ids'
 import { toDate, daysBetween } from '../utils/format'
 import { isRD } from '../data/compensation'
 import { updateDashboardSummary } from './summary'
+import { calculateCommissions } from './commissionEngine'
 
 /**
  * Record a payment atomically:
@@ -21,8 +22,20 @@ export async function recordPayment({ plan, customer, agent, form }) {
   const isLate = daysLate > 0
 
   const planRef = doc(db, 'plans', plan.id)
-  const paymentRef = doc(collection(db, 'payments'))
   const receiptRef = doc(collection(db, 'receipts'))
+  const paymentRef = doc(collection(db, 'payments'))
+
+  // We need users, commission config, and ranks to calculate commissions
+  const [usersSnap, configSnap, ranksSnap] = await Promise.all([
+    getDocs(collection(db, 'users')),
+    getDoc(doc(db, 'config', 'commissions')),
+    getDoc(doc(db, 'config', 'ranks')),
+  ])
+
+  const usersMap = {}
+  usersSnap.forEach(d => { usersMap[d.id] = { id: d.id, ...d.data() } })
+  const commissionMaster = configSnap.exists() ? configSnap.data() : {}
+  const ranksList = ranksSnap.exists() ? (ranksSnap.data().ranks || []) : []
 
   await runTransaction(db, async (tx) => {
     const planSnap = await tx.get(planRef)
@@ -33,6 +46,36 @@ export async function recordPayment({ plan, customer, agent, form }) {
     const newTotalPaid = (p.totalPaid || 0) + Number(form.amount)
     const reachedMaturity = installmentNumber >= (p.totalInstallments || 1)
     const nextDue = isRD(p.type) && !reachedMaturity ? addMonths(toDate(p.nextDueDate) || paidDate, 1) : p.maturityDate
+
+    // Generate commission
+    const calculationDate = new Date()
+    const monthNum = paidDate.getMonth() + 1
+    const yearNum = paidDate.getFullYear()
+    const isRDPlan = isRD(p.type)
+    
+    // Only generate FD/Pension commission on the first payment
+    if (isRDPlan || installmentNumber === 1) {
+      const baseAgent = p.agentId && usersMap[p.agentId] ? usersMap[p.agentId] : null
+      if (baseAgent) {
+        const commissionResults = calculateCommissions({
+          businessAmount: Number(form.amount),
+          plan: { planCode: p.type, planType: p.planType || (isRDPlan ? 'RD' : 'FD'), policyYear: 1 },
+          baseAgent: baseAgent,
+          usersMap,
+          commissionMaster,
+          ranksList,
+          customer: { id: customer.id, name: customer.name, account: customer.accountNumber || p.planAccountNumber },
+          policyInfo: { id: plan.id, number: p.planAccountNumber },
+          monthNum,
+          yearNum,
+          installmentNumber
+        })
+        commissionResults.forEach(comm => {
+          const commRef = doc(collection(db, 'commission_ledger'))
+          tx.set(commRef, comm)
+        })
+      }
+    }
 
     tx.set(paymentRef, {
       planId: plan.id,

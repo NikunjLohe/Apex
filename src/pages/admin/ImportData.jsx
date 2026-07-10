@@ -481,7 +481,7 @@ export default function ImportData() {
           const calculationDate = new Date()
           const monthNum = row.startDate ? (row.startDate.getMonth() + 1) : (calculationDate.getMonth() + 1)
           const yearNum = row.startDate ? row.startDate.getFullYear() : calculationDate.getFullYear()
-          const baseAmount = isRDPlan ? (row.monthlyAmount * 12) : row.totalAmount
+          const baseAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
           
           const commissionResults = calculateCommissions({
             businessAmount: baseAmount,

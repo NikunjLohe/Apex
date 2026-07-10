@@ -30,6 +30,7 @@ export function calculateCommissions({
   policyInfo,
   monthNum,
   yearNum,
+  installmentNumber = 1,
 }) {
   const code = String(plan.planCode).toUpperCase()
   const yr = Number(plan.policyYear) || 1
@@ -74,7 +75,7 @@ export function calculateCommissions({
         planCode: code,
         planType: isRDPlan ? 'RD' : 'FD',
         policyYear: yr,
-        installment: 1, 
+        installment: installmentNumber, 
         
         businessAmount: businessAmount,
         percentage: rankRate * 100,
@@ -83,9 +84,9 @@ export function calculateCommissions({
         originalRank: baseAgent.rank,
         originalAgentId: baseAgent.id,
         
-        commissionType: isSeller ? 'direct' : 'differential_own', // Direct for seller, Differential for upline
+        commissionType: isSeller ? 'direct' : 'upline', // Direct for seller, Upline for sponsor
         compression: false,
-        compressionReason: isSeller ? `${rankCode} Commission (Direct)` : `${rankCode} Commission (Differential)`,
+        compressionReason: isSeller ? `${rankCode} Commission (Direct)` : `${rankCode} Commission (Upline Commission)`,
         compressedFromRank: null,
         
         month: monthNum,
