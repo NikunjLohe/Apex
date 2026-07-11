@@ -126,10 +126,15 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
   const selectedSponsor = useMemo(() => {
-    if (!sponsorCodeInputVal || !members) return null
+    // If blank: Super Admin has no sponsor, Agent defaults to themselves
+    if (!sponsorCodeInputVal?.trim()) {
+      if (!isSuperAdmin && profile) return profile  // agent defaults to self
+      return null
+    }
+    if (!members) return null
     const clean = sponsorCodeInputVal.trim().toUpperCase()
     return members.find(u => u.sponsorCode?.toUpperCase() === clean) || null
-  }, [sponsorCodeInputVal, members])
+  }, [sponsorCodeInputVal, members, isSuperAdmin, profile])
 
   const cannotRecruit = useMemo(() => {
     return selectedSponsor && Number(selectedSponsor.rank) === 1
@@ -139,16 +144,13 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   const activeRanks = useMemo(() => {
     let list = RANKS.filter(r => r.status !== 'inactive' || r.rank === m?.rank)
     if (selectedSponsor) {
-      // Sponsor entered: only ranks strictly below sponsor's rank
+      // Ranks strictly below the effective sponsor's rank
       list = list.filter(r => r.rank < selectedSponsor.rank || r.rank === m?.rank)
     } else if (isEdit && m?.rank) {
-      // Editing with no sponsor change: keep current rank only
       list = list.filter(r => r.rank === m.rank)
     } else if (!isEdit && isSuperAdmin) {
-      // Super Admin adding root agent (no sponsor) → all ranks available
-      // list stays as-is (all active ranks)
+      // Super Admin no sponsor → all ranks for root agent
     } else {
-      // Agent must have a sponsor
       return []
     }
     return list
@@ -190,13 +192,13 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       let finalReferredBy = null
       const sponsorCodeInput = form.sponsorCodeInput?.trim()
       if (!sponsorCodeInput) {
-        // Super Admin can create root agents with no sponsor
-        if (!isSuperAdmin) {
-          toast.error('Sponsor ID is required')
-          setSaving(false)
-          return
+        if (isSuperAdmin) {
+          // Super Admin + blank = root agent, no sponsor
+          finalReferredBy = null
+        } else {
+          // Agent + blank = recruit directly under themselves
+          finalReferredBy = profile?.uid || null
         }
-        // isSuperAdmin + blank sponsor → root agent, finalReferredBy stays null
       } else {
         if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
           toast.error('Agent cannot sponsor themselves')
@@ -334,7 +336,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         title="Add member" 
         confirmLabel="Create" 
         loading={saving} 
-        confirmDisabled={cannotRecruit || (!isSuperAdmin && !selectedSponsor)}
+        confirmDisabled={cannotRecruit || (sponsorCodeInputVal?.trim() && !selectedSponsor)}
         onConfirm={handleSubmit(submit)} 
         onClose={onClose}
       >
@@ -403,15 +405,11 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                 <div>
                   <label className="label">Rank</label>
                   <select 
-                    className="field" 
-                    disabled={!selectedSponsor}
+                    className="field"
                     {...register('rank', { valueAsNumber: true })}
                   >
-                    {!selectedSponsor ? (
-                      <option value="">— Enter a valid Sponsor ID first —</option>
-                    ) : (
-                      activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)
-                    )}
+                    <option value="">— Select a rank —</option>
+                    {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
                   </select>
                   {errors.rank && <p className="err">{errors.rank.message}</p>}
                 </div>
@@ -449,6 +447,11 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                 cannotRecruit ? (
                   <p className="text-danger text-[10px] mt-1 font-semibold">
                     ✗ This sponsor cannot recruit new members.
+                  </p>
+                ) : !isSuperAdmin && !sponsorCodeInputVal?.trim() ? (
+                  // Agent with blank sponsor: show default message
+                  <p className="text-sky-400 text-[10px] mt-1 font-semibold">
+                    ℹ Leave blank to recruit directly under you ({selectedSponsor.name})
                   </p>
                 ) : (
                   <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
