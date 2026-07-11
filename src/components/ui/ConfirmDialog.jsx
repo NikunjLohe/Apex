@@ -17,6 +17,7 @@ export default function ConfirmDialog({
   cancelLabel = 'Cancel',
   danger = false,
   loading = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
   children,
@@ -63,7 +64,7 @@ export default function ConfirmDialog({
               <button
                 type="button"
                 onClick={onConfirm}
-                disabled={loading}
+                disabled={loading || confirmDisabled}
                 className={danger ? 'btn-danger' : 'btn-gold'}
               >
                 {loading ? 'Please wait…' : confirmLabel}

@@ -40,13 +40,9 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       if (!m?.referredBy || !members) return ''
       return members.find(u => u.id === m.referredBy)?.sponsorCode || ''
     } else {
-      // For agents recruiting: Sponsor is locked to the logged-in agent
-      if (!isSuperAdmin) {
-        return profile?.sponsorCode || ''
-      }
       return ''
     }
-  }, [isEdit, m?.referredBy, members, isSuperAdmin, profile?.sponsorCode])
+  }, [isEdit, m?.referredBy, members])
 
   const initialRank = useMemo(() => {
     if (isEdit) return m?.rank || 1
@@ -130,31 +126,29 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
   const selectedSponsor = useMemo(() => {
-    if (!isSuperAdmin) return null
     if (!sponsorCodeInputVal || !members) return null
     const clean = sponsorCodeInputVal.trim().toUpperCase()
     return members.find(u => u.sponsorCode?.toUpperCase() === clean) || null
-  }, [sponsorCodeInputVal, members, isSuperAdmin])
+  }, [sponsorCodeInputVal, members])
+
+  const cannotRecruit = useMemo(() => {
+    return selectedSponsor && Number(selectedSponsor.rank) === 1
+  }, [selectedSponsor])
 
   // Filter allowed ranks
   const activeRanks = useMemo(() => {
     let list = RANKS.filter(r => r.status !== 'inactive' || r.rank === m?.rank)
-    if (isSuperAdmin) {
-      if (selectedSponsor) {
-        list = list.filter(r => r.rank < selectedSponsor.rank || r.rank === m?.rank)
+    if (selectedSponsor) {
+      list = list.filter(r => r.rank < selectedSponsor.rank || r.rank === m?.rank)
+    } else {
+      if (isEdit && m?.rank) {
+        list = list.filter(r => r.rank === m.rank)
       } else {
-        if (isEdit && m?.rank) {
-          list = list.filter(r => r.rank === m.rank)
-        } else {
-          return []
-        }
+        return []
       }
-    } else if (profile?.rank) {
-      // Agent may ONLY recruit ranks strictly BELOW their own rank
-      list = list.filter(r => r.rank < profile.rank)
     }
     return list
-  }, [RANKS, m?.rank, isSuperAdmin, selectedSponsor, profile?.rank, isEdit])
+  }, [RANKS, m?.rank, selectedSponsor, isEdit])
 
   const submit = async (form) => {
     setSaving(true)
@@ -190,29 +184,29 @@ export default function MemberModal({ modal, branches, members, settings, onClos
 
       // Sponsor lookup & hierarchy rules enforcement
       let finalReferredBy = null
-      if (!isSuperAdmin) {
-        // Enforce sponsor is ALWAYS the logged-in agent in Agent Panel
-        finalReferredBy = profile?.uid || null
-      } else {
-        const sponsorCodeInput = form.sponsorCodeInput?.trim()
-        if (!sponsorCodeInput) {
-          toast.error('Sponsor ID is required')
-          setSaving(false)
-          return
-        }
-        if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
-          toast.error('Agent cannot sponsor themselves')
-          setSaving(false)
-          return
-        }
-        const sponsorObj = (members || []).find(u => u.sponsorCode?.toUpperCase() === sponsorCodeInput.toUpperCase())
-        if (!sponsorObj) {
-          toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
-          setSaving(false)
-          return
-        }
-        finalReferredBy = sponsorObj.id
+      const sponsorCodeInput = form.sponsorCodeInput?.trim()
+      if (!sponsorCodeInput) {
+        toast.error('Sponsor ID is required')
+        setSaving(false)
+        return
       }
+      if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
+        toast.error('Agent cannot sponsor themselves')
+        setSaving(false)
+        return
+      }
+      const sponsorObj = (members || []).find(u => u.sponsorCode?.toUpperCase() === sponsorCodeInput.toUpperCase())
+      if (!sponsorObj) {
+        toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
+        setSaving(false)
+        return
+      }
+      if (Number(sponsorObj.rank) === 1) {
+        toast.error('This sponsor cannot recruit new members')
+        setSaving(false)
+        return
+      }
+      finalReferredBy = sponsorObj.id
 
       form.referredBy = finalReferredBy
 
@@ -326,7 +320,15 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   // Adding a member: render the standard ConfirmDialog modal
   if (!isEdit) {
     return (
-      <ConfirmDialog open title="Add member" confirmLabel="Create" loading={saving} onConfirm={handleSubmit(submit)} onClose={onClose}>
+      <ConfirmDialog 
+        open 
+        title="Add member" 
+        confirmLabel="Create" 
+        loading={saving} 
+        confirmDisabled={cannotRecruit || !selectedSponsor}
+        onConfirm={handleSubmit(submit)} 
+        onClose={onClose}
+      >
         <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit)} autoComplete="off">
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2">
@@ -372,7 +374,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
               </>
             ) : (
               <>
-                {/* For non-super admins (Agents): Lock Branch and Rank dropdown options */}
+                {/* For non-super admins (Agents): Lock Branch but keep Rank dropdown dynamic */}
                 <div>
                   <label className="label">Branch</label>
                   <input type="hidden" value={profile?.branchId || ''} {...register('branchId')} />
@@ -383,8 +385,16 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                 </div>
                 <div>
                   <label className="label">Rank</label>
-                  <select className="field" {...register('rank', { valueAsNumber: true })}>
-                    {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
+                  <select 
+                    className="field" 
+                    disabled={!selectedSponsor}
+                    {...register('rank', { valueAsNumber: true })}
+                  >
+                    {!selectedSponsor ? (
+                      <option value="">— Enter a valid Sponsor ID first —</option>
+                    ) : (
+                      activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)
+                    )}
                   </select>
                   {errors.rank && <p className="err">{errors.rank.message}</p>}
                 </div>
@@ -408,36 +418,30 @@ export default function MemberModal({ modal, branches, members, settings, onClos
               <input className="field" placeholder="Auto-generated" disabled {...register('sponsorCode')} />
             </div>
  
-            {isSuperAdmin ? (
-              <div>
-                <label className="label">Sponsor ID</label>
-                <input 
-                  className="field font-mono uppercase" 
-                  placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
-                  autoComplete="off"
-                  {...register('sponsorCodeInput')} 
-                />
-                {selectedSponsor ? (
+            <div>
+              <label className="label">Sponsor ID</label>
+              <input 
+                className="field font-mono uppercase" 
+                placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
+                autoComplete="new-password"
+                {...register('sponsorCodeInput')} 
+              />
+              {selectedSponsor ? (
+                cannotRecruit ? (
+                  <p className="text-danger text-[10px] mt-1 font-semibold">
+                    ✗ This sponsor cannot recruit new members.
+                  </p>
+                ) : (
                   <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
                     ✓ Sponsor: {selectedSponsor.name} ({getRank(selectedSponsor.rank).code})
                   </p>
-                ) : sponsorCodeInputVal?.trim() ? (
-                  <p className="text-danger text-[10px] mt-1 font-semibold">
-                    ✗ Invalid Sponsor ID
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <div>
-                <label className="label">Sponsor ID (Read-Only)</label>
-                <input type="hidden" value={profile?.sponsorCode || ''} {...register('sponsorCodeInput')} />
-                <input 
-                  className="field font-mono bg-navy-2/60 text-ink-2" 
-                  disabled
-                  value={profile?.sponsorCode || ''}
-                />
-              </div>
-            )}
+                )
+              ) : sponsorCodeInputVal?.trim() ? (
+                <p className="text-danger text-[10px] mt-1 font-semibold">
+                  ✗ Invalid Sponsor ID
+                </p>
+              ) : null}
+            </div>
  
             {isSuperAdmin ? (
               <div>
@@ -791,12 +795,19 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                     className="field font-mono uppercase" 
                     placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`} 
                     disabled={!isSuperAdmin}
+                    autoComplete="new-password"
                     {...register('sponsorCodeInput')} 
                   />
                   {isSuperAdmin && selectedSponsor && (
-                    <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
-                      ✓ Sponsor: {selectedSponsor.name} ({getRank(selectedSponsor.rank).code})
-                    </p>
+                    cannotRecruit ? (
+                      <p className="text-danger text-[10px] mt-1 font-semibold">
+                        ✗ This sponsor cannot recruit new members.
+                      </p>
+                    ) : (
+                      <p className="text-emerald-500 text-[10px] mt-1 font-semibold">
+                        ✓ Sponsor: {selectedSponsor.name} ({getRank(selectedSponsor.rank).code})
+                      </p>
+                    )
                   )}
                   {isSuperAdmin && !selectedSponsor && sponsorCodeInputVal?.trim() && (
                     <p className="text-danger text-[10px] mt-1 font-semibold">
@@ -834,7 +845,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
             <button
               type="submit"
               form="edit-member-form"
-              disabled={saving}
+              disabled={saving || cannotRecruit || !selectedSponsor}
               className="btn-gold px-6"
             >
               {saving ? 'Saving...' : 'Save Settings'}

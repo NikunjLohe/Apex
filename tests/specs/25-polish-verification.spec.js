@@ -2,6 +2,8 @@ import { test, expect } from '../fixtures/auth.fixture.js'
 import { ROUTES } from '../fixtures/test-data.js'
 
 test.describe('Handover Verification Spec', () => {
+  let rank1AgentCode = ''
+
   test('Verify Add Member standardizations, prefix settings, duplicate blocks, and rank restrictions', async ({ adminPage }) => {
     // 1. Visit Settings to set prefix and email domain
     await adminPage.goto(ROUTES.settings)
@@ -21,6 +23,12 @@ test.describe('Handover Verification Spec', () => {
     // 2. Go to Members
     await adminPage.goto(ROUTES.members)
     await adminPage.waitForSelector('table.tbl')
+
+    // Find a valid sponsor code from the list
+    const agentCodeCell = adminPage.locator('tbody tr td').filter({ hasText: /^[A-Z]+\d+/i }).first()
+    const validSponsorCode = (await agentCodeCell.innerText()).trim()
+    console.log(`Found a valid sponsor code in table: ${validSponsorCode}`)
+
     await adminPage.click('button:has-text("Add Member")')
     await adminPage.waitForSelector('text=Add member')
 
@@ -32,6 +40,7 @@ test.describe('Handover Verification Spec', () => {
     await adminPage.fill('input[name="name"]', 'Handover Agent')
     await adminPage.fill('input[name="phone"]', '9812345678')
     await adminPage.fill('input[name="panNumber"]', emailTestPan)
+    await adminPage.fill('input[name="sponsorCodeInput"]', validSponsorCode)
     
     // Fill existing email (superadmin@apex.test)
     const emailField = adminPage.locator('input[name="email"]')
@@ -60,6 +69,7 @@ test.describe('Handover Verification Spec', () => {
     await emailField.fill('')
     await adminPage.fill('input[name="phone"]', '9999999003')
     await adminPage.fill('input[name="panNumber"]', phoneTestPan)
+    await adminPage.fill('input[name="sponsorCodeInput"]', validSponsorCode)
     
     await adminPage.click('button:has-text("Create")')
     const phoneToast = adminPage.locator('[role="status"]:has-text("Phone")').first()
@@ -78,6 +88,11 @@ test.describe('Handover Verification Spec', () => {
     await adminPage.fill('input[name="name"]', 'Handover Test Agent')
     await adminPage.fill('input[name="phone"]', uniquePhone)
     await adminPage.fill('input[name="panNumber"]', uniquePan)
+    await adminPage.fill('input[name="sponsorCodeInput"]', validSponsorCode)
+
+    const rankDropdown = adminPage.locator('select[name="rank"]')
+    await expect(rankDropdown).toBeEnabled()
+    await rankDropdown.selectOption({ index: 0 })
     
     await adminPage.click('button:has-text("Create")')
 
@@ -92,6 +107,13 @@ test.describe('Handover Verification Spec', () => {
     expect(modalText).toContain('KB00')
     expect(modalText).toContain('@apex.local')
     console.log('PASS: Agent Code sequencing (KB) and email domain generation (@apex.local) are working perfectly!')
+
+    // Extract created rank 1 agent code for rank 1 testing
+    const match = modalText.match(/AGENT CODE \(SPONSOR ID\)\s*\n*([A-Z0-9]+)/i)
+    if (match) {
+      rank1AgentCode = match[1].trim()
+      console.log('Extracted Rank 1 Agent Code:', rank1AgentCode)
+    }
 
     // Click Copy Credentials to close
     await adminPage.click('button:has-text("Copy Credentials")')
@@ -155,10 +177,10 @@ test.describe('Handover Verification Spec', () => {
     await superAdminPage.fill('input[name="phone"]', uniquePhone)
     await superAdminPage.fill('input[name="panNumber"]', uniquePan)
 
-    await superAdminPage.click('button:has-text("Create")')
-    const errToast = superAdminPage.locator('[role="status"]:has-text("Sponsor ID is required")').first()
-    await expect(errToast).toBeVisible({ timeout: 10000 })
-    console.log('PASS: Blank Sponsor ID successfully rejected!')
+    // Verify Create button is disabled when Sponsor ID is blank
+    const createBtn = superAdminPage.locator('button:has-text("Create")')
+    await expect(createBtn).toBeDisabled()
+    console.log('PASS: Create button disabled for blank Sponsor ID!')
 
     // 4. Fill invalid sponsor ID and verify indicator
     await sponsorInput.fill('INVALID')
@@ -166,7 +188,15 @@ test.describe('Handover Verification Spec', () => {
     await expect(invalidText).toBeVisible()
     console.log('PASS: Invalid Sponsor ID text feedback verified!')
 
-    // 5. Fill a valid sponsor ID and verify confirmation text and rank dropdown limits
+    // 5. Verify Rank 1 sponsor block is validated successfully
+    const testRank1Code = rank1AgentCode || 'KB001032' // Fallback to a seeded/created code if empty
+    await sponsorInput.fill(testRank1Code)
+    const rank1WarningText = superAdminPage.locator('text=This sponsor cannot recruit new members.')
+    await expect(rank1WarningText).toBeVisible()
+    await expect(createBtn).toBeDisabled()
+    console.log('PASS: Rank 1 sponsor validation warning is successfully displayed and Create button is disabled!')
+
+    // 6. Fill a valid sponsor ID and verify confirmation text and rank dropdown limits
     await sponsorInput.fill(validSponsorCode)
     const validText = superAdminPage.locator('text=Sponsor:')
     await expect(validText).toBeVisible()
