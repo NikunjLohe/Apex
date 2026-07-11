@@ -139,16 +139,20 @@ export default function MemberModal({ modal, branches, members, settings, onClos
   const activeRanks = useMemo(() => {
     let list = RANKS.filter(r => r.status !== 'inactive' || r.rank === m?.rank)
     if (selectedSponsor) {
+      // Sponsor entered: only ranks strictly below sponsor's rank
       list = list.filter(r => r.rank < selectedSponsor.rank || r.rank === m?.rank)
+    } else if (isEdit && m?.rank) {
+      // Editing with no sponsor change: keep current rank only
+      list = list.filter(r => r.rank === m.rank)
+    } else if (!isEdit && isSuperAdmin) {
+      // Super Admin adding root agent (no sponsor) → all ranks available
+      // list stays as-is (all active ranks)
     } else {
-      if (isEdit && m?.rank) {
-        list = list.filter(r => r.rank === m.rank)
-      } else {
-        return []
-      }
+      // Agent must have a sponsor
+      return []
     }
     return list
-  }, [RANKS, m?.rank, selectedSponsor, isEdit])
+  }, [RANKS, m?.rank, selectedSponsor, isEdit, isSuperAdmin])
 
   const submit = async (form) => {
     setSaving(true)
@@ -186,27 +190,32 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       let finalReferredBy = null
       const sponsorCodeInput = form.sponsorCodeInput?.trim()
       if (!sponsorCodeInput) {
-        toast.error('Sponsor ID is required')
-        setSaving(false)
-        return
+        // Super Admin can create root agents with no sponsor
+        if (!isSuperAdmin) {
+          toast.error('Sponsor ID is required')
+          setSaving(false)
+          return
+        }
+        // isSuperAdmin + blank sponsor → root agent, finalReferredBy stays null
+      } else {
+        if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
+          toast.error('Agent cannot sponsor themselves')
+          setSaving(false)
+          return
+        }
+        const sponsorObj = (members || []).find(u => u.sponsorCode?.toUpperCase() === sponsorCodeInput.toUpperCase())
+        if (!sponsorObj) {
+          toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
+          setSaving(false)
+          return
+        }
+        if (Number(sponsorObj.rank) === 1) {
+          toast.error('This sponsor cannot recruit new members')
+          setSaving(false)
+          return
+        }
+        finalReferredBy = sponsorObj.id
       }
-      if (isEdit && sponsorCodeInput.toUpperCase() === m.sponsorCode?.toUpperCase()) {
-        toast.error('Agent cannot sponsor themselves')
-        setSaving(false)
-        return
-      }
-      const sponsorObj = (members || []).find(u => u.sponsorCode?.toUpperCase() === sponsorCodeInput.toUpperCase())
-      if (!sponsorObj) {
-        toast.error('Invalid Sponsor ID: Sponsor agent does not exist')
-        setSaving(false)
-        return
-      }
-      if (Number(sponsorObj.rank) === 1) {
-        toast.error('This sponsor cannot recruit new members')
-        setSaving(false)
-        return
-      }
-      finalReferredBy = sponsorObj.id
 
       form.referredBy = finalReferredBy
 
@@ -325,7 +334,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         title="Add member" 
         confirmLabel="Create" 
         loading={saving} 
-        confirmDisabled={cannotRecruit || !selectedSponsor}
+        confirmDisabled={cannotRecruit || (!isSuperAdmin && !selectedSponsor)}
         onConfirm={handleSubmit(submit)} 
         onClose={onClose}
       >
@@ -365,13 +374,16 @@ export default function MemberModal({ modal, branches, members, settings, onClos
                   <label className="label">Rank</label>
                   <select 
                     className="field" 
-                    disabled={!selectedSponsor}
+                    disabled={!selectedSponsor && sponsorCodeInputVal?.trim()}
                     {...register('rank', { valueAsNumber: true })}
                   >
-                    {!selectedSponsor ? (
-                      <option value="">— Enter a valid Sponsor ID first —</option>
+                    {activeRanks.length === 0 ? (
+                      <option value="">— No eligible ranks —</option>
                     ) : (
-                      activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)
+                      <>
+                        <option value="">— Select a rank —</option>
+                        {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
+                      </>
                     )}
                   </select>
                   {errors.rank && <p className="err">{errors.rank.message}</p>}
