@@ -24,7 +24,7 @@ export default function PaymentImport() {
     reader.onload = (evt) => {
       try {
         const bstr = evt.target.result
-        const wb = read(bstr, { type: 'binary' })
+        const wb = read(bstr, { type: 'binary', cellDates: true })
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         const parsed = utils.sheet_to_json(ws)
@@ -44,7 +44,8 @@ export default function PaymentImport() {
       
       const policyNumber = (r['Policy Number'] || '').toString().trim()
       const amount = Number(r['Amount Paid'])
-      const paymentDate = r['Payment Date'] ? new Date(r['Payment Date']) : new Date()
+      const rawDate = r['Payment Date']
+      const paymentDate = rawDate ? (rawDate instanceof Date ? rawDate : new Date(rawDate)) : new Date()
 
       if (!policyNumber) errors.push('Missing Policy Number')
       if (isNaN(amount) || amount <= 0) errors.push('Invalid Amount Paid')
@@ -82,9 +83,11 @@ export default function PaymentImport() {
     for (let i = 0; i < validRows.length; i++) {
       const row = validRows[i]
       try {
-        // Find the active policy
-        const planQuery = query(collection(db, 'plans'), where('policyNumber', '==', row.policyNumber), where('status', '==', 'active'))
-        const planSnap = await getDocs(planQuery)
+        // Find the active policy (support both policyNumber and planAccountNumber)
+        let planSnap = await getDocs(query(collection(db, 'plans'), where('policyNumber', '==', row.policyNumber), where('status', '==', 'active')))
+        if (planSnap.empty) {
+          planSnap = await getDocs(query(collection(db, 'plans'), where('planAccountNumber', '==', row.policyNumber), where('status', '==', 'active')))
+        }
         
         if (planSnap.empty) {
           throw new Error(`Active policy ${row.policyNumber} not found`)
