@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, getDoc, getDocs, collection, query, where, getAggregateFromServer, sum, count } from 'firebase/firestore'
+import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { formatINR, fmtDate } from '../../utils/format'
 import { useDoc } from '../../hooks/useFirestore'
@@ -111,42 +111,67 @@ export default function CommissionBill() {
           })
           setPolicyCommissionsMap(policyMap)
 
-          // Fetch real-time aggregates for Agent Summary
-          if (payoutData.agentId) {
-            // 1. Lifetime & Current Month Business, Policy Count
-            const plansQ = query(collection(db, 'plans'), where('agentId', '==', payoutData.agentId))
-            const pSnap = await getDocs(plansQ)
-            let ltVol = 0
-            let cmVol = 0
-            pSnap.forEach(d => {
-              const p = d.data()
-              const planTypeStr = (p.planType || p.type || '').toLowerCase()
-              const amt = planTypeStr.startsWith('rd') ? (p.monthlyAmount * 12) : (p.fdAmount || 0)
-              ltVol += amt
-              
-              const pDate = p.startDate ? new Date(p.startDate.toDate ? p.startDate.toDate() : p.startDate) : (p.date ? new Date(p.date) : null)
-              if (pDate) {
-                if (pDate.getMonth() + 1 === payoutData.month && pDate.getFullYear() === payoutData.year) {
-                  cmVol += amt
+          // ── Agent Business Summary ──────────────────────────────────────
+          // Uses the same data sources as the Dashboard to guarantee identical
+          // totals: agentProfile.businessVolume is incremented at import time
+          // by the same calculatedAmount that feeds system_summaries/dashboard.
+          //
+          // We intentionally avoid getAggregateFromServer here because it
+          // requires the Blaze billing plan and throws on Spark – silently
+          // zeroing every stat when caught by the outer try/catch.
+          // ──────────────────────────────────────────────────────────────────
+          if (payoutData.agentId && agentProf) {
+            try {
+              // 1. Lifetime business & counts – read from agent profile
+              //    (same field incremented by ImportData.jsx → matches Dashboard)
+              const lifetimeBusiness = Number(agentProf.businessVolume || 0)
+              const policyCount      = Number(agentProf.activePolicies  || 0)
+              const customerCount    = Number(agentProf.totalCustomers  || 0)
+
+              // 2. Current-month business – query plans and filter in JS
+              //    Amount formula matches import: RD → monthlyAmount (not ×12), FD → fdAmount
+              let currentMonthBusiness = 0
+              const plansQ = query(
+                collection(db, 'plans'),
+                where('agentId', '==', payoutData.agentId)
+              )
+              const pSnap = await getDocs(plansQ)
+              pSnap.forEach(d => {
+                const p = d.data()
+                const pDate = p.startDate
+                  ? new Date(p.startDate.toDate ? p.startDate.toDate() : p.startDate)
+                  : null
+                if (
+                  pDate &&
+                  pDate.getMonth() + 1 === payoutData.month &&
+                  pDate.getFullYear()  === payoutData.year
+                ) {
+                  const isRDPlan = (p.planType || p.type || '').toLowerCase().startsWith('rd')
+                  currentMonthBusiness += isRDPlan
+                    ? Number(p.monthlyAmount || 0)
+                    : Number(p.fdAmount || 0)
                 }
-              }
-            })
+              })
 
-            // 2. Customer Count
-            const custQ = query(collection(db, 'customers'), where('enrolledBy', '==', payoutData.agentId))
-            const cSnap = await getDocs(custQ)
+              // 3. Lifetime commission – getDocs + reduce (no Blaze required)
+              const ledgQ = query(
+                collection(db, 'commission_ledger'),
+                where('agentId', '==', payoutData.agentId)
+              )
+              const lSnap = await getDocs(ledgQ)
+              let commissionEarned = 0
+              lSnap.forEach(d => { commissionEarned += Number(d.data().amount || 0) })
 
-            // 3. Lifetime Commission
-            const ledgQ = query(collection(db, 'commission_ledger'), where('agentId', '==', payoutData.agentId))
-            const lSnap = await getAggregateFromServer(ledgQ, { totalCom: sum('amount') })
-
-            setAgentStats({
-              lifetimeBusiness: ltVol,
-              currentMonthBusiness: cmVol,
-              policyCount: pSnap.size,
-              customerCount: cSnap.size,
-              commissionEarned: lSnap.data().totalCom || 0
-            })
+              setAgentStats({
+                lifetimeBusiness,
+                currentMonthBusiness,
+                policyCount,
+                customerCount,
+                commissionEarned,
+              })
+            } catch (statsErr) {
+              console.error('Agent stats fetch failed (non-critical):', statsErr)
+            }
           }
         }
       } catch (err) {
