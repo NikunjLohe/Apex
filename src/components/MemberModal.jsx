@@ -330,6 +330,11 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         onClose={onClose}
       >
         <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit)} autoComplete="off">
+          {/* Fake fields to defeat browser autofill */}
+          <div style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden' }}>
+            <input type="text" name="chrome-username-dummy" tabIndex="-1" />
+            <input type="password" name="chrome-password-dummy" tabIndex="-1" />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2">
               <label className="label">Full name</label>
@@ -754,6 +759,11 @@ export default function MemberModal({ modal, branches, members, settings, onClos
 
           {activeTab === 'edit' && (
             <form id="edit-member-form" className="space-y-3.5 pt-1" onSubmit={handleSubmit(submit)}>
+              {/* Fake fields to defeat browser autofill */}
+              <div style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden' }}>
+                <input type="text" name="chrome-username-dummy" tabIndex="-1" />
+                <input type="password" name="chrome-password-dummy" tabIndex="-1" />
+              </div>
               <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Email</label><input className="field bg-navy-2/60 text-ink-2" type="email" disabled {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
