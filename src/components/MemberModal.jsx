@@ -428,7 +428,9 @@ export default function MemberModal({ modal, branches, members, settings, onClos
               <input 
                 className="field font-mono uppercase" 
                 placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
-                autoComplete="new-password"
+                autoComplete="off"
+                readOnly
+                onFocus={(e) => e.target.removeAttribute('readOnly')}
                 {...register('sponsorCodeInput')} 
               />
               {selectedSponsor ? (
@@ -469,8 +471,9 @@ export default function MemberModal({ modal, branches, members, settings, onClos
             <div>
               <label className="label">Email address (optional)</label>
               <input 
-                type="email" 
+                type="text" 
                 className="field" 
+                autoComplete="new-password"
                 placeholder={isSuperAdmin ? "Custom email or leave blank for auto" : "Leave blank for auto-generated login"} 
                 {...register('email')} 
               />
@@ -478,7 +481,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
             </div>
             <div>
               <label className="label">Temporary Password (optional)</label>
-              <input className="field" type="password" placeholder="Auto-generated if blank" {...register('password')} />
+              <input className="field" type="password" autoComplete="new-password" placeholder="Auto-generated if blank" {...register('password')} />
               {errors.password && <p className="err">{errors.password.message}</p>}
             </div>
           </div>
