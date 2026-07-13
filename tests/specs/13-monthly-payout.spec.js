@@ -19,7 +19,7 @@ test.describe('Monthly Payout Engine', () => {
 
     // Ensure table loads or empty state shows without crashing
     const tableVisible = await adminPage.locator('tbody tr').first().isVisible().catch(()=>false)
-    const emptyVisible = await adminPage.locator('text=No payouts').isVisible().catch(()=>false)
+    const emptyVisible = await adminPage.locator('text=No Commission Bills').isVisible().catch(()=>false)
     expect(tableVisible || emptyVisible).toBeTruthy()
   })
 
@@ -36,7 +36,7 @@ test.describe('Monthly Payout Engine', () => {
       await expect(adminPage.locator('h2')).toHaveText(/Payout Statement/i)
       
       // Verify Header details
-      await expect(adminPage.locator('text=APEX Branch Operations Portal')).toBeVisible()
+      await expect(adminPage.locator('text=Krantibhumi Branch Operations Portal')).toBeVisible()
       await expect(adminPage.locator('text=Payout ID:')).toBeVisible()
       
       // Verify Agent Profile Snapshot is rendered

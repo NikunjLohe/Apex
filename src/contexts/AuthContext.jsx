@@ -25,10 +25,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
+      console.warn('[AuthContext] Firebase is not configured.')
       setAuthLoading(false)
       return undefined
     }
+    console.log('[AuthContext] Initializing Firebase Auth observer...')
     return onAuthStateChanged(auth, (u) => {
+      console.log('[AuthContext] Firebase Auth state changed. User UID:', u?.uid || 'NONE')
       setUser(u)
       if (u) {
         setProfileLoading(true)
@@ -41,19 +44,35 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!user) {
+      console.log('[AuthContext] No authenticated user. Clearing profile.')
       setProfile(null)
       setProfileLoading(false)
       return undefined
     }
+    console.log('[AuthContext] Fetching profile from Firestore for UID:', user.uid)
     setProfileLoading(true)
     const ref = doc(db, 'users', user.uid)
     return onSnapshot(
       ref,
       (snap) => {
-        setProfile(snap.exists() ? { uid: snap.id, ...snap.data() } : null)
-        setProfileLoading(false)
+        console.log('[AuthContext] Profile snapshot received. Exists:', snap.exists())
+        if (snap.exists()) {
+          setProfile({ uid: snap.id, ...snap.data() })
+          setProfileLoading(false)
+        } else {
+          console.warn('[AuthContext] Profile document missing in Firestore. Triggering self-healing signout...')
+          setProfile(null)
+          setProfileLoading(false)
+          signOut(auth).catch(err => console.error('[AuthContext] Self-healing signout failed:', err))
+        }
       },
-      () => setProfileLoading(false)
+      (error) => {
+        console.error('[AuthContext] Error listening to profile snapshot:', error)
+        setProfile(null)
+        setProfileLoading(false)
+        console.warn('[AuthContext] Profile load failed. Triggering self-healing signout to clear dead session...')
+        signOut(auth).catch(err => console.error('[AuthContext] Self-healing signout failed:', err))
+      }
     )
   }, [user])
 

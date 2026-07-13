@@ -378,7 +378,7 @@ export default function CommissionBill() {
     return <div className="p-10 text-center text-red-500">Bill not found.</div>
   }
 
-  const companyName = settings?.companyName || 'APEX Savings'
+  const companyName = settings?.companyName || 'Krantibhumi'
   const headOffice = settings?.headOffice || ''
 
   const displayBankName = agentProfile?.bankDetails?.bankName || '—'
@@ -433,7 +433,7 @@ export default function CommissionBill() {
             <Logo size={46} showText={false} />
             <div>
               <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">APEX Branch Operations Portal</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Krantibhumi Branch Operations Portal</p>
               {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
             </div>
           </div>

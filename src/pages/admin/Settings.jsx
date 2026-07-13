@@ -66,12 +66,12 @@ export default function Settings() {
 
   useEffect(() => {
     setSystemForm({
-      companyName: settingsData?.companyName || 'APEX Savings',
+      companyName: settingsData?.companyName || 'Krantibhumi',
       headOffice: settingsData?.headOffice || '',
       supportPhone: settingsData?.supportPhone || '',
-      receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · APEX',
+      receiptFooter: settingsData?.receiptFooter || 'This is a computer-generated receipt · Krantibhumi',
       agentPrefix: settingsData?.agentPrefix || 'KB',
-      agentEmailDomain: settingsData?.agentEmailDomain || 'apex.local',
+      agentEmailDomain: settingsData?.agentEmailDomain || 'krantibhumi.local',
       enableAgentAlerts: settingsData?.enableAgentAlerts ?? true,
       enablePayoutAlerts: settingsData?.enablePayoutAlerts ?? true,
       enablePromoAlerts: settingsData?.enablePromoAlerts ?? true,

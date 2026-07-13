@@ -19,12 +19,23 @@ export function Protected({ children, capability, ignorePasswordForce }) {
   const { can } = usePermission()
   const location = useLocation()
 
-  if (authLoading || (isAuthenticated && (profileLoading || !profile))) return <FullLoader />
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  if (authLoading || (isAuthenticated && (profileLoading || !profile))) {
+    console.log('[Protected Route Guard] Rendering FullLoader (authLoading:', authLoading, 'isAuthenticated:', isAuthenticated, 'profileLoading:', profileLoading, 'profile:', !!profile, ')')
+    return <FullLoader />
+  }
+  if (!isAuthenticated) {
+    console.log('[Protected Route Guard] User is not authenticated. Redirecting to /login from:', location.pathname)
+    return <Navigate to="/login" replace state={{ from: location }} />
+  }
   if (!ignorePasswordForce && profile?.mustChangePassword && location.pathname !== '/change-password') {
+    console.log('[Protected Route Guard] Force change password active. Redirecting to /change-password.')
     return <Navigate to="/change-password" replace />
   }
-  if (capability && !can(capability)) return <Navigate to="/unauthorized" replace />
+  if (capability && !can(capability)) {
+    console.warn('[Protected Route Guard] Unauthorized capability:', capability, 'Redirecting.')
+    return <Navigate to="/unauthorized" replace />
+  }
+  console.log('[Protected Route Guard] Authorization passed. Rendering requested children.')
   return children
 }
 

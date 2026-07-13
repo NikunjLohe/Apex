@@ -93,7 +93,7 @@ export default function Receipt() {
           )}
         </div>
         <div className="border-t border-navy-4 bg-navy-2 px-5 py-3 text-center text-[10px] text-ink-2">
-          This is a computer-generated receipt · APEX Performance Portal
+          This is a computer-generated receipt · Krantibhumi Performance Portal
         </div>
       </div>
 

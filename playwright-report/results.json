@@ -4,7 +4,7 @@
       "C:\\Program Files\\nodejs\\node.exe",
       "C:\\Users\\User\\OneDrive\\Desktop\\Apex\\node_modules\\@playwright\\test\\cli.js",
       "test",
-      "tests/specs/01-auth.spec.js"
+      "tests/specs/13-monthly-payout.spec.js"
     ],
     "configFile": "C:\\Users\\User\\OneDrive\\Desktop\\Apex\\playwright.config.js",
     "rootDir": "C:/Users/User/OneDrive/Desktop/Apex/tests/specs",
@@ -141,20 +141,180 @@
   },
   "suites": [
     {
-      "title": "01-auth.spec.js",
-      "file": "01-auth.spec.js",
+      "title": "..\\global.setup.js",
+      "file": "../global.setup.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Save Super Admin auth state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 40000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "setup",
+              "projectName": "setup",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5827,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "[setup] ✓ Super Admin auth state saved → C:\\Users\\User\\OneDrive\\Desktop\\Apex\\tests\\.auth\\superadmin.json\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T09:01:18.305Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ddbcaf8b47669ab14b8-13ae0100000b9a841ef4",
+          "file": "../global.setup.js",
+          "line": 41,
+          "column": 1
+        },
+        {
+          "title": "Save Admin auth state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 40000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "setup",
+              "projectName": "setup",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5072,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "[setup] ✓ Admin auth state saved → C:\\Users\\User\\OneDrive\\Desktop\\Apex\\tests\\.auth\\admin.json\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T09:01:24.538Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ddbcaf8b47669ab14b8-928f4e2abe28bf304f2a",
+          "file": "../global.setup.js",
+          "line": 45,
+          "column": 1
+        },
+        {
+          "title": "Save Manager auth state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 40000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "setup",
+              "projectName": "setup",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4757,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "[setup] ✓ Branch Manager auth state saved → C:\\Users\\User\\OneDrive\\Desktop\\Apex\\tests\\.auth\\manager.json\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T09:01:29.673Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ddbcaf8b47669ab14b8-66ee6b5c3a98e6c37a1a",
+          "file": "../global.setup.js",
+          "line": 49,
+          "column": 1
+        },
+        {
+          "title": "Save Agent auth state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 40000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "setup",
+              "projectName": "setup",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8568,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "[setup] ✓ Field Agent auth state saved → C:\\Users\\User\\OneDrive\\Desktop\\Apex\\tests\\.auth\\agent.json\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T09:01:34.493Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ddbcaf8b47669ab14b8-a99f833c8be2907b6471",
+          "file": "../global.setup.js",
+          "line": 53,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "13-monthly-payout.spec.js",
+      "file": "13-monthly-payout.spec.js",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Authentication",
-          "file": "01-auth.spec.js",
-          "line": 9,
+          "title": "Monthly Payout Engine",
+          "file": "13-monthly-payout.spec.js",
+          "line": 8,
           "column": 6,
           "specs": [
             {
-              "title": "AUTH-001 | Login page renders email + password fields and submit button",
+              "title": "PAY-001 | Admin can view Payout Engine page",
               "ok": true,
               "tags": [],
               "tests": [
@@ -162,19 +322,19 @@
                   "timeout": 40000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 1,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 6367,
+                      "duration": 4988,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-07-10T08:26:32.886Z",
+                      "startTime": "2026-07-13T09:01:46.407Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -182,13 +342,13 @@
                   "status": "expected"
                 }
               ],
-              "id": "bfce37c7b15ae2ffafd1-a19885e940fa1a11a339",
-              "file": "01-auth.spec.js",
-              "line": 15,
+              "id": "248330c15914709c687a-36926463809a907b72e3",
+              "file": "13-monthly-payout.spec.js",
+              "line": 10,
               "column": 3
             },
             {
-              "title": "AUTH-002 | Login fails with empty credentials",
+              "title": "PAY-002 | Admin can view detailed payout statement with historical hierarchy",
               "ok": true,
               "tags": [],
               "tests": [
@@ -196,19 +356,19 @@
                   "timeout": 40000,
                   "annotations": [],
                   "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
+                      "workerIndex": 1,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 2030,
+                      "duration": 1358,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-07-10T08:26:39.875Z",
+                      "startTime": "2026-07-13T09:01:51.735Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -216,315 +376,9 @@
                   "status": "expected"
                 }
               ],
-              "id": "bfce37c7b15ae2ffafd1-287c8dab595104412715",
-              "file": "01-auth.spec.js",
-              "line": 21,
-              "column": 3
-            },
-            {
-              "title": "AUTH-003 | Login fails with wrong password",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 4912,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:26:41.972Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-06e6ca9362c156b0a58e",
-              "file": "01-auth.spec.js",
-              "line": 28,
-              "column": 3
-            },
-            {
-              "title": "AUTH-004 | Login fails with non-existent email",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 5079,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:26:46.936Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-4ac695169c4181103f1e",
-              "file": "01-auth.spec.js",
-              "line": 37,
-              "column": 3
-            },
-            {
-              "title": "AUTH-005 | Successful Super Admin login redirects to /dashboard",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3438,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:26:52.064Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-d3fe89240b30f2f4dc60",
-              "file": "01-auth.spec.js",
-              "line": 44,
-              "column": 3
-            },
-            {
-              "title": "AUTH-006 | Successful Agent login redirects away from /login",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3353,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:26:55.557Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-d7ca3a719e9002b484b8",
-              "file": "01-auth.spec.js",
-              "line": 50,
-              "column": 3
-            },
-            {
-              "title": "AUTH-007 | Unauthenticated access to /dashboard redirects to /login",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 1975,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:26:58.961Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-e27e186d767a2e94b33b",
-              "file": "01-auth.spec.js",
-              "line": 56,
-              "column": 3
-            },
-            {
-              "title": "AUTH-008 | Unauthenticated access to /admin/members redirects to /login",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 1926,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:27:00.977Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-eb079b473557914ebad9",
-              "file": "01-auth.spec.js",
-              "line": 62,
-              "column": 3
-            },
-            {
-              "title": "AUTH-009 | Password field masks input characters",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 1599,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:27:02.946Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-9a65c215f422bdf1cb11",
-              "file": "01-auth.spec.js",
-              "line": 67,
-              "column": 3
-            },
-            {
-              "title": "AUTH-010 | Already-authenticated user visiting /login is redirected away",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 6246,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:27:04.597Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-d1b8dde32b2a3b7a6061",
-              "file": "01-auth.spec.js",
-              "line": 72,
-              "column": 3
-            },
-            {
-              "title": "AUTH-011 | Session persists after page reload",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 40000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "auth-tests",
-                  "projectName": "auth-tests",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 3751,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-07-10T08:27:10.886Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "bfce37c7b15ae2ffafd1-4cc7413520e13dc521ff",
-              "file": "01-auth.spec.js",
-              "line": 85,
+              "id": "248330c15914709c687a-92b9f4128fc9624d4a5d",
+              "file": "13-monthly-payout.spec.js",
+              "line": 26,
               "column": 3
             }
           ]
@@ -534,9 +388,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-07-10T08:26:30.253Z",
-    "duration": 45264.212,
-    "expected": 11,
+    "startTime": "2026-07-13T09:01:15.213Z",
+    "duration": 38662.358,
+    "expected": 6,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

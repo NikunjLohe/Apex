@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { CAP } from './hooks/usePermission'
@@ -67,10 +67,86 @@ function ConfigNotice() {
   )
 }
 
+function StartupErrorScreen({ onRetry, onReset }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-6 bg-navy-1">
+      <div className="card max-w-md w-full p-8 text-center border border-navy-3 shadow-2xl relative overflow-hidden">
+        {/* Glow effect */}
+        <div className="absolute -top-10 -left-10 w-40 h-40 bg-gold-1/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-info/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <Logo size={48} className="mx-auto mb-6 justify-center text-gold-1" />
+        <h1 className="text-xl font-bold text-white tracking-tight">Unable to Initialize Application</h1>
+        <p className="mt-3 text-sm text-ink-2 leading-relaxed">
+          The startup sequence timed out. This can happen due to an intermittent network lag or database connection failure.
+        </p>
+
+        <div className="mt-8 flex flex-col gap-3">
+          <button
+            onClick={onRetry}
+            className="btn-primary w-full py-2.5 font-medium flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform duration-150 active:scale-[0.98]"
+          >
+            🔄 Retry Connection
+          </button>
+          
+          <button
+            onClick={onReset}
+            className="btn-secondary w-full py-2.5 font-medium border border-danger/30 hover:border-danger text-danger bg-danger/5 hover:bg-danger/10 hover:scale-[1.02] transition-transform duration-150 active:scale-[0.98]"
+          >
+            🚪 Reset Session & Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
-  const { isConfigured, authLoading } = useAuth()
+  const { isConfigured, authLoading, profileLoading, user, isAuthenticated, profile, logout } = useAuth()
+  const [startupTimedOut, setStartupTimedOut] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+
+  const isAppLoading = authLoading || (isAuthenticated && (profileLoading || !profile))
+
+  useEffect(() => {
+    if (!isConfigured) return
+
+    if (!isAppLoading) {
+      console.log('[App] Application successfully initialized!')
+      setStartupTimedOut(false)
+      return
+    }
+
+    console.log(
+      `[App] Startup in progress... authLoading=${authLoading}, profileLoading=${profileLoading}, isAuthenticated=${isAuthenticated}, profile=${!!profile}, user=${user?.uid || 'none'}`
+    )
+
+    const timer = setTimeout(() => {
+      console.warn('[App] Startup timeout exceeded! (7 seconds)')
+      setStartupTimedOut(true)
+    }, 7000)
+
+    return () => clearTimeout(timer)
+  }, [isConfigured, isAppLoading, authLoading, profileLoading, user, profile, retryCount])
+
   if (!isConfigured) return <ConfigNotice />
-  if (authLoading) return <Loader />
+  if (startupTimedOut) {
+    return (
+      <StartupErrorScreen
+        onRetry={() => {
+          console.log('[App] Retrying startup...')
+          setStartupTimedOut(false)
+          setRetryCount(prev => prev + 1)
+        }}
+        onReset={() => {
+          console.log('[App] Resetting session...')
+          logout()
+          setStartupTimedOut(false)
+        }}
+      />
+    )
+  }
+  if (isAppLoading) return <Loader />
 
   return (
     <BrowserRouter>

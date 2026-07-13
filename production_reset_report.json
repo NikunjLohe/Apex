@@ -1,0 +1,31 @@
+{
+  "resetAt": "2026-07-11T08:05:24.239Z",
+  "status": "FAIL",
+  "remainingUsers": [
+    {
+      "uid": "o8KTy5ALGAXj6dN6H30lupcXIE92",
+      "name": "QA Super Admin",
+      "email": "superadmin@apex.test"
+    },
+    {
+      "uid": "yB2kXcCD0oS8dgJnL6xXziCpz8D3",
+      "name": "Super Admin",
+      "email": "admin@apex.com"
+    }
+  ],
+  "agentCount": 0,
+  "counterValues": {
+    "counters/agents.seq": 0
+  },
+  "collectionCounts": {
+    "customers": 0,
+    "plans": 0,
+    "payments": 0,
+    "receipts": 0,
+    "commission_ledger": 0,
+    "payouts": 0,
+    "notifications": 0,
+    "imports": 0
+  },
+  "firstGeneratedAgentCode": "KB000001"
+}

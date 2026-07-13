@@ -39,7 +39,7 @@ function titleFor(pathname) {
   if (pathname.includes('/passbook')) return 'Passbook'
   if (pathname.includes('/enroll')) return 'Enroll in Plan'
   const found = TITLES.find(([p]) => pathname.startsWith(p))
-  return found ? found[1] : 'APEX'
+  return found ? found[1] : 'Krantibhumi'
 }
 
 export default function Layout() {
