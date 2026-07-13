@@ -89,7 +89,7 @@ export default function ChangePassword() {
             </button>
           </form>
         </div>
-        <p className="text-center text-xs text-ink-2">Krantibhumi Savings Portal Protection Center</p>
+        <p className="text-center text-xs text-ink-2">Apex Multisolutions Savings Portal Protection Center</p>
       </div>
     </div>
   )

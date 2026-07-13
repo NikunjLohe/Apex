@@ -36,7 +36,7 @@ test.describe('Monthly Payout Engine', () => {
       await expect(adminPage.locator('h2')).toHaveText(/Payout Statement/i)
       
       // Verify Header details
-      await expect(adminPage.locator('text=Krantibhumi Branch Operations Portal')).toBeVisible()
+      await expect(adminPage.locator('text=Apex Multisolutions Branch Operations Portal')).toBeVisible()
       await expect(adminPage.locator('text=Payout ID:')).toBeVisible()
       
       // Verify Agent Profile Snapshot is rendered

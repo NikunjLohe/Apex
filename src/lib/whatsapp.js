@@ -10,9 +10,9 @@ export function shareWhatsApp(message, phone) {
 }
 
 export function receiptMessage({ name, amount, planAccount, receiptNumber, branch }) {
-  return `Krantibhumi Receipt ${receiptNumber}\nDear ${name}, we have received your installment of ${formatINR(amount)} for plan ${planAccount}.\nThank you for banking with Krantibhumi${branch ? ` – ${branch}` : ''}.`
+  return `Apex Multisolutions Receipt ${receiptNumber}\nDear ${name}, we have received your installment of ${formatINR(amount)} for plan ${planAccount}.\nThank you for banking with Apex Multisolutions${branch ? ` – ${branch}` : ''}.`
 }
 
 export function reminderMessage({ name, amount, planAccount, dueDate, agentName, agentPhone }) {
-  return `Dear ${name}, your Krantibhumi installment of ${formatINR(amount)} for plan ${planAccount} was due on ${fmtDate(dueDate)}. Please visit your nearest branch or contact your agent ${agentName || ''}${agentPhone ? ` at ${agentPhone}` : ''}. Thank you.`
+  return `Dear ${name}, your Apex Multisolutions installment of ${formatINR(amount)} for plan ${planAccount} was due on ${fmtDate(dueDate)}. Please visit your nearest branch or contact your agent ${agentName || ''}${agentPhone ? ` at ${agentPhone}` : ''}. Thank you.`
 }

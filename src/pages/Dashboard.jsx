@@ -438,7 +438,7 @@ function AgentDashboard() {
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online
               </span>
             </div>
-            <p className="text-xs text-ink-2">Welcome back to Krantibhumi Branch Operations Portal.</p>
+            <p className="text-xs text-ink-2">Welcome back to Apex Multisolutions Branch Operations Portal.</p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-ink-2 border-t border-navy-4/50 pt-4 lg:border-0 lg:pt-0">
             <div>
@@ -633,7 +633,7 @@ function AgentDashboard() {
 
       {/* ── Dashboard Footer ────────────────────────────────────────── */}
       <div className="border-t border-navy-4/50 pt-5 mt-8 flex flex-col sm:flex-row justify-between items-center gap-2 text-[10px] text-ink-3">
-        <span className="font-semibold">Krantibhumi Branch Operations Portal</span>
+        <span className="font-semibold">Apex Multisolutions Branch Operations Portal</span>
         <span>Version 1.0</span>
         <span>Last Updated: {currentDateStr} at {currentTimeStr}</span>
       </div>

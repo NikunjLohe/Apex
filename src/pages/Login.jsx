@@ -73,10 +73,10 @@ export default function Login() {
         }
       }
 
-      toast.success('Access Granted. Welcome to Krantibhumi.', { id: toastId })
+      toast.success('Access Granted. Welcome to Apex Multisolutions.', { id: toastId })
       navigate(allowed ? (targetPath || '/dashboard') : '/dashboard', { replace: true })
     } catch (e) {
-      console.error('[Krantibhumi login error]', e)
+      console.error('[Apex Multisolutions login error]', e)
       toast.error(friendly(e.code), { id: toastId })
     } finally {
       setIsSubmitting(false)
@@ -108,7 +108,7 @@ export default function Login() {
           >
             <Logo size={48} showText={false} />
           </motion.div>
-          <h1 className="mt-3 text-2xl font-serif font-extrabold tracking-wide text-white">Krantibhumi</h1>
+          <h1 className="mt-3 text-2xl font-serif font-extrabold tracking-wide text-white">Apex Multisolutions</h1>
           <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-400">Branch Operations Portal</p>
         </div>
 
@@ -192,7 +192,7 @@ export default function Login() {
         {/* Footer info */}
         <div className="mt-6 flex flex-col items-center space-y-2 text-[10px] text-emerald-300/40">
           <p className="text-center font-medium tracking-wide">SECURE 256-BIT ENCRYPTED CHANNEL</p>
-          <p className="text-center">© {new Date().getFullYear()} Krantibhumi. All rights reserved.</p>
+          <p className="text-center">© {new Date().getFullYear()} Apex Multisolutions. All rights reserved.</p>
         </div>
       </motion.div>
     </div>

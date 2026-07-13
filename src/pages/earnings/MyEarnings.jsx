@@ -300,7 +300,7 @@ export default function MyEarnings() {
     paidDate: null
   } : null)
 
-  const companyName = settings?.companyName || 'Krantibhumi'
+  const companyName = settings?.companyName || 'Apex Multisolutions'
   const headOffice = settings?.headOffice || ''
 
   return (
@@ -672,7 +672,7 @@ export default function MyEarnings() {
                         <Logo size={46} showText={false} />
                         <div>
                           <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Krantibhumi Branch Operations Portal</p>
+                          <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
                           {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
                         </div>
                       </div>
