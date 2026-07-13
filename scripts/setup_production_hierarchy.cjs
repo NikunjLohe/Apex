@@ -9,133 +9,128 @@ initializeApp({ credential: cert(sa) })
 const auth = getAuth()
 const db = getFirestore()
 
+// Official designation names from Rank Master
 const hierarchy = [
   {
     rank: 18,
-    name: "Rajesh Kumar",
+    name: "Managing Director",
     code: "MGT000018",
     sponsorCode: "admin@apex.com",
-    email: "rajesh.kumar@apex.local",
-    password: "Rajesh@Apex2026",
-    phone: "9876543210",
-    panNumber: "ABCDE1234F"
+    email: "mgd@apex.local",
+    password: "MGD@Apex2026",
+    phone: "9800000018",
+    panNumber: "MGDIR0018A"
   },
   {
     rank: 17,
-    name: "Sanjay Singhal",
+    name: "Executive Vice President",
     code: "MGT000017",
     sponsorCode: "MGT000018",
-    email: "sanjay.singhal@apex.local",
-    password: "Sanjay@Apex2026",
-    phone: "9876543211",
-    panNumber: "BCDEF2345G"
+    email: "evp@apex.local",
+    password: "EVP@Apex2026",
+    phone: "9800000017",
+    panNumber: "EVPRE0017B"
   },
   {
     rank: 16,
-    name: "Vikram Malhotra",
+    name: "Senior Vice President",
     code: "MGT000016",
     sponsorCode: "MGT000017",
-    email: "vikram.malhotra@apex.local",
-    password: "Vikram@Apex2026",
-    phone: "9876543212",
-    panNumber: "CDEFG3456H"
+    email: "svp@apex.local",
+    password: "SVP@Apex2026",
+    phone: "9800000016",
+    panNumber: "SVPRE0016C"
   },
   {
     rank: 15,
-    name: "Sunita Deshmukh",
+    name: "Vice President",
     code: "MGT000015",
     sponsorCode: "MGT000016",
-    email: "sunita.deshmukh@apex.local",
-    password: "Sunita@Apex2026",
-    phone: "9876543213",
-    panNumber: "DEFGH4567I"
+    email: "vp@apex.local",
+    password: "VP@Apex20261",
+    phone: "9800000015",
+    panNumber: "VPPRE0015D"
   },
   {
     rank: 14,
-    name: "Pankaj Mishra",
+    name: "Asst. Vice President",
     code: "MGT000014",
     sponsorCode: "MGT000015",
-    email: "pankaj.mishra@apex.local",
-    password: "Pankaj@Apex2026",
-    phone: "9876543214",
-    panNumber: "EFGHI5678J"
+    email: "avp@apex.local",
+    password: "AVP@Apex2026",
+    phone: "9800000014",
+    panNumber: "AVPRE0014E"
   },
   {
     rank: 13,
-    name: "Aarav Mehta",
+    name: "Chief Marketing Director",
     code: "MGT000013",
     sponsorCode: "MGT000014",
-    email: "aarav.mehta@apex.local",
-    password: "Aarav@Apex2026",
-    phone: "9876543215",
-    panNumber: "FGHIJ6789K"
+    email: "cmd@apex.local",
+    password: "CMD@Apex2026",
+    phone: "9800000013",
+    panNumber: "CMDRE0013F"
   },
   {
     rank: 12,
-    name: "Deepak Joshi",
+    name: "Marketing Director",
     code: "MGT000012",
     sponsorCode: "MGT000013",
-    email: "deepak.joshi@apex.local",
-    password: "Deepak@Apex2026",
-    phone: "9876543216",
-    panNumber: "GHIJK7890L"
+    email: "md@apex.local",
+    password: "MD@Apex20261",
+    phone: "9800000012",
+    panNumber: "MDPRE0012G"
   },
   {
     rank: 11,
-    name: "Neha Sharma",
+    name: "Sr. Executive Director",
     code: "MGT000011",
     sponsorCode: "MGT000012",
-    email: "neha.sharma@apex.local",
-    password: "Neha@Apex2026",
-    phone: "9876543217",
-    panNumber: "HIJKL8901M"
+    email: "sed@apex.local",
+    password: "SED@Apex2026",
+    phone: "9800000011",
+    panNumber: "SEDRE0011H"
   }
 ]
 
 async function run() {
   console.log('--- STARTING PRODUCTION HIERARCHY SETUP ---')
 
-  // 1. Find Super Admin details
+  // 1. Find Super Admin
   const superAdminSnap = await db.collection('users').where('email', '==', 'admin@apex.com').get()
   if (superAdminSnap.empty) {
-    throw new Error('Super Admin account with email admin@apex.com not found. Run production_reset.cjs first.')
+    throw new Error('Super Admin account with email admin@apex.com not found.')
   }
   const superAdminDoc = superAdminSnap.docs[0]
   const superAdminUid = superAdminDoc.id
   console.log(`Found Super Admin: ${superAdminDoc.data().name} (${superAdminUid})`)
 
-  // We will map sponsor code to UIDs to build the referredBy chain
+  // 2. Delete ALL existing non-super-admin users to start clean
+  console.log('Deleting ALL existing non-super-admin users...')
+  const allUsersSnap = await db.collection('users').get()
+  for (const d of allUsersSnap.docs) {
+    if (!d.data().isSuperAdmin) {
+      console.log(`  Deleting Firestore user: ${d.data().name} (${d.id})`)
+      await d.ref.delete()
+      try {
+        await auth.deleteUser(d.id)
+        console.log(`  Deleted Auth user: ${d.id}`)
+      } catch (e) {
+        // Already deleted or not found
+      }
+    }
+  }
+
+  // 3. Build sponsor code → UID map
   const codeToUidMap = {
     "admin@apex.com": superAdminUid
   }
 
-  // 2. Clear out any old versions of these users to make this script idempotent
-  for (const item of hierarchy) {
-    try {
-      const existingUser = await auth.getUserByEmail(item.email)
-      console.log(`Deleting existing Auth user: ${item.email} (${existingUser.uid})`)
-      await auth.deleteUser(existingUser.uid)
-      await db.collection('users').doc(existingUser.uid).delete()
-    } catch (e) {
-      // User doesn't exist, which is fine
-    }
-
-    // Also delete by sponsorCode just in case
-    const codeSnap = await db.collection('users').where('sponsorCode', '==', item.code).get()
-    for (const d of codeSnap.docs) {
-      console.log(`Deleting existing Firestore doc: ${d.id} with code ${item.code}`)
-      await d.ref.delete()
-      try {
-        await auth.deleteUser(d.id)
-      } catch (e) {}
-    }
-  }
-
-  // 3. Create the management hierarchy sequentially (to resolve referrers properly)
+  // 4. Create management hierarchy sequentially
   for (const item of hierarchy) {
     const parentUid = codeToUidMap[item.sponsorCode]
     if (!parentUid) {
-      throw new Error(`Sponsor UID for code ${item.sponsorCode} not found in map.`)
+      throw new Error(`Sponsor UID for code ${item.sponsorCode} not found.`)
     }
 
     console.log(`Creating Auth user: ${item.name} <${item.email}>...`)
@@ -160,7 +155,7 @@ async function run() {
       status: "active",
       sponsorCode: item.code,
       referredBy: parentUid,
-      mustChangePassword: false, // let them log in directly
+      mustChangePassword: false,
       panNumber: item.panNumber,
       address: "Mumbai, Maharashtra",
       dob: "1980-01-01",
@@ -169,33 +164,44 @@ async function run() {
     })
   }
 
-  // 4. Set/Ensure counters/agents seq = 0
-  console.log('Resetting counters/agents -> seq = 0')
+  // 5. Reset agent counter — NEXT agent will be KB000001
+  console.log('Resetting counters/agents -> seq = 0 (next agent = KB000001)')
   await db.doc('counters/agents').set({ seq: 0 })
 
-  // 5. Generate Excel file
-  console.log('Generating Excel sheet of management accounts...')
-  const excelData = hierarchy.map(item => ({
-    "Name": item.name,
-    "Rank": item.rank,
-    "Agent Code": item.code,
-    "Sponsor Agent Code": item.sponsorCode,
-    "Login Email": item.email,
-    "Password": item.password,
-    "Phone": item.phone,
-    "PAN": item.panNumber
-  }))
+  // 6. Generate Excel credentials sheet
+  console.log('Generating Excel credentials sheet...')
+  const excelData = [
+    {
+      "Name": "Super Admin",
+      "Rank": 99,
+      "Agent Code": "SUPER-ADMIN",
+      "Sponsor": "Root",
+      "Login Email": "admin@apex.com",
+      "Password": "Apex@12345",
+      "Phone": "N/A",
+      "PAN": "N/A"
+    },
+    ...hierarchy.map(item => ({
+      "Name": item.name,
+      "Rank": item.rank,
+      "Agent Code": item.code,
+      "Sponsor": item.sponsorCode,
+      "Login Email": item.email,
+      "Password": item.password,
+      "Phone": item.phone,
+      "PAN": item.panNumber
+    }))
+  ]
 
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(excelData)
-  
-  // Set column widths
+
   const wscols = [
-    { wch: 20 }, // Name
+    { wch: 26 }, // Name
     { wch: 8 },  // Rank
     { wch: 15 }, // Agent Code
-    { wch: 20 }, // Sponsor Agent Code
-    { wch: 28 }, // Login Email
+    { wch: 20 }, // Sponsor
+    { wch: 24 }, // Login Email
     { wch: 18 }, // Password
     { wch: 15 }, // Phone
     { wch: 15 }  // PAN
@@ -205,9 +211,21 @@ async function run() {
   XLSX.utils.book_append_sheet(wb, ws, "Management Hierarchy")
   const xlsxPath = path.resolve('management_hierarchy.xlsx')
   XLSX.writeFile(wb, xlsxPath)
-  console.log(`Excel file successfully written to ${xlsxPath}`)
+  console.log(`Excel file written to ${xlsxPath}`)
 
-  console.log('--- PRODUCTION HIERARCHY SETUP COMPLETED SUCCESSFULLY ---')
+  // 7. Final audit
+  console.log('\n=== FINAL DATABASE STATE ===')
+  const finalSnap = await db.collection('users').get()
+  const sorted = finalSnap.docs.sort((a, b) => (b.data().rank || 0) - (a.data().rank || 0))
+  sorted.forEach(d => {
+    const data = d.data()
+    console.log(`  Rank ${String(data.rank).padStart(2, ' ')} | ${data.sponsorCode || 'N/A'} | ${data.name} <${data.email}>`)
+  })
+
+  const counterSnap = await db.doc('counters/agents').get()
+  const nextSeq = (counterSnap.data().seq || 0) + 1
+  console.log(`\n  Next generated field agent code: KB${String(nextSeq).padStart(6, '0')}`)
+  console.log('\n--- PRODUCTION HIERARCHY SETUP COMPLETED SUCCESSFULLY ---')
 }
 
 run().catch(console.error)
