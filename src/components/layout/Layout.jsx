@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Sidebar from './Sidebar'
@@ -49,7 +50,7 @@ export default function Layout() {
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
 
-  // Auto-close drawer on every route change (nav items, logo, browser back)
+  // Auto-close drawer on route change (handles nav item clicks)
   useEffect(() => {
     setDrawer(false)
   }, [location.pathname])
@@ -67,11 +68,11 @@ export default function Layout() {
         <Sidebar />
       </aside>
 
-      {/* Mobile drawer backdrop + sidebar */}
+      {/* Mobile drawer */}
       <AnimatePresence>
         {drawer && (
           <>
-            {/* Backdrop — tap outside sidebar area to close */}
+            {/* Backdrop — tapping outside closes the drawer */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -95,34 +96,50 @@ export default function Layout() {
       </AnimatePresence>
 
       {/*
-        ── Mobile close button ──────────────────────────────────────────────
-        OUTSIDE AnimatePresence entirely — never affected by Framer Motion.
-        position:fixed in the viewport at z-index 9999.
-        onTouchEnd fires BEFORE click on mobile → instant response.
-        e.preventDefault() kills the 300ms ghost click that would follow.
-        touchAction:manipulation removes the browser's double-tap delay.
+        ── Mobile close button (React Portal) ──────────────────────────────
+        Rendered via createPortal INTO document.body — completely outside
+        the React app tree and any CSS stacking context. Guaranteed to be
+        the topmost element. Placed at the bottom center for easy thumb
+        reach on phones. Uses onTouchEnd to fire before click (instant
+        mobile response) with e.preventDefault() to cancel ghost clicks.
       */}
-      {drawer && (
+      {drawer && createPortal(
         <button
           type="button"
           onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
           onClick={closeDrawer}
           style={{
             position: 'fixed',
-            top: 14,
-            left: 210,
-            zIndex: 9999,
+            bottom: 36,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 2147483647,
             touchAction: 'manipulation',
+            background: 'linear-gradient(135deg, #C9A84C, #E5C66A)',
+            color: '#1B1F3B',
+            border: 'none',
+            borderRadius: 9999,
+            padding: '13px 28px',
+            fontWeight: 700,
+            fontSize: 15,
+            letterSpacing: '0.02em',
+            fontFamily: 'Inter, sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+            cursor: 'pointer',
+            userSelect: 'none',
+            WebkitTapHighlightColor: 'transparent',
           }}
-          className="lg:hidden flex items-center justify-center w-10 h-10 rounded-full bg-navy-3 border border-navy-4 text-ink-1 shadow-lg"
-          aria-label="Close menu"
         >
-          <IClose size={22} />
-        </button>
+          <IClose size={18} />
+          Close Menu
+        </button>,
+        document.body
       )}
 
       <div className="flex min-h-screen flex-1 flex-col">
-        {/* Hamburger toggles: opens when closed, closes when open */}
         <Topbar title={title} onMenu={() => setDrawer(d => !d)} />
         <main className="flex-1 p-4 lg:p-6">
           <ErrorBoundary>
