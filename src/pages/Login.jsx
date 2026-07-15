@@ -192,7 +192,31 @@ export default function Login() {
         {/* Footer info */}
         <div className="mt-6 flex flex-col items-center space-y-2 text-[10px] text-emerald-300/40">
           <p className="text-center font-medium tracking-wide">SECURE 256-BIT ENCRYPTED CHANNEL</p>
-          <p className="text-center">© {new Date().getFullYear()} Apex Multisolutions. All rights reserved.</p>
+          <div className="flex flex-col items-center gap-1 text-center">
+            <p>
+              &copy; 2026{' '}
+              <a
+                href="https://fyndevs.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-emerald-300 hover:text-emerald-100 underline decoration-emerald-300/30 hover:decoration-emerald-100 transition-colors"
+              >
+                Fyndevs
+              </a>{' '}
+              Technologies. All Rights Reserved.
+            </p>
+            <p>
+              Designed &amp; Developed by{' '}
+              <a
+                href="https://fyndevs.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-emerald-300 hover:text-emerald-100 underline decoration-emerald-300/30 hover:decoration-emerald-100 transition-colors"
+              >
+                Fyndevs
+              </a>
+            </p>
+          </div>
         </div>
       </motion.div>
     </div>

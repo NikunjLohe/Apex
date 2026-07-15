@@ -202,7 +202,9 @@ export default function App() {
               <Route path="/admin/policies" element={<Protected capability={CAP.ADMIN}><Policies /></Protected>} />
               <Route path="/admin/policies/:id" element={<Protected capability={CAP.ADMIN}><PolicyDetail /></Protected>} />
               <Route path="/admin/settings" element={<Protected capability={CAP.ADMIN}><Settings /></Protected>} />
-              <Route path="/admin/seed" element={<Protected capability={CAP.ADMIN}><SeedDemo /></Protected>} />
+              {import.meta.env.DEV && (
+                <Route path="/admin/seed" element={<Protected capability={CAP.ADMIN}><SeedDemo /></Protected>} />
+              )}
 
               {/* Super admin */}
               <Route path="/admin/overview" element={<Protected capability={CAP.SUPER_ADMIN}><Overview /></Protected>} />

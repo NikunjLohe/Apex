@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { Outlet, useLocation } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
@@ -68,76 +66,68 @@ export default function Layout() {
         <Sidebar />
       </aside>
 
-      {/* Mobile drawer: Backdrop and Sidebar rendered as direct children of AnimatePresence for exit animations to work */}
-      <AnimatePresence>
-        {drawer && (
-          <motion.div
-            key="drawer-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-navy-1/70 lg:hidden"
-            onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
-            onClick={closeDrawer}
-          />
-        )}
-        {drawer && (
-          <motion.aside
-            key="drawer-sidebar"
-            initial={{ x: -280 }}
-            animate={{ x: 0 }}
-            exit={{ x: -280 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden bg-navy-2 shadow-card"
-          >
-            <Sidebar onNavigate={closeDrawer} />
-          </motion.aside>
-        )}
-      </AnimatePresence>
+      {/* 
+        Mobile Drawer Backdrop
+        Always mounted, controlled via opacity and pointer-events transitions.
+        This completely avoids Framer Motion exit animation bugs on mobile browsers.
+      */}
+      <div
+        onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
+        onClick={closeDrawer}
+        className={`fixed inset-0 z-40 bg-navy-1/70 lg:hidden transition-all duration-300 ${
+          drawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+
+      {/* 
+        Mobile Sidebar Panel
+        Always mounted, controlled via CSS transforms.
+      */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 lg:hidden bg-navy-2 shadow-card transition-transform duration-300 transform ${
+          drawer ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <Sidebar onNavigate={closeDrawer} />
+      </aside>
 
       {/*
-        ── Mobile close button (React Portal) ──────────────────────────────
-        Rendered via createPortal INTO document.body — completely outside
-        the React app tree and any CSS stacking context. Guaranteed to be
-        the topmost element. Placed at the bottom center for easy thumb
-        reach on phones. Uses onTouchEnd to fire before click (instant
-        mobile response) with e.preventDefault() to cancel ghost clicks.
+        ── Mobile Close Button ──────────────────────────────────────────────
+        Controlled by the same 'drawer' state, styled as a premium gold pill.
+        Always in sync with backdrop/sidebar panel.
       */}
-      {drawer && createPortal(
-        <button
-          type="button"
-          onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
-          onClick={closeDrawer}
-          style={{
-            position: 'fixed',
-            bottom: 36,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 2147483647,
-            touchAction: 'manipulation',
-            background: 'linear-gradient(135deg, #C9A84C, #E5C66A)',
-            color: '#1B1F3B',
-            border: 'none',
-            borderRadius: 9999,
-            padding: '13px 28px',
-            fontWeight: 700,
-            fontSize: 15,
-            letterSpacing: '0.02em',
-            fontFamily: 'Inter, sans-serif',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
-            cursor: 'pointer',
-            userSelect: 'none',
-            WebkitTapHighlightColor: 'transparent',
-          }}
-        >
-          <IClose size={18} />
-          Close Menu
-        </button>,
-        document.body
-      )}
+      <button
+        type="button"
+        onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
+        onClick={closeDrawer}
+        style={{
+          position: 'fixed',
+          bottom: 36,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          touchAction: 'manipulation',
+          background: 'linear-gradient(135deg, #C9A84C, #E5C66A)',
+          color: '#1B1F3B',
+          border: 'none',
+          borderRadius: 9999,
+          padding: '13px 28px',
+          fontWeight: 700,
+          fontSize: 15,
+          letterSpacing: '0.02em',
+          fontFamily: 'Inter, sans-serif',
+          cursor: 'pointer',
+          userSelect: 'none',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+        className={`lg:hidden flex items-center gap-2 shadow-lg transition-all duration-300 ${
+          drawer ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'
+        }`}
+        aria-label="Close menu"
+      >
+        <IClose size={18} />
+        Close Menu
+      </button>
 
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar title={title} onMenu={() => setDrawer(d => !d)} />
@@ -146,6 +136,35 @@ export default function Layout() {
             <Outlet />
           </ErrorBoundary>
         </main>
+        
+        {/* Premium Fyndevs Footer */}
+        <footer className="border-t border-navy-4 bg-navy-3 py-4 text-xs text-ink-2">
+          <div className="mx-auto px-4 lg:px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+            <p className="font-medium">
+              &copy; 2026{' '}
+              <a
+                href="https://fyndevs.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-gold hover:underline transition-colors"
+              >
+                Fyndevs
+              </a>{' '}
+              Technologies. All Rights Reserved.
+            </p>
+            <p className="font-medium">
+              Designed &amp; Developed by{' '}
+              <a
+                href="https://fyndevs.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-gold hover:underline transition-colors"
+              >
+                Fyndevs
+              </a>
+            </p>
+          </div>
+        </footer>
       </div>
     </div>
   )

@@ -59,7 +59,7 @@ const ADMIN_GROUPS = [
     items: [
       { to: '/admin/settings', label: 'Settings',      Icon: ISettings, cap: CAP.SUPER_ADMIN },
       { to: '/admin/logs',     label: 'System Logs',   Icon: IClock,    cap: CAP.SUPER_ADMIN },
-      { to: '/admin/seed',     label: 'Seed Demo Data', Icon: IAlert,    cap: CAP.SUPER_ADMIN },
+      { to: '/admin/seed',     label: 'Seed Demo Data', Icon: IAlert,    cap: CAP.SUPER_ADMIN, devOnly: true },
     ],
   },
 ]
@@ -92,7 +92,11 @@ export default function Sidebar({ onNavigate }) {
   const filteredGroups = groups
     .map((g) => ({
       ...g,
-      items: g.items.filter((it) => it.cap === null || can(it.cap)),
+      items: g.items.filter(
+        (it) =>
+          (it.cap === null || can(it.cap)) &&
+          (!it.devOnly || import.meta.env.DEV)
+      ),
     }))
     .filter((g) => g.items.length > 0)
 
