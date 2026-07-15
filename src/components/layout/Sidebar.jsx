@@ -1,9 +1,9 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import Logo from '../ui/Logo'
 import {
   IDashboard, IUsers, ICash, IReport, IAlert, ICalendar,
-  ITrophy, INetwork, IShield, IBuilding, ISettings, IDoc, IClock,
+  ITrophy, INetwork, IShield, IBuilding, ISettings, IDoc, IClock, IClose,
 } from '../ui/icons'
 
 // ─── Agent navigation (Rank 1–18, same for all) ─────────────────────────────
@@ -98,7 +98,25 @@ export default function Sidebar({ onNavigate }) {
 
   return (
     <div className="flex h-full flex-col bg-navy-2 p-4">
-      <Logo size={38} tagline className="mb-6 px-1" />
+      <div className="flex items-center justify-between mb-6 px-1">
+        {onNavigate ? (
+          <Link to="/dashboard" onClick={onNavigate} className="block flex-1">
+            <Logo size={38} tagline />
+          </Link>
+        ) : (
+          <Logo size={38} tagline />
+        )}
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            className="rounded-card p-1.5 text-ink-2 hover:bg-navy-4/30 hover:text-ink-1 lg:hidden"
+            aria-label="Close menu"
+          >
+            <IClose size={20} />
+          </button>
+        )}
+      </div>
       <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-none">
         {filteredGroups.map((g) => (
           <div key={g.title}>
