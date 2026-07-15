@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
@@ -47,11 +47,6 @@ export default function Layout() {
   const { profile } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
-
-  // Auto-close drawer on route change (handles nav item clicks)
-  useEffect(() => {
-    setDrawer(false)
-  }, [location.pathname])
 
   const closeDrawer = () => setDrawer(false)
 
