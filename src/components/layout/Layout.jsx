@@ -68,30 +68,30 @@ export default function Layout() {
         <Sidebar />
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer: Backdrop and Sidebar rendered as direct children of AnimatePresence for exit animations to work */}
       <AnimatePresence>
         {drawer && (
-          <>
-            {/* Backdrop — tapping outside closes the drawer */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-navy-1/70 lg:hidden"
-              onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
-              onClick={closeDrawer}
-            />
-            {/* Sidebar panel */}
-            <motion.aside
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-              className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
-            >
-              <Sidebar onNavigate={closeDrawer} />
-            </motion.aside>
-          </>
+          <motion.div
+            key="drawer-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-navy-1/70 lg:hidden"
+            onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
+            onClick={closeDrawer}
+          />
+        )}
+        {drawer && (
+          <motion.aside
+            key="drawer-sidebar"
+            initial={{ x: -280 }}
+            animate={{ x: 0 }}
+            exit={{ x: -280 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden bg-navy-2 shadow-card"
+          >
+            <Sidebar onNavigate={closeDrawer} />
+          </motion.aside>
         )}
       </AnimatePresence>
 
