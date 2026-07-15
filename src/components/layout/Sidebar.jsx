@@ -100,7 +100,7 @@ export default function Sidebar({ onNavigate }) {
     <div className="flex h-full flex-col bg-navy-2 p-4">
       <div className="flex items-center justify-between mb-6 px-1">
         {onNavigate ? (
-          <Link to="/dashboard" onClick={onNavigate} className="block flex-1">
+          <Link to="/dashboard" onClick={onNavigate} className="block min-w-0">
             <Logo size={38} tagline />
           </Link>
         ) : (
@@ -109,11 +109,11 @@ export default function Sidebar({ onNavigate }) {
         {onNavigate && (
           <button
             type="button"
-            onClick={onNavigate}
-            className="rounded-card p-1.5 text-ink-2 hover:bg-navy-4/30 hover:text-ink-1 lg:hidden"
+            onClick={(e) => { e.stopPropagation(); onNavigate(); }}
+            className="ml-2 shrink-0 rounded-card p-2 text-ink-2 hover:bg-navy-4/30 hover:text-ink-1 active:bg-navy-4/50"
             aria-label="Close menu"
           >
-            <IClose size={20} />
+            <IClose size={22} />
           </button>
         )}
       </div>

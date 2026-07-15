@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Sidebar from './Sidebar'
@@ -47,6 +47,11 @@ export default function Layout() {
   const { profile } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
+
+  // Close drawer on every route change (covers nav items, logo click, back button)
+  useEffect(() => {
+    setDrawer(false)
+  }, [location.pathname])
 
   const showCompletion = profile && !profile.isSuperAdmin && !profile.profileCompleted
 
