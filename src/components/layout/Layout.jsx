@@ -6,6 +6,7 @@ import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
 import { useAuth } from '../../contexts/AuthContext'
 import AgentProfileCompletionModal from '../AgentProfileCompletionModal'
+import { IClose } from '../ui/icons'
 
 // Map path prefixes → page title for the topbar.
 const TITLES = [
@@ -81,6 +82,16 @@ export default function Layout() {
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
               className="fixed inset-y-0 left-0 z-50 w-64 lg:hidden"
             >
+              {/* Close button — directly in Layout, direct access to setDrawer */}
+              <button
+                type="button"
+                onClick={() => setDrawer(false)}
+                style={{ position: 'absolute', top: 12, right: 12, zIndex: 60 }}
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-navy-3 border border-navy-4 text-ink-2 hover:text-ink-1 hover:bg-navy-4 active:scale-95 transition-all"
+                aria-label="Close menu"
+              >
+                <IClose size={20} />
+              </button>
               <Sidebar onNavigate={() => setDrawer(false)} />
             </motion.aside>
           </>

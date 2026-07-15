@@ -98,23 +98,13 @@ export default function Sidebar({ onNavigate }) {
 
   return (
     <div className="flex h-full flex-col bg-navy-2 p-4">
-      <div className="flex items-center justify-between mb-6 px-1">
+      <div className="mb-6 px-1">
         {onNavigate ? (
-          <Link to="/dashboard" onClick={onNavigate} className="block min-w-0">
+          <Link to="/dashboard" onClick={onNavigate} className="block">
             <Logo size={38} tagline />
           </Link>
         ) : (
           <Logo size={38} tagline />
-        )}
-        {onNavigate && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onNavigate(); }}
-            className="ml-2 shrink-0 rounded-card p-2 text-ink-2 hover:bg-navy-4/30 hover:text-ink-1 active:bg-navy-4/50"
-            aria-label="Close menu"
-          >
-            <IClose size={22} />
-          </button>
         )}
       </div>
       <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-none">
