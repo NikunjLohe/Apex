@@ -12,6 +12,7 @@ const AGENT_GROUPS = [
     title: 'My Portal',
     items: [
       { to: '/dashboard',     label: 'Dashboard',     Icon: IDashboard, cap: null,           end: true },
+      { to: '/my-profile',    label: 'My Profile',    Icon: IUsers,     cap: null },
       { to: '/my-earnings',   label: 'My Earnings',   Icon: ITrophy,    cap: CAP.AGENT_ONLY },
       { to: '/my-downline',   label: 'My Downline',   Icon: INetwork,   cap: CAP.AGENT_ONLY },
       { to: '/cmd-awards',    label: 'CMD Awards',    Icon: IShield,    cap: CAP.AGENT_ONLY },
@@ -32,6 +33,7 @@ const ADMIN_GROUPS = [
     title: 'Overview',
     items: [
       { to: '/dashboard',         label: 'Dashboard',       Icon: IDashboard, cap: null,              end: true },
+      { to: '/my-profile',        label: 'My Profile',      Icon: IUsers,     cap: null },
       { to: '/admin/overview',    label: 'Overview',        Icon: IBuilding,  cap: CAP.SUPER_ADMIN },
       { to: '/admin/all-reports', label: 'All Reports',     Icon: IReport,    cap: CAP.SUPER_ADMIN },
     ],

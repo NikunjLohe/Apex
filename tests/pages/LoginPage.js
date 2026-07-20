@@ -4,8 +4,8 @@
 export class LoginPage {
   constructor(page) {
     this.page = page
-    this.emailInput    = page.locator('input[type="email"]')
-    this.passwordInput = page.locator('input[type="password"]')
+    this.emailInput    = page.locator('input[name="email"]')
+    this.passwordInput = page.locator('input[name="password"]')
     this.submitButton  = page.locator('button[type="submit"]')
     this.errorMessage  = page.locator('.text-danger, [role="alert"], .text-red')
   }

@@ -50,12 +50,8 @@ export default function Layout() {
 
   const closeDrawer = () => setDrawer(false)
 
-  const showCompletion = profile && !profile.isSuperAdmin && !profile.profileCompleted
-
   return (
     <div className="flex min-h-screen">
-      {showCompletion && <AgentProfileCompletionModal />}
-
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-navy-4 lg:block">
         <Sidebar />

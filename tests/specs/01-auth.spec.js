@@ -13,8 +13,8 @@ test.describe('Authentication', () => {
 
   // ── Login Form Validation ────────────────────────────────────────────────
   test('AUTH-001 | Login page renders email + password fields and submit button', async ({ page }) => {
-    await expect(page.locator('input[type="email"]')).toBeVisible()
-    await expect(page.locator('input[type="password"]')).toBeVisible()
+    await expect(page.locator('input[name="email"]')).toBeVisible()
+    await expect(page.locator('input[name="password"]')).toBeVisible()
     await expect(page.locator('button[type="submit"]')).toBeVisible()
   })
 

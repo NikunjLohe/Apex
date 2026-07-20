@@ -24,6 +24,7 @@ const Maturities = lazy(() => import('./pages/reports/Maturities'))
 const MyEarnings = lazy(() => import('./pages/earnings/MyEarnings'))
 const MyDownline = lazy(() => import('./pages/earnings/MyDownline'))
 const CmdAwards = lazy(() => import('./pages/earnings/CmdAwards'))
+const MyProfile = lazy(() => import('./pages/MyProfile'))
 const Members = lazy(() => import('./pages/admin/Members'))
 const MemberDetail = lazy(() => import('./pages/admin/MemberDetail'))
 const Branches = lazy(() => import('./pages/admin/Branches'))
@@ -160,6 +161,7 @@ export default function App() {
             {/* App (protected, with chrome) */}
             <Route element={<Protected><Layout /></Protected>}>
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/my-profile" element={<MyProfile />} />
 
               {/* Customers */}
               <Route path="/customers" element={<CustomerList />} />

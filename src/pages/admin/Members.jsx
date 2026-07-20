@@ -15,15 +15,28 @@ export default function Members() {
   const branches = useCollection('branches')
   const [search, setSearch] = useState(searchParams.get('q') || '')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
+  const [filterProfile, setFilterProfile] = useState(searchParams.get('profile') || '')
   const [modal, setModal] = useState(null) // { mode:'new'|'edit', member }
   const navigate = useNavigate()
   const { data: settings } = useDoc('config/settings')
+
+  const isProfileComplete = (m) => {
+    if (!m.dob || !m.address || !m.pan || !m.bankDetails?.bankName || !m.bankDetails?.accountNumber || !m.bankDetails?.ifscCode) {
+      return false
+    }
+    return true
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return members.data
       .filter((m) => {
         if (filterStatus && m.status !== filterStatus) return false
+        if (filterProfile) {
+          const complete = isProfileComplete(m)
+          if (filterProfile === 'completed' && !complete) return false
+          if (filterProfile === 'pending' && complete) return false
+        }
         return !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q) || m.sponsorCode?.toLowerCase().includes(q)
       })
       .sort((a, b) => (b.rank || 0) - (a.rank || 0))
@@ -51,10 +64,15 @@ export default function Members() {
             <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10" />
           </div>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="field w-40">
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="field w-32">
             <option value="">All Statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+          </select>
+          <select value={filterProfile} onChange={(e) => setFilterProfile(e.target.value)} className="field w-36">
+            <option value="">All Profiles</option>
+            <option value="completed">Completed</option>
+            <option value="pending">Pending</option>
           </select>
         </div>
         <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm"><IPlus size={16} /> Add Member</button>
@@ -68,7 +86,7 @@ export default function Members() {
         <div className="table-wrap">
           <div className="overflow-x-auto">
             <table className="tbl">
-              <thead><tr><th>Name</th><th>Agent ID</th><th>Rank</th><th>Sponsor</th><th>Branch</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th>Agent ID</th><th>Rank</th><th>Sponsor</th><th>Branch</th><th>Joined</th><th>Status</th><th>Profile</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((m) => (
                   <tr key={m.id}>
@@ -89,6 +107,13 @@ export default function Members() {
                     <td className="text-ink-2">{branchName(m.branchId)}</td>
                     <td className="text-ink-2">{fmtDate(m.joinDate)}</td>
                     <td><StatusBadge status={m.status || 'active'} /></td>
+                    <td>
+                      {isProfileComplete(m) ? (
+                        <span className="text-ok text-xs font-semibold">✓ Complete</span>
+                      ) : (
+                        <span className="text-gold text-xs font-semibold">⚠ Pending</span>
+                      )}
+                    </td>
                     <td className="space-x-2">
                       <Link to={`/admin/members/${m.id}`} className="text-xs font-semibold text-gold hover:underline">View Profile</Link>
                       <button type="button" onClick={() => setModal({ mode: 'edit', member: m })} className="text-xs font-semibold text-gold hover:underline">Edit</button>

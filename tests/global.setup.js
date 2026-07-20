@@ -15,10 +15,10 @@ if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true })
 
 async function loginAndSave(page, credentials, stateFile) {
   await page.goto('/login')
-  await page.waitForSelector('input[type="email"]', { timeout: 20_000 })
+  await page.waitForSelector('input[name="email"]', { timeout: 20_000 })
 
-  await page.fill('input[type="email"]', credentials.email)
-  await page.fill('input[type="password"]', credentials.password)
+  await page.fill('input[name="email"]', credentials.email)
+  await page.fill('input[name="password"]', credentials.password)
   await page.click('button[type="submit"]')
 
   // Wait until redirected away from login page
