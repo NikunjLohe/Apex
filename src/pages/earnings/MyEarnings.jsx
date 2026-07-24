@@ -355,13 +355,13 @@ export default function MyEarnings() {
             <div className="mb-2 flex items-center justify-between text-xs font-semibold">
               <span className="text-ink-2">Next Promotion Target: {next.code}</span>
               <span className="text-ink-1 font-mono">
-                {formatINR(stats.lifetimeBusinessVolume)} / {formatINR(next.promoTarget || 50000)}
+                {formatINR(stats.lifetimeBusinessVolume)} / {formatINR(next.promoTarget || 0)}
               </span>
             </div>
             <div className="w-full bg-navy-2 rounded-full h-2 overflow-hidden border border-navy-4">
               <div 
                 className="bg-gold h-2 rounded-full transition-all duration-300" 
-                style={{ width: `${Math.min(100, (stats.lifetimeBusinessVolume / (next.promoTarget || 50000)) * 100)}%` }} 
+                style={{ width: `${Math.min(100, next.promoTarget ? (stats.lifetimeBusinessVolume / next.promoTarget) * 100 : 100)}%` }} 
               />
             </div>
           </div>

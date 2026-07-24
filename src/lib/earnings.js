@@ -57,9 +57,10 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
   // MDA this month
   const mda = monthPayments.reduce((s, p) => s + mdaForPayment(rankIdx, p, planById[p.planId], mdaTable), 0)
 
-  // MFA / TA flat
-  const mfa = mfaTable[rankIdx] || 0
-  const ta = taTable[rankIdx] || 0
+  // MFA / TA flat (only if agent has business records)
+  const hasRecords = payments.length > 0 || ownPlans.length > 0 || downlinePlans.length > 0
+  const mfa = hasRecords ? (mfaTable[rankIdx] || 0) : 0
+  const ta = hasRecords ? (taTable[rankIdx] || 0) : 0
 
   // Performance bonus
   const pbTarget = pbTargetTable[rankIdx] || 0
