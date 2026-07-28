@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  IShield, 
   INetwork, 
+  IShield, 
   IReport, 
   IUsers, 
   ITrophy, 
@@ -11,641 +11,524 @@ import {
   IChevron,
   IMenu,
   IClose,
-  IBuilding,
-  IDoc,
-  IPhone
-} from '../components/ui/icons'
-import Logo from '../components/ui/Logo'
+  ICheck,
+  ISearch
+} from '../components/ui/icons';
 
-export default function Landing() {
-  const [isScrolled, setIsScrolled] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+// Minimalist, premium logo
+const Logo = ({ size = 32, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 200 200" fill="none" className={className}>
+    <circle cx="100" cy="100" r="100" fill="transparent" />
+    <path d="M100 30 L170 150 L30 150 Z" fill="url(#premiumGold)" />
+    <path d="M100 65 L145 140 L55 140 Z" fill="#04120E" />
+    <path d="M100 85 L125 130 L75 130 Z" fill="url(#premiumGold)" />
+    <defs>
+      <linearGradient id="premiumGold" x1="30" y1="30" x2="170" y2="150" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#E6C97A" />
+        <stop offset="0.5" stopColor="#BFA256" />
+        <stop offset="1" stopColor="#8C7335" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
 
-  // Handle document title and scroll for navbar
+const Landing = () => {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   useEffect(() => {
-    document.title = 'Apex Multisolutions | Performance Portal'
-    const metaDescription = document.createElement('meta')
-    metaDescription.name = 'description'
-    metaDescription.content = 'Join Apex Multisolutions and build your financial future through a transparent, technology-driven platform designed for long-term success.'
-    document.head.appendChild(metaDescription)
-    
-    const canonical = document.createElement('link')
-    canonical.rel = 'canonical'
-    canonical.href = 'https://apexmultisolutions.com'
-    document.head.appendChild(canonical)
-
-    const handleScroll = () => {
-      if (window.scrollY > 20) {
-        setIsScrolled(true)
-      } else {
-        setIsScrolled(false)
-      }
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-
-  const navLinks = [
-    { name: 'Home', href: '#home' },
-    { name: 'About', href: '#about' },
-    { name: 'Why Apex', href: '#why-us' },
-    { name: 'Services', href: '#services' },
-    { name: 'Opportunity', href: '#opportunity' },
-    { name: 'Contact', href: '#contact' },
-  ]
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const scrollTo = (id) => {
-    setMobileMenuOpen(false)
-    const el = document.getElementById(id)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
     }
-  }
+  };
+
+  const navLinks = [
+    { name: 'Platform', href: '#home' },
+    { name: 'Solutions', href: '#why-us' },
+    { name: 'Infrastructure', href: '#services' },
+    { name: 'Enterprise', href: '#opportunity' }
+  ];
 
   return (
-    <div className="min-h-screen bg-[#061A15] text-white font-sans selection:bg-gold-1 selection:text-navy-1 overflow-x-hidden">
-      {/* Navigation */}
+    <div className="min-h-screen bg-[#04120E] text-white font-sans selection:bg-[#BFA256] selection:text-[#04120E] overflow-x-hidden">
+      
+      {/* FLOATING GLASS NAVBAR */}
       <nav 
-        className={`fixed top-0 w-full z-50 transition-all duration-500 ease-in-out ${
-          isScrolled 
-            ? 'bg-white/10 backdrop-blur-xl border-b border-white/20 py-4 shadow-[0_8px_30px_rgba(0,0,0,0.2)]' 
-            : 'bg-gradient-to-b from-[#061A15]/90 to-transparent py-6'
+        className={`fixed top-0 w-full z-50 transition-all duration-700 ease-in-out px-4 sm:px-6 lg:px-8 ${
+          isScrolled ? 'py-4' : 'py-8'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="flex justify-between items-center">
-            {/* Logo */}
-            <div className="flex-shrink-0 cursor-pointer transition-transform duration-300 hover:scale-105" onClick={() => scrollTo('home')}>
-              <Logo size={36} />
+        <div 
+          className={`max-w-7xl mx-auto rounded-full transition-all duration-700 ${
+            isScrolled 
+              ? 'bg-[#081C16]/80 backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] px-8' 
+              : 'bg-transparent px-4'
+          }`}
+        >
+          <div className="flex justify-between items-center h-16">
+            
+            {/* Logo area */}
+            <div className="flex-shrink-0 cursor-pointer flex items-center gap-4 transition-transform duration-500 hover:scale-[1.02]" onClick={() => scrollTo('home')}>
+              <Logo size={44} />
+              <div className="hidden sm:block mt-1">
+                <div className="text-white font-extrabold text-2xl leading-none tracking-tight">Apex Multisolutions</div>
+                <div className="text-[#BFA256] text-[0.7rem] font-bold uppercase tracking-[0.2em] mt-1.5">Performance Portal</div>
+              </div>
             </div>
 
-            {/* Desktop Menu */}
-            <div className="hidden lg:flex items-center space-x-10">
+            {/* Nav links */}
+            <div className="hidden lg:flex items-center space-x-2">
               {navLinks.map((link) => (
                 <button 
                   key={link.name} 
                   onClick={() => scrollTo(link.href.substring(1))}
-                  className="text-sm font-bold tracking-wider text-white hover:text-gold-1 transition-all duration-300 hover:-translate-y-0.5"
+                  className="px-5 py-2 text-sm font-medium tracking-wide text-[#9AA8A2] hover:text-white rounded-full hover:bg-white/[0.03] transition-all duration-300"
                 >
                   {link.name}
                 </button>
               ))}
+            </div>
+            
+            {/* CTA */}
+            <div className="hidden lg:block">
               <Link 
                 to="/login"
-                className="bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] px-8 py-2.5 rounded-full font-extrabold text-sm transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(212,175,55,0.4)] hover:shadow-[0_0_30px_rgba(212,175,55,0.6)]"
+                className="group relative inline-flex items-center justify-center bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#8C7335] text-[#04120E] px-8 py-3 rounded-full font-bold text-sm transition-all duration-500 hover:-translate-y-0.5"
               >
-                Login to Portal
+                <span className="relative z-10">Sign In</span>
+                <div className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute -inset-1 rounded-full bg-[#BFA256]/30 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </Link>
             </div>
 
-            {/* Mobile Menu Button */}
+            {/* Mobile Nav Toggle */}
             <div className="lg:hidden flex items-center">
-              <button 
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5"
-              >
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-[#9AA8A2] hover:text-white p-2">
                 {mobileMenuOpen ? <IClose size={28} /> : <IMenu size={28} />}
               </button>
             </div>
           </div>
         </div>
-
-        {/* Mobile Menu Dropdown */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              className="lg:hidden bg-[#0a231d]/95 backdrop-blur-xl border-b border-gold-1/20 overflow-hidden"
-            >
-              <div className="px-6 pt-4 pb-8 space-y-2 shadow-2xl">
-                {navLinks.map((link) => (
-                  <button
-                    key={link.name}
-                    onClick={() => scrollTo(link.href.substring(1))}
-                    className="block w-full text-left px-4 py-3 text-base font-semibold text-gray-300 hover:text-gold-1 hover:bg-white/5 rounded-xl transition-all"
-                  >
-                    {link.name}
-                  </button>
-                ))}
-                <div className="pt-6">
-                  <Link 
-                    to="/login"
-                    className="flex justify-center items-center w-full bg-gradient-to-r from-gold-1 to-gold-2 text-[#04120e] px-6 py-3.5 rounded-xl font-bold transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]"
-                  >
-                    Login to Portal
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </nav>
 
-      {/* Hero Section */}
-      <section id="home" className="relative pt-36 pb-24 lg:pt-52 lg:pb-40 overflow-hidden">
-        {/* Background Effects */}
+      {/* CINEMATIC HERO SECTION */}
+      <section id="home" className="relative pt-48 pb-40 lg:pt-64 lg:pb-56 overflow-hidden min-h-screen flex items-center">
+        
+        {/* Background Textures & Lighting */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-          {/* Enhanced Glows */}
-          <div className="absolute top-[10%] left-[20%] w-[40%] h-[40%] rounded-full bg-gold-1/20 blur-[150px]" />
-          <div className="absolute -top-[10%] -right-[5%] w-[50%] h-[50%] rounded-full bg-emerald-500/15 blur-[120px]" />
-          <div className="absolute bottom-[0%] -left-[10%] w-[50%] h-[50%] rounded-full bg-gold-1/10 blur-[120px]" />
+          {/* Abstract map texture */}
+          <div className="absolute inset-0 bg-map-pattern mix-blend-overlay" />
           
-          {/* Softer Grid */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_80%,transparent_100%)]" />
+          {/* Cinematic Spotlights */}
+          <div className="absolute -top-[10%] left-[20%] w-[50%] h-[50%] rounded-full bg-[#BFA256]/10 blur-[180px]" />
+          <div className="absolute top-[20%] right-[10%] w-[40%] h-[60%] rounded-full bg-[#081C16] blur-[150px]" />
+          <div className="absolute bottom-[-20%] left-[30%] w-[40%] h-[50%] rounded-full bg-emerald-900/20 blur-[150px]" />
+          
+          {/* Light Rays */}
+          <div className="absolute -top-[30%] left-[10%] w-[100%] h-[30%] bg-white/[0.01] blur-[80px] rotate-[35deg] transform origin-top-left" />
+          
+          {/* Floating Particles */}
+          <div className="absolute top-[20%] left-[15%] w-2 h-2 rounded-full bg-[#BFA256]/40 blur-[1px] animate-particle-1" />
+          <div className="absolute top-[60%] left-[5%] w-3 h-3 rounded-full bg-emerald-500/30 blur-[2px] animate-particle-2" />
+          <div className="absolute top-[30%] right-[20%] w-1.5 h-1.5 rounded-full bg-white/30 blur-[1px] animate-particle-3" />
+          <div className="absolute bottom-[20%] right-[10%] w-2 h-2 rounded-full bg-[#BFA256]/20 blur-[1px] animate-particle-1" style={{ animationDelay: '2s' }} />
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-16 lg:gap-12 items-center">
+        <div className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-16 relative z-10 w-full">
+          <div className="grid lg:grid-cols-2 gap-20 lg:gap-16 items-center">
             
-            {/* Hero Content */}
+            {/* LEFT TYPOGRAPHY */}
             <motion.div 
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} // smooth apple-like ease
               className="max-w-2xl"
             >
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gold-1/10 border border-gold-1/20 text-gold-1 text-xs sm:text-sm font-bold uppercase tracking-widest mb-8 backdrop-blur-md"
-              >
-                <INetwork size={16} /> Official Performance Portal
-              </motion.div>
-              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white mb-8 leading-[1.15]">
-                Empowering Growth Through <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-1 via-yellow-200 to-gold-1 bg-300% animate-gradient">Trusted Opportunities</span>
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/[0.02] border border-white/5 text-[#BFA256] text-[0.7rem] font-bold uppercase tracking-[0.2em] mb-10 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#BFA256] animate-pulse" />
+                Trusted Performance Management Platform
+              </div>
+              
+              <h1 className="text-6xl sm:text-7xl lg:text-[5rem] font-bold tracking-[-0.03em] text-white mb-8 leading-[1.05]">
+                Elevating Performance. <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#8C7335]">
+                  Expanding Horizons.
+                </span>
               </h1>
-              <p className="text-lg sm:text-xl text-gray-300 mb-12 leading-relaxed max-w-xl font-medium">
-                Join Apex Multisolutions and build your financial future through a transparent, enterprise-grade platform designed for long-term success.
+              
+              <p className="text-xl text-[#9AA8A2] mb-12 leading-[1.8] font-medium max-w-lg tracking-wide">
+                Partner with Apex Multisolutions for transparent commission management, actionable analytics, and the institutional infrastructure required to scale your business network.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-5 mt-10">
+              <div className="flex flex-col sm:flex-row gap-5 mb-16">
                 <Link 
                   to="/login" 
-                  className="inline-flex justify-center items-center gap-3 bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] px-10 py-4 rounded-xl font-extrabold text-lg transition-all duration-300 hover:scale-[1.03] shadow-[0_0_40px_rgba(212,175,55,0.5)] hover:shadow-[0_0_60px_rgba(212,175,55,0.7)]"
+                  className="group relative inline-flex justify-center items-center gap-3 bg-gradient-to-r from-[#E6C97A] to-[#BFA256] text-[#04120E] px-10 py-4.5 rounded-2xl font-bold text-lg transition-all duration-500 hover:-translate-y-1 shadow-[0_10px_30px_rgba(191,162,86,0.15)]"
                 >
-                  Access Portal <IChevron size={24} className="ml-1" />
+                  <span className="relative z-10">Access Portal</span>
+                  <IChevron size={20} className="relative z-10 ml-1 transition-transform duration-300 group-hover:translate-x-1" />
+                  <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </Link>
                 <button 
                   onClick={() => scrollTo('contact')}
-                  className="inline-flex justify-center items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 text-white px-10 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:border-gold-1 hover:text-gold-1 hover:bg-white/20 shadow-lg"
+                  className="inline-flex justify-center items-center gap-2 bg-white/[0.02] backdrop-blur-md border border-white/10 text-white px-10 py-4.5 rounded-2xl font-bold text-lg transition-all duration-500 hover:bg-white/[0.05] hover:border-white/20"
                 >
-                  Contact Us
+                  Contact Sales
                 </button>
               </div>
+
+              {/* Minimal Trust Indicators */}
+              <div className="flex items-center gap-8 border-t border-white/5 pt-8">
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-2xl">99.9%</span>
+                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Uptime SLA</span>
+                </div>
+                <div className="w-px h-10 bg-white/5" />
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-2xl">SOC 2</span>
+                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Certified</span>
+                </div>
+                <div className="w-px h-10 bg-white/5" />
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-2xl">256-bit</span>
+                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Encryption</span>
+                </div>
+              </div>
             </motion.div>
 
-            {/* Hero Visual - Premium Illustration representation */}
+            {/* RIGHT: HIGH-FIDELITY SaaS DASHBOARD MOCKUP */}
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, x: 20 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
-              className="relative hidden lg:block"
+              initial={{ opacity: 0, x: 50, rotateY: -10 }}
+              animate={{ opacity: 1, x: 0, rotateY: 0 }}
+              transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="relative hidden lg:block perspective-1000 w-full h-[700px] mt-10"
             >
-              <div className="relative w-full aspect-square max-w-lg mx-auto">
-                {/* Abstract Data/Financial representation using CSS and SVGs */}
-                <div className="absolute inset-0 bg-gradient-to-br from-[#0f352c] to-[#061a15] rounded-3xl border border-gray-700 shadow-2xl overflow-hidden transform rotate-3 scale-105 z-0 transition-transform duration-700 hover:rotate-6" />
-                <div className="absolute inset-0 bg-gradient-to-tr from-gold-1/30 to-white/5 rounded-3xl border border-white/20 shadow-2xl backdrop-blur-3xl z-10 flex flex-col p-10 justify-between">
+              <div className="rotate-dashboard transition-transform duration-1000 hover:rotate-dashboard-hover relative w-[130%] -ml-[15%] h-full">
+                
+                {/* Dashboard Frame Container */}
+                <div className="absolute inset-0 bg-[#081C16]/80 backdrop-blur-3xl rounded-[2rem] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.8),inset_0_0_0_1px_rgba(255,255,255,0.05)] flex overflow-hidden">
                   
-                  {/* Mock UI Elements for financial feel */}
-                  <div className="flex justify-between items-center mb-8">
-                    <div className="w-14 h-14 rounded-2xl bg-gold-1/20 flex items-center justify-center shadow-inner">
-                      <INetwork className="text-gold-1" size={28} />
+                  {/* SIDEBAR */}
+                  <div className="w-64 bg-black/20 border-r border-white/5 p-6 flex flex-col gap-8">
+                    {/* Fake Logo */}
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#E6C97A] to-[#8C7335] p-[1px]">
+                        <div className="w-full h-full bg-[#04120E] rounded-md" />
+                      </div>
+                      <div className="h-4 w-24 bg-white/20 rounded-md" />
                     </div>
-                    <div className="text-right space-y-3">
-                      <div className="w-28 h-2.5 bg-gray-700 rounded-full ml-auto" />
-                      <div className="w-16 h-2 bg-gray-600 rounded-full ml-auto" />
+
+                    {/* Nav Items */}
+                    <div className="flex flex-col gap-2">
+                      <div className="h-10 rounded-xl bg-white/10 border border-white/5 flex items-center px-4 gap-4 shadow-inner">
+                        <div className="w-4 h-4 rounded-md bg-[#BFA256]" />
+                        <div className="h-2.5 w-20 bg-white/80 rounded-md" />
+                      </div>
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="h-10 rounded-xl flex items-center px-4 gap-4 hover:bg-white/5 transition-colors">
+                          <div className="w-4 h-4 rounded-md bg-white/20" />
+                          <div className="h-2 w-24 bg-white/30 rounded-md" />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Profile */}
+                    <div className="mt-auto h-16 rounded-2xl bg-white/5 border border-white/5 p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#BFA256] to-emerald-700 p-[2px]">
+                        <div className="w-full h-full rounded-full bg-[#081C16] border-2 border-[#081C16]" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="h-2 w-20 bg-white/80 rounded-md" />
+                        <div className="h-1.5 w-12 bg-white/30 rounded-md" />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-6 flex-1 justify-center flex flex-col">
-                    {[85, 45, 92, 35, 65].map((width, i) => (
-                      <div key={i} className="flex items-center gap-5">
-                        <div className="w-10 h-10 rounded-xl bg-gray-800/80 flex items-center justify-center shadow-sm">
-                          <IReport className="text-gray-400" size={16} />
+                  {/* MAIN CONTENT AREA */}
+                  <div className="flex-1 p-8 flex flex-col gap-8 overflow-hidden bg-gradient-to-br from-transparent to-black/10">
+                    
+                    {/* Top Bar */}
+                    <div className="flex justify-between items-center">
+                      <div className="h-8 w-48 bg-white/10 rounded-lg" />
+                      <div className="flex gap-4">
+                        <div className="h-10 w-64 bg-black/20 border border-white/5 rounded-xl flex items-center px-4 gap-3">
+                          <ISearch size={16} className="text-white/30" />
+                          <div className="h-2 w-20 bg-white/20 rounded-md" />
                         </div>
-                        <div className="flex-1 h-3 bg-gray-800/80 rounded-full overflow-hidden shadow-inner">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${width}%` }}
-                            transition={{ duration: 1.5, delay: 0.6 + (i * 0.15), ease: "easeOut" }}
-                            className="h-full bg-gradient-to-r from-emerald-500 to-gold-1 rounded-full" 
-                          />
+                        <div className="h-10 w-10 bg-white/5 border border-white/5 rounded-xl flex items-center justify-center">
+                          <div className="w-2 h-2 rounded-full bg-[#BFA256] absolute top-2 right-2" />
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* KPI Cards */}
+                    <div className="grid grid-cols-3 gap-6">
+                      {[
+                        { trend: '+12.5%', color: 'text-emerald-400' },
+                        { trend: '+4.2%', color: 'text-emerald-400' },
+                        { trend: '-1.8%', color: 'text-red-400' }
+                      ].map((kpi, i) => (
+                        <div key={i} className="bg-white/5 border border-white/5 p-6 rounded-3xl relative overflow-hidden backdrop-blur-md">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="h-2.5 w-24 bg-white/30 rounded-md" />
+                            <div className={`text-[10px] font-bold px-2 py-1 rounded-md bg-black/30 ${kpi.color}`}>
+                              {kpi.trend}
+                            </div>
+                          </div>
+                          <div className="h-8 w-32 bg-white/90 rounded-lg mb-2" />
+                          <div className="h-2 w-16 bg-white/20 rounded-md" />
+                          
+                          {/* Subtle background glow per card */}
+                          {i === 0 && <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-[#BFA256]/10 rounded-full blur-2xl" />}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Charts & Graphs Row */}
+                    <div className="flex gap-6 h-64">
+                      {/* Main Chart */}
+                      <div className="flex-[2] bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col justify-between">
+                        <div className="flex justify-between">
+                          <div className="h-3 w-32 bg-white/40 rounded-md" />
+                          <div className="h-6 w-20 bg-white/10 rounded-lg" />
+                        </div>
+                        <div className="flex items-end gap-3 h-32 mt-6">
+                          {[30, 45, 20, 60, 80, 50, 95, 75, 40, 85].map((h, i) => (
+                            <div key={i} className="flex-1 rounded-t-sm bg-gradient-to-t from-[#BFA256]/20 to-[#BFA256]" style={{ height: `${h}%` }} />
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-4 px-2">
+                          {[...Array(10)].map((_, i) => (
+                            <div key={i} className="h-1.5 w-4 bg-white/20 rounded-sm" />
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Side Widget */}
+                      <div className="flex-1 bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col">
+                        <div className="h-3 w-24 bg-white/40 rounded-md mb-8" />
+                        <div className="relative w-32 h-32 mx-auto">
+                          <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#BFA256" strokeWidth="3" strokeDasharray="75, 100" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="h-4 w-12 bg-white/90 rounded-md mb-1" />
+                            <div className="h-1.5 w-6 bg-white/30 rounded-sm" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Data Table */}
+                    <div className="flex-1 bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col">
+                      <div className="h-3 w-32 bg-white/40 rounded-md mb-6" />
+                      
+                      <div className="flex justify-between border-b border-white/5 pb-3 mb-3">
+                        <div className="h-2 w-16 bg-white/20 rounded-md" />
+                        <div className="h-2 w-16 bg-white/20 rounded-md" />
+                        <div className="h-2 w-16 bg-white/20 rounded-md" />
+                        <div className="h-2 w-16 bg-white/20 rounded-md" />
+                      </div>
+
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
+                          <div className="flex items-center gap-4 w-1/4">
+                            <div className="w-8 h-8 rounded-full bg-white/10" />
+                            <div className="flex flex-col gap-1.5">
+                              <div className="h-2 w-20 bg-white/80 rounded-md" />
+                              <div className="h-1.5 w-12 bg-white/30 rounded-md" />
+                            </div>
+                          </div>
+                          <div className="w-1/4 flex justify-center">
+                            <div className="h-2 w-16 bg-white/60 rounded-md" />
+                          </div>
+                          <div className="w-1/4 flex justify-center">
+                            <div className={`h-5 w-16 rounded-full flex items-center justify-center bg-white/5 border border-white/10`}>
+                              <div className="h-1 w-8 bg-[#BFA256] rounded-full" />
+                            </div>
+                          </div>
+                          <div className="w-1/4 flex justify-end">
+                            <div className="h-2 w-16 bg-white/90 rounded-md" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                   </div>
-
-                  {/* Floating Elements */}
-                  <motion.div 
-                    animate={{ y: [0, -15, 0] }}
-                    transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute -right-8 -bottom-8 bg-[#061A15]/90 backdrop-blur-xl p-6 rounded-2xl border border-gray-700 shadow-2xl flex items-center gap-5"
-                  >
-                    <div className="bg-emerald-500/20 p-4 rounded-xl shadow-inner">
-                      <IShield className="text-emerald-400" size={28} />
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-1">Enterprise</div>
-                      <div className="font-bold text-white text-lg">Secure Portal</div>
-                    </div>
-                  </motion.div>
-
                 </div>
+
+                {/* Floating Notification Glass */}
+                <motion.div 
+                  animate={{ y: [0, -15, 0] }}
+                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute -right-12 top-20 bg-[#081C16]/90 backdrop-blur-2xl p-4 rounded-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)] flex items-center gap-4 z-20"
+                >
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-inner">
+                    <IShield size={20} className="text-white" />
+                  </div>
+                  <div>
+                    <div className="h-1.5 w-16 bg-white/40 rounded-sm mb-2" />
+                    <div className="h-2.5 w-24 bg-white rounded-md" />
+                  </div>
+                </motion.div>
+
               </div>
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* About Section */}
-      <section id="about" className="py-24 lg:py-32 bg-[#04120e] relative">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+      {/* SECTION DIVIDER: Soft Gradient & Blur */}
+      <div className="relative h-48 bg-gradient-to-b from-[#04120E] via-[#04120E] to-white z-20">
+        <div className="absolute inset-0 bg-[#04120E] [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      </div>
+
+      {/* SECOND SECTION: The "White" Section */}
+      <section id="why-us" className="relative bg-white pt-10 pb-40">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16">
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6 }}
-            className="text-center max-w-3xl mx-auto mb-20"
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-24 md:mb-32 max-w-4xl"
           >
-            <h2 className="text-gold-1 font-bold tracking-widest uppercase text-sm mb-4 flex items-center justify-center gap-4">
-              <span className="w-12 h-px bg-gold-1/30"></span>
-              About Apex
-              <span className="w-12 h-px bg-gold-1/30"></span>
-            </h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold text-white mb-8 leading-tight">Built on Trust. <br className="hidden sm:block"/>Powered by Technology.</h3>
-            <p className="text-gray-400 text-lg md:text-xl leading-relaxed">
-              At Apex Multisolutions, our mission is to create sustainable financial opportunities for driven individuals. 
-              We combine enterprise-grade technology with transparent business practices.
-            </p>
+            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-6">Why Choose Apex</h2>
+            <h3 className="text-5xl md:text-6xl font-bold text-[#04120E] leading-[1.1] tracking-tight">
+              A transparent ecosystem designed for <span className="text-[#8C7335]">sustainable</span> network growth.
+            </h3>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-10">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-12">
             {[
-              { icon: INetwork, title: 'Our Mission', desc: 'To provide a robust, reliable platform where members can confidently grow their financial portfolios and build long-term success.' },
-              { icon: IUsers, title: 'Our Vision', desc: 'To become the industry standard for transparent, technology-driven financial network organizations globally.' },
-              { icon: IShield, title: 'Our Commitment', desc: 'We are committed to absolute integrity, offering secure payouts, clear performance metrics, and unwavering support to our community.' }
-            ].map((item, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.6, delay: idx * 0.15 }}
-                className="bg-white/[0.05] backdrop-blur-xl p-10 rounded-3xl border border-white/10 hover:border-gold-1/50 hover:bg-white/[0.08] hover:shadow-[0_10px_50px_rgba(212,175,55,0.15)] transition-all duration-500 group relative overflow-hidden"
-              >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gold-1/5 rounded-bl-full -mr-10 -mt-10 transition-transform duration-500 group-hover:scale-110" />
-                <div className="w-16 h-16 bg-gold-1/10 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 relative z-10 shadow-inner">
-                  <item.icon className="text-gold-1" size={32} />
-                </div>
-                <h4 className="text-2xl font-bold text-white mb-4 relative z-10">{item.title}</h4>
-                <p className="text-gray-400 leading-relaxed text-lg relative z-10">{item.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Why Choose Apex */}
-      <section id="why-us" className="py-24 lg:py-32 relative overflow-hidden bg-[#061A15]">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <motion.div 
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6 }}
-            className="mb-20"
-          >
-            <h2 className="text-gold-1 font-bold tracking-widest uppercase text-sm mb-4 flex items-center gap-4">
-              <span className="w-12 h-px bg-gold-1/30"></span>
-              Why Choose Apex
-            </h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold text-white max-w-3xl leading-tight">The Enterprise Standard for Performance Tracking</h3>
-          </motion.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
-            {[
-              { title: 'Secure Member Portal', icon: IShield },
-              { title: 'Transparent Commission', icon: IReport },
-              { title: 'Real-Time Dashboard', icon: IAlert },
-              { title: 'Growth Opportunities', icon: INetwork },
-              { title: 'Fast Payout Management', icon: IShield },
-              { title: 'Dedicated Support', icon: IUsers },
-              { title: 'Modern Technology', icon: INetwork },
-              { title: 'Leadership Rewards', icon: ITrophy },
+              { title: 'Secure & Reliable', icon: IShield, desc: 'Bank-level encryption protecting your personal data, network hierarchy, and financial earnings with zero compromise.' },
+              { title: 'Transparent Operations', icon: IReport, desc: 'Every policy, commission, and payout is completely traceable and clearly reported in real-time.' },
+              { title: 'Growth Opportunities', icon: INetwork, desc: 'A structured promotion system designed to intelligently reward your hard work and consistent network expansion.' },
+              { title: 'Fast Payouts', icon: IAlert, desc: 'Automated processing ensures your commissions and allowances are calculated accurately and distributed on time.' },
+              { title: 'Dedicated Support', icon: IUsers, desc: 'Professional management support ready to help you navigate the platform and maximize your earning potential.' },
+              { title: 'Performance Driven', icon: ITrophy, desc: 'Clear metrics, intuitive dashboards, and actionable insights to help you track business volume and achieve leadership ranks.' },
             ].map((feature, idx) => (
               <motion.div 
                 key={idx}
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: idx * 0.05 }}
-                className="bg-white/[0.06] backdrop-blur-xl p-8 rounded-2xl border border-white/10 hover:bg-white/[0.1] hover:border-gold-1/50 hover:-translate-y-1 transition-all duration-300 flex flex-col items-start group shadow-xl"
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.8, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                className="bg-white p-10 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] hover:-translate-y-2 transition-all duration-500 group"
               >
-                <div className="p-4 bg-white/10 rounded-xl mb-5 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 shadow-inner">
-                  <feature.icon className="text-emerald-300 group-hover:text-gold-1 transition-colors duration-300" size={28} />
+                <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-8 border border-gray-100 group-hover:bg-[#04120E] transition-colors duration-500 shadow-sm">
+                  <feature.icon className="text-[#081C16] group-hover:text-[#BFA256] transition-colors duration-500" size={28} />
                 </div>
-                <h4 className="font-bold text-white text-lg leading-snug">{feature.title}</h4>
+                <h4 className="font-bold text-[#04120E] text-2xl mb-4 tracking-tight">{feature.title}</h4>
+                <p className="text-gray-500 text-lg leading-relaxed font-medium">{feature.desc}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Our Services */}
-      <section id="services" className="py-24 lg:py-32 bg-[#0a231d] relative border-y border-gray-800 shadow-2xl">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+      {/* TRANSITION BACK TO DARK */}
+      <div className="w-full h-40 bg-gradient-to-b from-white to-[#04120E]" />
+
+      {/* SERVICES SECTION */}
+      <section id="services" className="py-32 bg-[#04120E] relative overflow-hidden">
+        
+        {/* Subtle background glow */}
+        <div className="absolute top-0 right-0 w-[50%] h-[50%] bg-[#BFA256]/5 blur-[200px] pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16 relative z-10">
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-20"
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-24"
           >
-            <h2 className="text-gold-1 font-bold tracking-widest uppercase text-sm mb-4 flex items-center justify-center gap-4">
-              <span className="w-12 h-px bg-gold-1/30"></span>
-              Our Services
-              <span className="w-12 h-px bg-gold-1/30"></span>
-            </h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold text-white">Comprehensive Financial Tools</h3>
+            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-6">Infrastructure</h2>
+            <h3 className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-tight max-w-2xl">
+              Professional tools designed for network leaders.
+            </h3>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
+          <div className="grid md:grid-cols-2 gap-6 lg:gap-8">
             {[
-              { title: 'Business Network', desc: 'Advanced tools to manage and visualize your entire organizational hierarchy.' },
-              { title: 'Performance Tracking', desc: 'Real-time analytics and metrics to monitor sales, volume, and rank progression.' },
-              { title: 'Secure Member Portal', desc: 'Enterprise-grade security ensuring your data and financial information remain protected.' },
-              { title: 'Business Reports', desc: 'Detailed, exportable reports for collections, maturities, and network performance.' },
-              { title: 'Growth Planning', desc: 'Strategic insights and clear targets to help you reach the next promotion tier.' },
-              { title: 'Digital Management', desc: 'Completely paperless, cloud-based management for all your operations.' }
+              'Network & Hierarchy Management',
+              'Real-time Performance Dashboard',
+              'Automated Commission Tracking',
+              'Detailed Earnings Reports',
+              'Rank & Promotion Pathways',
+              'Secure Document Management'
             ].map((service, idx) => (
               <motion.div 
                 key={idx}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.5, delay: idx * 0.1 }}
-                className="bg-white/[0.06] backdrop-blur-xl p-10 rounded-3xl border border-white/10 hover:border-gold-1/40 hover:bg-white/[0.09] transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_15px_40px_rgba(212,175,55,0.15)] group"
-              >
-                <div className="w-12 h-1 bg-gradient-to-r from-gold-1 to-transparent mb-6 transition-all duration-300 group-hover:w-20 rounded-full" />
-                <h4 className="text-xl font-extrabold text-white mb-4 tracking-wide">{service.title}</h4>
-                <p className="text-gray-300 text-base leading-relaxed font-medium">{service.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Business Opportunity (Timeline) */}
-      <section id="opportunity" className="py-24 lg:py-32 relative bg-[#04120e]">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-24"
-          >
-            <h2 className="text-gold-1 font-bold tracking-widest uppercase text-sm mb-4 flex items-center justify-center gap-4">
-              <span className="w-12 h-px bg-gold-1/30"></span>
-              The Journey
-              <span className="w-12 h-px bg-gold-1/30"></span>
-            </h2>
-            <h3 className="text-4xl md:text-5xl font-extrabold text-white">Your Path to Leadership</h3>
-          </motion.div>
-
-          <div className="relative max-w-5xl mx-auto">
-            {/* Connecting Line */}
-            <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-gold-1 via-emerald-500 to-[#04120e] transform md:-translate-x-1/2 rounded-full opacity-50" />
-            
-            {[
-              { step: '01', title: 'Join Apex', desc: 'Onboard securely through our digital portal and gain immediate access to performance tracking.' },
-              { step: '02', title: 'Build Your Network', desc: 'Utilize our structural tools to enroll clients and expand your organization strategically.' },
-              { step: '03', title: 'Grow Your Business', desc: 'Increase your business volume and monitor real-time contributions from your direct downlines.' },
-              { step: '04', title: 'Track Performance', desc: 'Use advanced analytics to see exact requirements for your next promotion and commission payouts.' },
-              { step: '05', title: 'Earn Rewards', desc: 'Receive transparent, automated payouts including Marketing Allowances and Performance Bonuses.' },
-              { step: '06', title: 'Leadership Growth', desc: 'Achieve executive ranks and unlock exclusive CMD awards and global organizational benefits.' },
-            ].map((item, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, y: 30, x: idx % 2 === 0 ? 30 : -30 }}
-                whileInView={{ opacity: 1, y: 0, x: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.6, type: "spring", bounce: 0.2 }}
-                className={`relative flex items-center mb-16 lg:mb-12 ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}
-              >
-                {/* Number node */}
-                <div className="absolute left-4 md:left-1/2 w-10 h-10 rounded-full bg-[#04120e] border-2 border-gold-1 flex items-center justify-center transform -translate-x-1/2 z-10 text-sm font-extrabold text-gold-1 shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-                  {item.step}
-                </div>
-
-                {/* Content Card */}
-                <div className={`ml-20 md:ml-0 md:w-1/2 ${idx % 2 === 0 ? 'md:pl-16' : 'md:pr-16 text-left md:text-right'}`}>
-                  <div className="bg-white/[0.05] backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-xl hover:border-gold-1/40 hover:-translate-y-1 hover:bg-white/[0.08] transition-all duration-300 group">
-                    <h4 className="text-2xl font-bold text-white mb-3 group-hover:text-gold-1 transition-colors">{item.title}</h4>
-                    <p className="text-gray-300 text-base leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Core Values */}
-      <section className="py-24 lg:py-32 bg-[#04120e] relative border-t border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-y-16 gap-x-8 text-center">
-            {[
-              'Transparency', 'Integrity', 'Commitment', 'Growth', 'Innovation', 'Trust'
-            ].map((value, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: idx * 0.1 }}
-                className="flex flex-col items-center group"
+                transition={{ duration: 0.6, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-3xl border border-white/5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 flex items-center gap-6 group"
               >
-                <div className="text-gold-1 mb-6 p-4 rounded-full bg-gold-1/5 group-hover:bg-gold-1/20 group-hover:scale-110 transition-all duration-300 shadow-inner">
-                  <IShield size={36} strokeWidth={1.5} />
-                </div>
-                <h4 className="text-lg lg:text-xl font-bold text-white tracking-wide">{value}</h4>
+                <div className="w-1.5 h-10 bg-gradient-to-b from-[#E6C97A] to-[#8C7335] rounded-full scale-y-50 group-hover:scale-y-100 transition-transform duration-500 origin-top" />
+                <h4 className="font-bold text-white text-xl tracking-tight">{service}</h4>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Trust & Features Section (Placeholders) */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#061A15] to-[#0a231d] z-0" />
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none -translate-y-1/2 translate-x-1/3" />
-        
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10">
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.6 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-center"
-          >
-            {[
-              { label: 'Network Reliability', value: 'Expansion & Growth', icon: INetwork },
-              { label: 'Technology Stack', value: 'Modern Infrastructure', icon: IAlert },
-              { label: 'Security & Compliance', value: 'Enterprise Grade', icon: IShield },
-              { label: 'Agent Assistance', value: 'Professional Support', icon: IUsers },
-            ].map((stat, idx) => (
-              <div key={idx} className="p-8 bg-white/[0.08] backdrop-blur-xl rounded-3xl border border-white/20 hover:bg-white/[0.12] hover:border-gold-1/50 transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.2)] group">
-                <div className="w-14 h-14 mx-auto bg-white/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 shadow-inner">
-                  <stat.icon className="text-emerald-300 group-hover:text-gold-1 transition-colors" size={28} />
-                </div>
-                <div className="text-xl font-extrabold text-gold-1 mb-3 drop-shadow-md">{stat.value}</div>
-                <div className="text-sm text-white uppercase tracking-widest font-bold">{stat.label}</div>
+      {/* FOOTER */}
+      <footer className="bg-[#04120E] pt-32 pb-12 border-t border-white/5">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16">
+          <div className="grid md:grid-cols-12 gap-12 lg:gap-16 mb-24">
+            <div className="col-span-12 md:col-span-5">
+              <div className="mb-8 flex items-center gap-4">
+                <Logo size={40} />
+                <span className="text-white font-extrabold text-2xl tracking-tight">Apex</span>
               </div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className="py-24 lg:py-32 bg-[#04120e] relative">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="grid lg:grid-cols-2 gap-16 xl:gap-24 items-center">
-            <motion.div 
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.6 }}
-            >
-              <h2 className="text-gold-1 font-bold tracking-widest uppercase text-sm mb-4 flex items-center gap-4">
-                <span className="w-12 h-px bg-gold-1/30"></span>
-                Get in Touch
-              </h2>
-              <h3 className="text-4xl md:text-5xl font-extrabold text-white mb-8 leading-tight">Contact Our Professional Support Team</h3>
-              <p className="text-gray-400 mb-12 leading-relaxed text-lg">
-                Whether you have questions about the platform, need support with your account, or want to learn more about the business opportunity, we are here to help.
-              </p>
-
-              <div className="space-y-8">
-                <div className="flex items-start gap-6 group">
-                  <div className="w-14 h-14 rounded-2xl bg-[#0a231d] border border-gray-800 flex items-center justify-center flex-shrink-0 group-hover:border-gold-1/40 group-hover:bg-gold-1/10 transition-all duration-300 shadow-inner">
-                    <IBuilding className="text-emerald-400 group-hover:text-gold-1 transition-colors" size={24} />
-                  </div>
-                  <div>
-                    <h5 className="text-white font-bold mb-2 text-lg">Corporate Headquarters</h5>
-                    <p className="text-gray-400 leading-relaxed">[Company Name], Suite [Number]<br/>[Business Center City], [ZIP]</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-6 group">
-                  <div className="w-14 h-14 rounded-2xl bg-[#0a231d] border border-gray-800 flex items-center justify-center flex-shrink-0 group-hover:border-gold-1/40 group-hover:bg-gold-1/10 transition-all duration-300 shadow-inner">
-                    <IDoc className="text-emerald-400 group-hover:text-gold-1 transition-colors" size={24} />
-                  </div>
-                  <div>
-                    <h5 className="text-white font-bold mb-2 text-lg">Email Inquiry</h5>
-                    <p className="text-gray-400 leading-relaxed">contact@[company-domain].com</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-6 group">
-                  <div className="w-14 h-14 rounded-2xl bg-[#0a231d] border border-gray-800 flex items-center justify-center flex-shrink-0 group-hover:border-gold-1/40 group-hover:bg-gold-1/10 transition-all duration-300 shadow-inner">
-                    <IPhone className="text-emerald-400 group-hover:text-gold-1 transition-colors" size={24} />
-                  </div>
-                  <div>
-                    <h5 className="text-white font-bold mb-2 text-lg">Direct Line</h5>
-                    <p className="text-gray-400 leading-relaxed">+1 (000) 000-0000</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Contact Form UI (Placeholder) */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              whileInView={{ opacity: 1, scale: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-white/[0.06] backdrop-blur-2xl p-10 rounded-3xl border border-white/20 shadow-[0_10px_50px_rgba(0,0,0,0.3)] relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gold-1/10 rounded-bl-full -mr-10 -mt-10 pointer-events-none" />
-              
-              <h4 className="text-2xl font-extrabold text-white mb-8 relative z-10">Send us a message</h4>
-              <form className="space-y-5 relative z-10" onSubmit={(e) => e.preventDefault()}>
-                <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">First Name</label>
-                    <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="John" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Last Name</label>
-                    <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="Doe" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Email Address</label>
-                  <input type="email" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="john@example.com" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Message</label>
-                  <textarea rows="4" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all resize-none" placeholder="How can we help you?"></textarea>
-                </div>
-                <button type="button" className="w-full bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] py-4 rounded-xl font-extrabold text-lg hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] hover:scale-[1.02] transition-all duration-300 mt-4">
-                  Submit Inquiry
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-[#020806] pt-20 pb-10 border-t border-gray-900">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="grid md:grid-cols-4 gap-12 lg:gap-16 mb-16">
-            <div className="col-span-1 md:col-span-2">
-              <div className="mb-8">
-                <Logo size={36} />
-              </div>
-              <p className="text-gray-500 text-base max-w-md leading-relaxed">
-                Empowering individuals and organizations with robust performance tracking, secure operations, and scalable network solutions. Built for the modern enterprise.
+              <p className="text-[#9AA8A2] text-lg max-w-sm leading-[1.8] font-medium">
+                Providing network leaders and partners with robust performance tracking, secure operations, and a clear foundation for financial success.
               </p>
             </div>
             
-            <div>
-              <h5 className="text-white font-bold mb-6 uppercase tracking-widest text-xs">Quick Links</h5>
+            <div className="col-span-6 md:col-span-3 md:col-start-7">
+              <h5 className="text-white font-bold mb-6 uppercase tracking-[0.15em] text-xs">Platform</h5>
               <ul className="space-y-4">
-                <li><button onClick={() => scrollTo('about')} className="text-gray-400 hover:text-gold-1 text-sm font-medium transition-colors">About Us</button></li>
-                <li><button onClick={() => scrollTo('services')} className="text-gray-400 hover:text-gold-1 text-sm font-medium transition-colors">Services</button></li>
-                <li><button onClick={() => scrollTo('opportunity')} className="text-gray-400 hover:text-gold-1 text-sm font-medium transition-colors">Opportunity</button></li>
-                <li><button onClick={() => scrollTo('contact')} className="text-gray-400 hover:text-gold-1 text-sm font-medium transition-colors">Contact</button></li>
+                <li><button onClick={() => scrollTo('home')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Home</button></li>
+                <li><button onClick={() => scrollTo('why-us')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Solutions</button></li>
+                <li><button onClick={() => scrollTo('services')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Infrastructure</button></li>
               </ul>
             </div>
 
-            <div>
-              <h5 className="text-white font-bold mb-6 uppercase tracking-widest text-xs">Legal & Access</h5>
+            <div className="col-span-6 md:col-span-3">
+              <h5 className="text-white font-bold mb-6 uppercase tracking-[0.15em] text-xs">Resources</h5>
               <ul className="space-y-4">
-                <li><Link to="/login" className="text-gray-400 hover:text-gold-1 text-sm font-medium transition-colors">Agent Login</Link></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm font-medium transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white text-sm font-medium transition-colors">Terms of Service</a></li>
+                <li><Link to="/login" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Sign In</Link></li>
+                <li><a href="#" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Privacy Policy</a></li>
+                <li><a href="#" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Terms of Service</a></li>
               </ul>
             </div>
           </div>
           
-          <div className="border-t border-gray-900 pt-10 flex flex-col md:flex-row justify-between items-center gap-6">
-            <p className="text-gray-600 text-sm font-medium">
+          <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-6">
+            <p className="text-[#9AA8A2] text-sm font-medium tracking-wide">
               &copy; {new Date().getFullYear()} Apex Multisolutions. All rights reserved.
             </p>
-            <p className="text-gray-600 text-sm font-medium">
-              Designed & Developed by <a href="https://fyndevs.com" target="_blank" rel="noopener noreferrer" className="text-gold-1 hover:text-gold-2 hover:underline transition-colors">Fyndevs</a>
+            <p className="text-[#9AA8A2] text-sm font-medium tracking-wide">
+              Designed & Developed by <a href="https://fyndevs.com" target="_blank" rel="noopener noreferrer" className="text-white hover:text-[#BFA256] transition-colors font-semibold">Fyndevs</a>
             </p>
           </div>
         </div>
       </footer>
     </div>
-  )
-}
+  );
+};
+
+export default Landing;

@@ -93,4 +93,38 @@
   .text-gold {
     color: #e8b84b;
   }
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .rotate-dashboard {
+    transform: rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateZ(0);
+    transform-style: preserve-3d;
+  }
+  .rotate-dashboard-hover {
+    transform: rotateY(-15deg) rotateX(5deg) rotateZ(-1deg) translateZ(30px);
+  }
+  
+  .bg-map-pattern {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.3;
+  }
 }
+
+@keyframes float-particle-1 {
+  0%, 100% { transform: translateY(0) translateX(0) scale(1); opacity: 0.3; }
+  50% { transform: translateY(-100px) translateX(20px) scale(1.2); opacity: 0.6; }
+}
+@keyframes float-particle-2 {
+  0%, 100% { transform: translateY(0) translateX(0) scale(1); opacity: 0.2; }
+  50% { transform: translateY(80px) translateX(-30px) scale(0.8); opacity: 0.5; }
+}
+@keyframes float-particle-3 {
+  0%, 100% { transform: translateY(0) translateX(0) scale(1.5); opacity: 0.1; }
+  50% { transform: translateY(-50px) translateX(50px) scale(1); opacity: 0.4; }
+}
+
+.animate-particle-1 { animation: float-particle-1 15s infinite ease-in-out; }
+.animate-particle-2 { animation: float-particle-2 20s infinite ease-in-out reverse; }
+.animate-particle-3 { animation: float-particle-3 18s infinite ease-in-out; }
+
