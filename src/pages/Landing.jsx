@@ -68,8 +68,8 @@ export default function Landing() {
       <nav 
         className={`fixed top-0 w-full z-50 transition-all duration-500 ease-in-out ${
           isScrolled 
-            ? 'bg-[#061A15]/80 backdrop-blur-xl border-b border-gold-1/20 py-4 shadow-[0_4px_30px_rgba(0,0,0,0.5)]' 
-            : 'bg-gradient-to-b from-[#061A15]/80 to-transparent py-6'
+            ? 'bg-white/10 backdrop-blur-xl border-b border-white/20 py-4 shadow-[0_8px_30px_rgba(0,0,0,0.2)]' 
+            : 'bg-gradient-to-b from-[#061A15]/90 to-transparent py-6'
         }`}
       >
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
@@ -85,14 +85,14 @@ export default function Landing() {
                 <button 
                   key={link.name} 
                   onClick={() => scrollTo(link.href.substring(1))}
-                  className="text-sm font-semibold tracking-wide text-gray-300 hover:text-gold-1 transition-all duration-300 hover:-translate-y-0.5"
+                  className="text-sm font-bold tracking-wider text-white hover:text-gold-1 transition-all duration-300 hover:-translate-y-0.5"
                 >
                   {link.name}
                 </button>
               ))}
               <Link 
                 to="/login"
-                className="bg-gradient-to-r from-gold-1 to-gold-2 text-[#04120e] px-7 py-2.5 rounded-full font-bold text-sm transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+                className="bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] px-8 py-2.5 rounded-full font-extrabold text-sm transition-all duration-300 hover:scale-105 shadow-[0_0_20px_rgba(212,175,55,0.4)] hover:shadow-[0_0_30px_rgba(212,175,55,0.6)]"
               >
                 Login to Portal
               </Link>
@@ -148,11 +148,13 @@ export default function Landing() {
       <section id="home" className="relative pt-36 pb-24 lg:pt-52 lg:pb-40 overflow-hidden">
         {/* Background Effects */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-          <div className="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] rounded-full bg-gold-1/10 blur-[150px]" />
-          <div className="absolute bottom-[0%] -left-[10%] w-[50%] h-[50%] rounded-full bg-emerald-500/10 blur-[120px]" />
+          {/* Enhanced Glows */}
+          <div className="absolute top-[10%] left-[20%] w-[40%] h-[40%] rounded-full bg-gold-1/20 blur-[150px]" />
+          <div className="absolute -top-[10%] -right-[5%] w-[50%] h-[50%] rounded-full bg-emerald-500/15 blur-[120px]" />
+          <div className="absolute bottom-[0%] -left-[10%] w-[50%] h-[50%] rounded-full bg-gold-1/10 blur-[120px]" />
           
-          {/* Subtle Grid */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_80%,transparent_100%)]" />
+          {/* Softer Grid */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_80%,transparent_100%)]" />
         </div>
 
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10">
@@ -180,16 +182,16 @@ export default function Landing() {
                 Join Apex Multisolutions and build your financial future through a transparent, enterprise-grade platform designed for long-term success.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-5">
+              <div className="flex flex-col sm:flex-row gap-5 mt-10">
                 <Link 
                   to="/login" 
-                  className="inline-flex justify-center items-center gap-3 bg-gradient-to-r from-gold-1 to-gold-2 text-[#04120e] px-9 py-4 rounded-xl font-extrabold text-lg transition-all duration-300 hover:scale-[1.03] shadow-[0_0_30px_rgba(212,175,55,0.3)] hover:shadow-[0_0_40px_rgba(212,175,55,0.5)]"
+                  className="inline-flex justify-center items-center gap-3 bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] px-10 py-4 rounded-xl font-extrabold text-lg transition-all duration-300 hover:scale-[1.03] shadow-[0_0_40px_rgba(212,175,55,0.5)] hover:shadow-[0_0_60px_rgba(212,175,55,0.7)]"
                 >
-                  Access Portal <IChevron size={22} className="ml-1" />
+                  Access Portal <IChevron size={24} className="ml-1" />
                 </Link>
                 <button 
                   onClick={() => scrollTo('contact')}
-                  className="inline-flex justify-center items-center gap-2 bg-white/5 backdrop-blur-sm border border-gray-600 text-white px-9 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:border-gold-1 hover:text-gold-1 hover:bg-white/10"
+                  className="inline-flex justify-center items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 text-white px-10 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:border-gold-1 hover:text-gold-1 hover:bg-white/20 shadow-lg"
                 >
                   Contact Us
                 </button>
@@ -205,8 +207,8 @@ export default function Landing() {
             >
               <div className="relative w-full aspect-square max-w-lg mx-auto">
                 {/* Abstract Data/Financial representation using CSS and SVGs */}
-                <div className="absolute inset-0 bg-gradient-to-br from-[#0a231d] to-[#04120e] rounded-3xl border border-gray-800 shadow-2xl overflow-hidden transform rotate-3 scale-105 z-0 transition-transform duration-700 hover:rotate-6" />
-                <div className="absolute inset-0 bg-gradient-to-tr from-gold-1/10 to-transparent rounded-3xl border border-gold-1/20 shadow-2xl backdrop-blur-2xl z-10 flex flex-col p-10 justify-between">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#0f352c] to-[#061a15] rounded-3xl border border-gray-700 shadow-2xl overflow-hidden transform rotate-3 scale-105 z-0 transition-transform duration-700 hover:rotate-6" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-gold-1/30 to-white/5 rounded-3xl border border-white/20 shadow-2xl backdrop-blur-3xl z-10 flex flex-col p-10 justify-between">
                   
                   {/* Mock UI Elements for financial feel */}
                   <div className="flex justify-between items-center mb-8">
@@ -293,7 +295,7 @@ export default function Landing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.6, delay: idx * 0.15 }}
-                className="bg-gradient-to-b from-[#0a231d] to-[#061A15] p-10 rounded-3xl border border-gray-800 hover:border-gold-1/40 hover:shadow-[0_10px_40px_rgba(212,175,55,0.05)] transition-all duration-500 group relative overflow-hidden"
+                className="bg-white/[0.05] backdrop-blur-xl p-10 rounded-3xl border border-white/10 hover:border-gold-1/50 hover:bg-white/[0.08] hover:shadow-[0_10px_50px_rgba(212,175,55,0.15)] transition-all duration-500 group relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-gold-1/5 rounded-bl-full -mr-10 -mt-10 transition-transform duration-500 group-hover:scale-110" />
                 <div className="w-16 h-16 bg-gold-1/10 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 relative z-10 shadow-inner">
@@ -341,12 +343,12 @@ export default function Landing() {
                 whileInView={{ opacity: 1, scale: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: idx * 0.05 }}
-                className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-2xl border border-white/5 hover:bg-white/[0.05] hover:border-gold-1/30 hover:-translate-y-1 transition-all duration-300 flex flex-col items-start group shadow-lg"
+                className="bg-white/[0.06] backdrop-blur-xl p-8 rounded-2xl border border-white/10 hover:bg-white/[0.1] hover:border-gold-1/50 hover:-translate-y-1 transition-all duration-300 flex flex-col items-start group shadow-xl"
               >
-                <div className="p-3 bg-[#0a231d] rounded-xl mb-5 group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                  <feature.icon className="text-emerald-400 group-hover:text-gold-1 transition-colors duration-300" size={28} />
+                <div className="p-4 bg-white/10 rounded-xl mb-5 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 shadow-inner">
+                  <feature.icon className="text-emerald-300 group-hover:text-gold-1 transition-colors duration-300" size={28} />
                 </div>
-                <h4 className="font-bold text-gray-200 text-lg leading-snug">{feature.title}</h4>
+                <h4 className="font-bold text-white text-lg leading-snug">{feature.title}</h4>
               </motion.div>
             ))}
           </div>
@@ -386,10 +388,11 @@ export default function Landing() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ duration: 0.5, delay: idx * 0.1 }}
-                className="bg-[#061A15] p-10 rounded-3xl border border-gray-800 hover:border-emerald-500/30 hover:bg-[#071f19] transition-all duration-300 shadow-lg"
+                className="bg-white/[0.06] backdrop-blur-xl p-10 rounded-3xl border border-white/10 hover:border-gold-1/40 hover:bg-white/[0.09] transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_15px_40px_rgba(212,175,55,0.15)] group"
               >
-                <h4 className="text-xl font-bold text-white mb-4">{service.title}</h4>
-                <p className="text-gray-400 text-base leading-relaxed">{service.desc}</p>
+                <div className="w-12 h-1 bg-gradient-to-r from-gold-1 to-transparent mb-6 transition-all duration-300 group-hover:w-20 rounded-full" />
+                <h4 className="text-xl font-extrabold text-white mb-4 tracking-wide">{service.title}</h4>
+                <p className="text-gray-300 text-base leading-relaxed font-medium">{service.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -441,9 +444,9 @@ export default function Landing() {
 
                 {/* Content Card */}
                 <div className={`ml-20 md:ml-0 md:w-1/2 ${idx % 2 === 0 ? 'md:pl-16' : 'md:pr-16 text-left md:text-right'}`}>
-                  <div className="bg-[#0a231d] p-8 rounded-3xl border border-gray-800 shadow-xl hover:border-gold-1/40 hover:-translate-y-1 transition-all duration-300 group">
+                  <div className="bg-white/[0.05] backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-xl hover:border-gold-1/40 hover:-translate-y-1 hover:bg-white/[0.08] transition-all duration-300 group">
                     <h4 className="text-2xl font-bold text-white mb-3 group-hover:text-gold-1 transition-colors">{item.title}</h4>
-                    <p className="text-gray-400 text-base leading-relaxed">{item.desc}</p>
+                    <p className="text-gray-300 text-base leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               </motion.div>
@@ -497,12 +500,12 @@ export default function Landing() {
               { label: 'Security & Compliance', value: 'Enterprise Grade', icon: IShield },
               { label: 'Agent Assistance', value: 'Professional Support', icon: IUsers },
             ].map((stat, idx) => (
-              <div key={idx} className="p-8 bg-white/[0.03] backdrop-blur-xl rounded-3xl border border-white/10 hover:bg-white/[0.06] hover:border-gold-1/30 transition-all duration-300 shadow-xl group">
-                <div className="w-12 h-12 mx-auto bg-[#04120e] rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-inner">
-                  <stat.icon className="text-emerald-400" size={24} />
+              <div key={idx} className="p-8 bg-white/[0.08] backdrop-blur-xl rounded-3xl border border-white/20 hover:bg-white/[0.12] hover:border-gold-1/50 transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.2)] group">
+                <div className="w-14 h-14 mx-auto bg-white/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-gold-1/20 transition-all duration-300 shadow-inner">
+                  <stat.icon className="text-emerald-300 group-hover:text-gold-1 transition-colors" size={28} />
                 </div>
-                <div className="text-xl font-bold text-gold-1 mb-3">{stat.value}</div>
-                <div className="text-sm text-gray-400 uppercase tracking-widest font-semibold">{stat.label}</div>
+                <div className="text-xl font-extrabold text-gold-1 mb-3 drop-shadow-md">{stat.value}</div>
+                <div className="text-sm text-white uppercase tracking-widest font-bold">{stat.label}</div>
               </div>
             ))}
           </motion.div>
@@ -567,31 +570,31 @@ export default function Landing() {
               whileInView={{ opacity: 1, scale: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-gradient-to-br from-[#0a231d] to-[#061A15] p-10 rounded-3xl border border-gray-800 shadow-2xl relative overflow-hidden"
+              className="bg-white/[0.06] backdrop-blur-2xl p-10 rounded-3xl border border-white/20 shadow-[0_10px_50px_rgba(0,0,0,0.3)] relative overflow-hidden"
             >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gold-1/5 rounded-bl-full -mr-10 -mt-10 pointer-events-none" />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gold-1/10 rounded-bl-full -mr-10 -mt-10 pointer-events-none" />
               
               <h4 className="text-2xl font-extrabold text-white mb-8 relative z-10">Send us a message</h4>
               <form className="space-y-5 relative z-10" onSubmit={(e) => e.preventDefault()}>
                 <div className="grid grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 ml-1">First Name</label>
-                    <input type="text" className="w-full bg-[#04120e] border border-gray-800 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="John" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">First Name</label>
+                    <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="John" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 ml-1">Last Name</label>
-                    <input type="text" className="w-full bg-[#04120e] border border-gray-800 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="Doe" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Last Name</label>
+                    <input type="text" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="Doe" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 ml-1">Email Address</label>
-                  <input type="email" className="w-full bg-[#04120e] border border-gray-800 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="john@example.com" />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Email Address</label>
+                  <input type="email" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all" placeholder="john@example.com" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 ml-1">Message</label>
-                  <textarea rows="4" className="w-full bg-[#04120e] border border-gray-800 rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all resize-none" placeholder="How can we help you?"></textarea>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2 ml-1">Message</label>
+                  <textarea rows="4" className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:border-gold-1 focus:ring-1 focus:ring-gold-1/50 transition-all resize-none" placeholder="How can we help you?"></textarea>
                 </div>
-                <button type="button" className="w-full bg-gradient-to-r from-gold-1 to-gold-2 text-[#061A15] py-4 rounded-xl font-bold text-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] hover:scale-[1.02] transition-all duration-300 mt-4">
+                <button type="button" className="w-full bg-gradient-to-r from-gold-1 via-yellow-300 to-gold-2 text-[#020806] py-4 rounded-xl font-extrabold text-lg hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] hover:scale-[1.02] transition-all duration-300 mt-4">
                   Submit Inquiry
                 </button>
               </form>
