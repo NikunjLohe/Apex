@@ -14,23 +14,7 @@ import {
   ICheck,
   ISearch
 } from '../components/ui/icons';
-
-// Minimalist, premium logo
-const Logo = ({ size = 32, className = '' }) => (
-  <svg width={size} height={size} viewBox="0 0 200 200" fill="none" className={className}>
-    <circle cx="100" cy="100" r="100" fill="transparent" />
-    <path d="M100 30 L170 150 L30 150 Z" fill="url(#premiumGold)" />
-    <path d="M100 65 L145 140 L55 140 Z" fill="#04120E" />
-    <path d="M100 85 L125 130 L75 130 Z" fill="url(#premiumGold)" />
-    <defs>
-      <linearGradient id="premiumGold" x1="30" y1="30" x2="170" y2="150" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#E6C97A" />
-        <stop offset="0.5" stopColor="#BFA256" />
-        <stop offset="1" stopColor="#8C7335" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
+import Logo from '../components/ui/Logo';
 
 const Landing = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -77,7 +61,7 @@ const Landing = () => {
             
             {/* Logo area */}
             <div className="flex-shrink-0 cursor-pointer flex items-center gap-4 transition-transform duration-500 hover:scale-[1.02]" onClick={() => scrollTo('home')}>
-              <Logo size={44} />
+              <Logo size={44} showText={false} />
               <div className="hidden sm:block mt-1">
                 <div className="text-white font-extrabold text-2xl leading-none tracking-tight">Apex Multisolutions</div>
                 <div className="text-[#BFA256] text-[0.7rem] font-bold uppercase tracking-[0.2em] mt-1.5">Performance Portal</div>
@@ -490,7 +474,7 @@ const Landing = () => {
           <div className="grid md:grid-cols-12 gap-12 lg:gap-16 mb-24">
             <div className="col-span-12 md:col-span-5">
               <div className="mb-8 flex items-center gap-4">
-                <Logo size={40} />
+                <Logo size={40} showText={false} />
                 <span className="text-white font-extrabold text-2xl tracking-tight">Apex</span>
               </div>
               <p className="text-[#9AA8A2] text-lg max-w-sm leading-[1.8] font-medium">
