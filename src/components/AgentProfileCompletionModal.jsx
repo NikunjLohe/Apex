@@ -64,7 +64,7 @@ export default function AgentProfileCompletionModal() {
   const handleSignOut = async () => {
     try {
       await logout()
-      window.location.href = '/login'
+      window.location.href = '/'
     } catch (e) {
       toast.error('Error logging out')
     }

@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Logo from './components/ui/Logo'
 
 // ---- Lazy routes ----
+const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const CustomerList = lazy(() => import('./pages/customers/CustomerList'))
@@ -215,7 +216,7 @@ export default function App() {
               <Route path="/unauthorized" element={<Unauthorized />} />
             </Route>
 
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
