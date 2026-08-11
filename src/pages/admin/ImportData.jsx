@@ -243,22 +243,51 @@ export default function ImportData() {
         const ws = wb.Sheets[wsname]
         const rawRows = xlsx.utils.sheet_to_json(ws)
 
-        // Columns check
+        // Header Normalization & Alias Mapping
         const excelCols = rawRows.length > 0 ? Object.keys(rawRows[0]) : []
+        
+        const normalizeHeader = (str) => String(str || '').toLowerCase().replace(/[-_.]/g, '').replace(/\s+/g, '').trim()
+        
+        const headerAliases = {
+          'mobile': ['mobile', 'mobilenumber'],
+          'monthlyamount': ['monthlyamount', 'monthlyamt'],
+          'totalamount': ['totalamount', 'totalamt']
+        }
+
+        const resolveHeader = (expectedHeader) => {
+          const normExpected = normalizeHeader(expectedHeader)
+          const validSet = new Set([normExpected, ...(headerAliases[normExpected] || [])])
+          
+          for (const h of excelCols) {
+            if (validSet.has(normalizeHeader(h))) {
+              return h
+            }
+          }
+          return null
+        }
+
+        const activeMapping = { ...mapping }
         const missingMappings = []
-        Object.entries(mapping).forEach(([key, colName]) => {
-          if (!excelCols.includes(colName)) {
-            missingMappings.push(`${key.toUpperCase()} mapped to "${colName}"`)
+
+        Object.entries(mapping).forEach(([key, expectedHeader]) => {
+          const matched = resolveHeader(expectedHeader)
+          if (matched) {
+            activeMapping[key] = matched
+          } else {
+            missingMappings.push(`${key.toUpperCase()} mapped to "${expectedHeader}"`)
           }
         })
 
-        if (missingMappings.length > 0 && rawRows.length > 0) {
-          toast.error(`Column mismatch! Expected headers not found: ${missingMappings.slice(0, 2).join(', ')}...`)
+        if (rawRows.length > 0) {
+          setMapping(activeMapping)
+          if (missingMappings.length > 0) {
+            toast.error(`Column mismatch! Expected headers not found: ${missingMappings.slice(0, 2).join(', ')}...`)
+          }
         }
 
         // Collect all policy and customer codes to query duplicates in batch
-        const policyNumbers = rawRows.map(r => String(r[mapping.policyNumber] || '').trim())
-        const customerIds = rawRows.map(r => String(r[mapping.customerId] || '').trim())
+        const policyNumbers = rawRows.map(r => String(r[activeMapping.policyNumber] || '').trim())
+        const customerIds = rawRows.map(r => String(r[activeMapping.customerId] || '').trim())
 
         // Asynchronous batch check from database
         const { existingPolicies, existingCustomerIds } = await queryExistingDuplicates(policyNumbers, customerIds)
@@ -268,16 +297,16 @@ export default function ImportData() {
         let errs = 0
 
         const processed = rawRows.map((row, idx) => {
-          const cId = String(row[mapping.customerId] || '').trim()
-          const cName = String(row[mapping.customerName] || '').trim()
-          const mobile = String(row[mapping.mobile] || '').trim()
-          const address = String(row[mapping.address] || '').trim()
-          const agentCode = String(row[mapping.agentCode] || '').trim().toLowerCase()
-          const policyNo = String(row[mapping.policyNumber] || '').trim()
-          const planCode = String(row[mapping.planCode] || '').trim().toLowerCase()
-          const mAmount = Number(row[mapping.monthlyAmount]) || 0
-          const tAmount = Number(row[mapping.totalAmount]) || 0
-          const rawDate = row[mapping.startDate]
+          const cId = String(row[activeMapping.customerId] || '').trim()
+          const cName = String(row[activeMapping.customerName] || '').trim()
+          const mobile = String(row[activeMapping.mobile] || '').trim()
+          const address = String(row[activeMapping.address] || '').trim()
+          const agentCode = String(row[activeMapping.agentCode] || '').trim().toLowerCase()
+          const policyNo = String(row[activeMapping.policyNumber] || '').trim()
+          const planCode = String(row[activeMapping.planCode] || '').trim().toLowerCase()
+          const mAmount = Number(row[activeMapping.monthlyAmount]) || 0
+          const tAmount = Number(row[activeMapping.totalAmount]) || 0
+          const rawDate = row[activeMapping.startDate]
 
           let isValid = true
           const errors = []
@@ -318,7 +347,7 @@ export default function ImportData() {
           const masterPlan = plansMaster.find(p => p.code.toLowerCase() === planCode || p.name.toLowerCase() === planCode)
           if (!masterPlan) {
             isValid = false
-            errors.push(`Plan Code ${row[mapping.planCode] || planCode} not found in Plans master.`)
+            errors.push(`Plan Code ${row[activeMapping.planCode] || planCode} not found in Plans master.`)
           }
 
           // 4. Missing required CIF/Name check
