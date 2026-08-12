@@ -47,8 +47,26 @@ export function calculateCommissions({
 
   const entries = []
   
-  let currentAgent = baseAgent
   const activeRanks = (ranksList && ranksList.length > 0) ? ranksList : DEFAULT_RANKS
+
+  // Identify selling agent rank
+  const sellerRankNum = Number(baseAgent.rank) || 1
+
+  // Calculate total vacant lower rank rates for ranks strictly below sellerRankNum
+  let vacantLowerRatesSum = 0
+  const vacantRanksAbsorbed = []
+
+  for (let r = 1; r < sellerRankNum; r++) {
+    const rankObj = activeRanks.find(rk => Number(rk.rank) === r)
+    const rankCode = rankObj?.code || 'AO'
+    const rRate = getRate(rankCode)
+    if (rRate > 0) {
+      vacantLowerRatesSum += rRate
+      vacantRanksAbsorbed.push({ rank: r, code: rankCode, rate: rRate * 100 })
+    }
+  }
+
+  let currentAgent = baseAgent
 
   // Traverse the upline (Sponsor Hierarchy) all the way to the top
   while (currentAgent) {
@@ -57,9 +75,19 @@ export function calculateCommissions({
     const rankCode = currentRankObj?.code || 'AO'
     const rankRate = getRate(rankCode)
 
-    if (rankRate > 0) {
+    if (rankRate > 0 || (currentAgent.id === baseAgent.id && vacantLowerRatesSum > 0)) {
       const isSeller = (currentAgent.id === baseAgent.id)
-      
+      const effectiveRate = isSeller ? (rankRate + vacantLowerRatesSum) : rankRate
+      const effectivePercentage = Number((effectiveRate * 100).toFixed(4))
+      const effectiveAmount = Number((businessAmount * effectiveRate).toFixed(2))
+
+      const hasCompression = isSeller && vacantRanksAbsorbed.length > 0
+      const compressionReason = isSeller
+        ? (hasCompression
+            ? `${rankCode} Commission (Direct + ${vacantRanksAbsorbed.map(v => v.code).join('+')} Vacant Lower Ranks)`
+            : `${rankCode} Commission (Direct)`)
+        : `${rankCode} Commission (Upline Commission)`
+
       entries.push({
         agentId: currentAgent.id,
         agentName: currentAgent.name,
@@ -78,16 +106,16 @@ export function calculateCommissions({
         installment: installmentNumber, 
         
         businessAmount: businessAmount,
-        percentage: rankRate * 100,
-        amount: businessAmount * rankRate,
+        percentage: effectivePercentage,
+        amount: effectiveAmount,
         
         originalRank: baseAgent.rank,
         originalAgentId: baseAgent.id,
         
         commissionType: isSeller ? 'direct' : 'upline', // Direct for seller, Upline for sponsor
-        compression: false,
-        compressionReason: isSeller ? `${rankCode} Commission (Direct)` : `${rankCode} Commission (Upline Commission)`,
-        compressedFromRank: null,
+        compression: hasCompression,
+        compressionReason: compressionReason,
+        compressedFromRank: hasCompression ? vacantRanksAbsorbed.map(v => v.rank) : null,
         
         month: monthNum,
         year: yearNum,
