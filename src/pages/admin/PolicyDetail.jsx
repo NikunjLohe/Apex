@@ -758,6 +758,144 @@ export default function PolicyDetail() {
         </div>
 
       </div>
+
+      {/* Admin Controlled Policy Correction Modal */}
+      <ConfirmDialog
+        open={editOpen}
+        title="Admin Record Correction — Policy Credentials"
+        confirmLabel="Save Correction"
+        cancelLabel="Cancel"
+        loading={saving}
+        confirmDisabled={diffs.length === 0 || !reason.trim() || (hasPaidCommission && diffs.some(d => ['Policy Number', 'Plan Code', 'Monthly Amount', 'Total Amount', 'Agent Code'].includes(d.field)))}
+        onConfirm={handleSaveCorrection}
+        onClose={() => !saving && setEditOpen(false)}
+      >
+        <div className="space-y-4 text-xs mt-3">
+          {/* PAID Payout Lock Warning */}
+          {hasPaidCommission && (
+            <div className="p-3 bg-red-950/40 border border-red-500/50 rounded text-red-300 flex items-start gap-2">
+              <IAlert size={18} className="text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-red-200">Paid Transaction Locked:</span>
+                This transaction has already been paid and cannot be directly modified. Please use the appropriate financial correction process.
+              </div>
+            </div>
+          )}
+
+          {/* Unpaid Commission Warning */}
+          {!hasPaidCommission && hasUnpaidCommissions && (
+            <div className="p-3 bg-gold/10 border border-gold/30 rounded text-gold-tan flex items-start gap-2">
+              <IAlert size={18} className="text-gold shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-gold">Commission Ledger Warning:</span>
+                This policy already has commission records. Changing Agent Code or Plan Code may affect commission allocation. Please confirm the correction.
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label">Policy Number</label>
+              <input
+                type="text"
+                disabled={hasPaidCommission}
+                className="field font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                value={editForm.policyNumber}
+                onChange={e => setEditForm({ ...editForm, policyNumber: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Plan Code</label>
+              <input
+                type="text"
+                disabled={hasPaidCommission}
+                className="field font-mono uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                value={editForm.planCode}
+                onChange={e => setEditForm({ ...editForm, planCode: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Selling Agent Sponsor Code</label>
+              <input
+                type="text"
+                disabled={hasPaidCommission}
+                className="field font-mono uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="e.g. KB000011"
+                value={editForm.agentCode}
+                onChange={e => setEditForm({ ...editForm, agentCode: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Policy Start Date</label>
+              <input
+                type="date"
+                className="field"
+                value={editForm.startDate}
+                onChange={e => setEditForm({ ...editForm, startDate: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Monthly Deposit Amount (₹)</label>
+              <input
+                type="number"
+                disabled={hasPaidCommission}
+                className="field disabled:opacity-50 disabled:cursor-not-allowed"
+                value={editForm.monthlyAmount}
+                onChange={e => setEditForm({ ...editForm, monthlyAmount: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Total Amount / FD Deposit (₹)</label>
+              <input
+                type="number"
+                disabled={hasPaidCommission}
+                className="field disabled:opacity-50 disabled:cursor-not-allowed"
+                value={editForm.totalAmount}
+                onChange={e => setEditForm({ ...editForm, totalAmount: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Live Diff Preview */}
+          {diffs.length > 0 && (
+            <div className="card p-3 bg-navy-4/40 border border-gold-1/30 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-gold">
+                Preview Changes:
+              </div>
+              <div className="space-y-1">
+                {diffs.map((d, i) => (
+                  <div key={i} className="flex justify-between items-center text-[11px] border-b border-navy-4/50 pb-1">
+                    <span className="text-ink-2 font-medium">{d.field}:</span>
+                    <span className="font-mono text-ink-1">
+                      <span className="text-red-400 line-through mr-1">{d.oldVal}</span> → <span className="text-ok font-bold">{d.newVal}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mandatory Correction Reason */}
+          <div>
+            <label className="label text-gold font-bold">
+              Reason for Correction <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              className="field border-gold/40 focus:border-gold"
+              placeholder="e.g. Corrected agent code entry error from bank file"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }
+
