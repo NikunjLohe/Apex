@@ -1,16 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { where, collection, doc, updateDoc, addDoc, getDocs, query, serverTimestamp, writeBatch } from 'firebase/firestore'
+import { db } from '../../firebase'
 import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { fmtDate, formatINR } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { IDoc, IUsers, ICash, IBuilding, ISettings } from '../../components/ui/icons'
+import { IDoc, IUsers, ICash, IBuilding, ISettings, IAlert } from '../../components/ui/icons'
 import { addYears } from 'date-fns'
 import { useRanks } from '../../contexts/RanksContext'
-import { where } from 'firebase/firestore'
+import { useAuth } from '../../contexts/AuthContext'
+import { usePermission } from '../../hooks/usePermission'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import toast from 'react-hot-toast'
 
 export default function PolicyDetail() {
   const { id } = useParams()
+  const { user, profile } = useAuth()
+  const { can, CAP, isSuperAdmin } = usePermission()
+  const canEdit = isSuperAdmin || can(CAP.ADMIN)
+
   const policyDoc = useDoc(id ? `plans/${id}` : null)
   const users = useCollection('users')
   const branches = useCollection('branches')
@@ -27,18 +36,219 @@ export default function PolicyDetail() {
   const { ranksList } = useRanks()
   const [explainOpen, setExplainOpen] = useState(false)
 
-  // Calculate maturity date if not explicitly in Firestore
-  const maturityDate = useMemo(() => {
-    if (!p?.startDate || !p?.duration) return null
-    const start = p.startDate.seconds ? new Date(p.startDate.seconds * 1000) : new Date(p.startDate)
-    return addYears(start, p.duration)
-  }, [p?.startDate, p?.duration])
+  // Edit / Correction State
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({
+    policyNumber: '',
+    planCode: '',
+    monthlyAmount: 0,
+    totalAmount: 0,
+    startDate: '',
+    agentCode: ''
+  })
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Check commission and payout safety
+  const hasPaidCommission = useMemo(() => {
+    return Boolean(ledgerDoc.data && ledgerDoc.data.some(c => c.status === 'paid'))
+  }, [ledgerDoc.data])
+
+  const hasUnpaidCommissions = useMemo(() => {
+    return Boolean(ledgerDoc.data && ledgerDoc.data.some(c => c.status === 'unpaid' || c.status === 'generated'))
+  }, [ledgerDoc.data])
 
   // Get agent profile
   const agent = useMemo(() => {
     if (!p?.agentId || !users.data) return null
     return users.data.find(u => u.id === p.agentId)
   }, [p?.agentId, users.data])
+
+  // Pre-fill edit form when modal opens
+  useEffect(() => {
+    if (p) {
+      let startStr = ''
+      if (p.startDate) {
+        const d = p.startDate.seconds ? new Date(p.startDate.seconds * 1000) : new Date(p.startDate)
+        startStr = d.toISOString().split('T')[0]
+      }
+      setEditForm({
+        policyNumber: p.policyNumber || '',
+        planCode: p.type || p.planCode || '',
+        monthlyAmount: p.monthlyAmount || 0,
+        totalAmount: p.fdAmount || p.calculatedAmount || 0,
+        startDate: startStr,
+        agentCode: agent?.sponsorCode || p.sponsorCode || ''
+      })
+      setReason('')
+    }
+  }, [p, agent, editOpen])
+
+  // Calculate live diff preview
+  const diffs = useMemo(() => {
+    if (!p) return []
+    const list = []
+    const newPolNum = editForm.policyNumber.trim()
+    const newPlanCode = editForm.planCode.trim().toUpperCase()
+    const newMonthly = Number(editForm.monthlyAmount) || 0
+    const newTotal = Number(editForm.totalAmount) || 0
+    const newStartDate = editForm.startDate.trim()
+    const newAgentCode = editForm.agentCode.trim().toUpperCase()
+
+    if (newPolNum !== (p.policyNumber || '')) {
+      list.push({ field: 'Policy Number', oldVal: p.policyNumber || '—', newVal: newPolNum })
+    }
+    if (newPlanCode !== ((p.type || '').toUpperCase())) {
+      list.push({ field: 'Plan Code', oldVal: p.type || '—', newVal: newPlanCode })
+    }
+    if (newMonthly !== (p.monthlyAmount || 0)) {
+      list.push({ field: 'Monthly Amount', oldVal: `${formatINR(p.monthlyAmount || 0)}`, newVal: `${formatINR(newMonthly)}` })
+    }
+    if (newTotal !== (p.fdAmount || p.calculatedAmount || 0)) {
+      list.push({ field: 'Total Amount', oldVal: `${formatINR(p.fdAmount || p.calculatedAmount || 0)}`, newVal: `${formatINR(newTotal)}` })
+    }
+    if (newStartDate && newStartDate !== (p.startDate ? (p.startDate.seconds ? new Date(p.startDate.seconds * 1000).toISOString().split('T')[0] : String(p.startDate).split('T')[0]) : '')) {
+      list.push({ field: 'Start Date', oldVal: p.startDate ? fmtDate(p.startDate) : '—', newVal: newStartDate })
+    }
+    if (newAgentCode && newAgentCode !== (agent?.sponsorCode || '').toUpperCase()) {
+      list.push({ field: 'Agent Code', oldVal: agent?.sponsorCode || '—', newVal: newAgentCode })
+    }
+    return list
+  }, [p, agent, editForm])
+
+  // Save Policy Correction Handler
+  const handleSaveCorrection = async () => {
+    if (!reason.trim()) {
+      toast.error('Reason for correction is mandatory.')
+      return
+    }
+
+    if (diffs.length === 0) {
+      toast.error('No values were changed.')
+      return
+    }
+
+    // Check financial edit safety on PAID transactions
+    const financialChanged = diffs.some(d => ['Policy Number', 'Plan Code', 'Monthly Amount', 'Total Amount', 'Agent Code'].includes(d.field))
+    if (hasPaidCommission && financialChanged) {
+      toast.error('This transaction has already been paid and cannot be directly modified. Please use the appropriate financial correction process.')
+      return
+    }
+
+    setSaving(true)
+    const loader = toast.loading('Saving policy correction...')
+
+    try {
+      const newPolNum = editForm.policyNumber.trim()
+      const newPlanCode = editForm.planCode.trim().toUpperCase()
+      const newMonthly = Number(editForm.monthlyAmount) || 0
+      const newTotal = Number(editForm.totalAmount) || 0
+      const newStartDate = editForm.startDate.trim()
+      const newAgentCode = editForm.agentCode.trim().toUpperCase()
+
+      // 1. Duplicate Policy Check
+      if (newPolNum !== p.policyNumber) {
+        const dupQ = query(collection(db, 'plans'), where('policyNumber', '==', newPolNum))
+        const dupSnap = await getDocs(dupQ)
+        const exists = dupSnap.docs.some(d => d.id !== id)
+        if (exists) {
+          toast.error(`Policy Number "${newPolNum}" already belongs to another policy.`, { id: loader })
+          setSaving(false)
+          return
+        }
+      }
+
+      // 2. Resolve Agent Code if changed
+      let newAgentDoc = agent
+      if (newAgentCode && newAgentCode !== (agent?.sponsorCode || '').toUpperCase()) {
+        const uQ = query(collection(db, 'users'), where('sponsorCode', '==', newAgentCode))
+        const uSnap = await getDocs(uQ)
+        if (uSnap.empty) {
+          toast.error(`Agent with Sponsor Code "${newAgentCode}" not found.`, { id: loader })
+          setSaving(false)
+          return
+        }
+        newAgentDoc = { id: uSnap.docs[0].id, ...uSnap.docs[0].data() }
+      }
+
+      // Construct Update payload for policy
+      const planUpdate = {
+        policyNumber: newPolNum,
+        planAccountNumber: newPolNum,
+        type: newPlanCode,
+        planCode: newPlanCode,
+        monthlyAmount: newMonthly,
+        fdAmount: newTotal,
+        calculatedAmount: newTotal > 0 ? newTotal : (newMonthly * 12 * (p.duration || 1)),
+        updatedAt: serverTimestamp()
+      }
+
+      if (newStartDate) {
+        planUpdate.startDate = new Date(newStartDate)
+      }
+
+      if (newAgentDoc) {
+        planUpdate.agentId = newAgentDoc.id
+        planUpdate.agentName = newAgentDoc.name
+        planUpdate.sponsorCode = newAgentDoc.sponsorCode
+      }
+
+      // Update policy document
+      await updateDoc(doc(db, 'plans', id), planUpdate)
+
+      // 3. Update unpaid linked commission ledger entries to keep records consistent
+      if (hasUnpaidCommissions && (newPolNum !== p.policyNumber || newPlanCode !== p.type || newAgentDoc?.id !== p.agentId)) {
+        const commQ = query(collection(db, 'commission_ledger'), where('policyNumber', '==', p.policyNumber), where('status', '==', 'unpaid'))
+        const commSnap = await getDocs(commQ)
+        const batch = writeBatch(db)
+
+        commSnap.forEach(cDoc => {
+          const cUpdate = {
+            policyNumber: newPolNum,
+            planCode: newPlanCode
+          }
+          if (newAgentDoc && cDoc.data().originalRank === 5 && cDoc.data().commissionType === 'direct') {
+            cUpdate.agentId = newAgentDoc.id
+            cUpdate.agentName = newAgentDoc.name
+            cUpdate.sponsorCode = newAgentDoc.sponsorCode
+          }
+          batch.update(cDoc.ref, cUpdate)
+        })
+
+        if (!commSnap.empty) {
+          await batch.commit()
+        }
+      }
+
+      // 4. Record Audit Log
+      await addDoc(collection(db, 'audit_logs'), {
+        type: 'Policy Correction',
+        recordId: id,
+        targetType: 'policy',
+        policyNumber: newPolNum,
+        adminUid: user?.uid || 'system',
+        adminName: profile?.name || user?.email || 'Admin',
+        timestamp: serverTimestamp(),
+        reason: reason.trim(),
+        changes: diffs
+      })
+
+      toast.success('Policy record corrected successfully!', { id: loader })
+      setEditOpen(false)
+    } catch (err) {
+      console.error('Error saving policy correction:', err)
+      toast.error(`Correction failed: ${err.message}`, { id: loader })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Calculate maturity date if not explicitly in Firestore
+  const maturityDate = useMemo(() => {
+    if (!p?.startDate || !p?.duration) return null
+    const start = p.startDate.seconds ? new Date(p.startDate.seconds * 1000) : new Date(p.startDate)
+    return addYears(start, p.duration)
+  }, [p?.startDate, p?.duration])
 
   // Get branch name
   const branchName = useMemo(() => {
@@ -215,7 +425,15 @@ export default function PolicyDetail() {
               <p className="text-xs text-ink-2 mt-0.5 font-mono">Product: {p.type || '—'}</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            {canEdit && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="btn-dark py-2 px-4 text-xs font-bold uppercase tracking-wider border border-gold/40 text-gold hover:border-gold flex items-center gap-1.5"
+              >
+                <ISettings size={14} /> Correct Credentials
+              </button>
+            )}
             <Link to="/admin/policies" className="btn-ghost py-2 px-4 text-xs font-bold uppercase tracking-wider">
               Back to List
             </Link>
@@ -248,8 +466,12 @@ export default function PolicyDetail() {
                   {p.monthlyAmount > 0 ? (
                     <span className="font-semibold text-ink-1">{formatINR(p.monthlyAmount)} /month (RD)</span>
                   ) : (
-                    <span className="font-semibold text-ink-1">{formatINR(p.fdAmount)} Lump Sum (FD)</span>
+                    <span className="font-semibold text-ink-1">{formatINR(p.fdAmount)} (Lump Sum)</span>
                   )}
+                </div>
+                <div>
+                  <span className="block text-[10px] text-ink-2">Total Matured Value</span>
+                  <span className="font-semibold text-gold-1 text-sm">{formatINR(businessValue)}</span>
                 </div>
               </div>
 
@@ -259,11 +481,11 @@ export default function PolicyDetail() {
                   <span className="font-semibold text-ink-1 font-mono">{p.startDate ? fmtDate(p.startDate) : '—'}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] text-ink-2">Plan Maturity Date</span>
+                  <span className="block text-[10px] text-ink-2">Expected Maturity Date</span>
                   <span className="font-semibold text-ink-1 font-mono">{maturityDate ? fmtDate(maturityDate) : '—'}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] text-ink-2">Branch Allocated</span>
+                  <span className="block text-[10px] text-ink-2">Issuing Branch Office</span>
                   <span className="font-semibold text-ink-1">{branchName}</span>
                 </div>
               </div>
