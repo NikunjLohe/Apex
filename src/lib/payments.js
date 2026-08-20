@@ -69,7 +69,7 @@ export async function recordPayment({ plan, customer, agent, form }) {
       const baseAgent = p.agentId && usersMap[p.agentId] ? usersMap[p.agentId] : null
       if (baseAgent) {
         const commissionResults = calculateCommissions({
-          businessAmount: Number(form.amount),
+          businessAmount: isRDPlan ? Number(form.amount) : Number(p.fdAmount || form.amount),
           plan: { planCode: p.type, planType: p.planType || (isRDPlan ? 'RD' : 'FD'), policyYear: 1 },
           baseAgent: baseAgent,
           usersMap,
