@@ -51,10 +51,11 @@ export default function Payouts() {
 
   const [loading, setLoading] = useState(false)
   const [payoutsList, setPayoutsList] = useState([])
+  const [usersMap, setUsersMap] = useState({})
   const [generating, setGenerating] = useState(false)
   const [exporting, setExporting] = useState(false)
 
-  // Load existing payouts for selected month & year
+  // Load existing payouts for selected month & year along with users map for current bank details
   const fetchPayouts = async () => {
     setLoading(true)
     try {
@@ -63,11 +64,19 @@ export default function Payouts() {
         where('month', '==', selectedMonth),
         where('year', '==', selectedYear)
       )
-      const snap = await getDocs(q)
+      const [snap, usersSnap] = await Promise.all([
+        getDocs(q),
+        getDocs(collection(db, 'users'))
+      ])
       const list = []
       snap.forEach(d => {
         list.push({ id: d.id, ...d.data() })
       })
+      const uMap = {}
+      usersSnap.forEach(d => {
+        uMap[d.id] = { id: d.id, ...d.data() }
+      })
+      setUsersMap(uMap)
       setPayoutsList(list)
     } catch (err) {
       console.error('Error fetching payouts:', err)
@@ -156,6 +165,8 @@ export default function Payouts() {
         totalNet += net
 
         const pDoc = payoutsList.find(p => p.agentId === agentId)
+        const bank = u.bankDetails || {}
+        const hasBankDetails = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
 
         agentSummaries.push({
           agentId,
@@ -163,11 +174,11 @@ export default function Payouts() {
           agentName: u.name || cList[0].agentName || '—',
           rank: u.rank ? `${u.rank} (${rankNumberToCode[u.rank] || ''})` : `Rank ${cList[0].receivingRank || 1}`,
           pan: u.pan || u.panNumber || '—',
-          accountHolder: u.bankDetails?.accountHolderName || u.name || '—',
-          bankName: u.bankDetails?.bankName || '—',
-          accountNumber: u.bankDetails?.accountNumber || '—',
-          ifsc: u.bankDetails?.ifscCode || '—',
-          branch: u.bankDetails?.branch || '—',
+          accountHolder: bank.accountHolderName?.trim() || u.name || (hasBankDetails ? '—' : 'Bank Details Pending'),
+          bankName: bank.bankName?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+          accountNumber: bank.accountNumber?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+          ifsc: bank.ifscCode?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+          branch: bank.branch?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
           policiesCount: cList.length,
           grossCommission: gross,
           tds,
@@ -180,41 +191,84 @@ export default function Payouts() {
       }
 
       const monthLabel = (MONTHS.find(m => m.value === selectedMonth)?.label || 'Month').toUpperCase()
+      const generatedDateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
       const uniquePolicies = new Set(commissions.map(c => c.policyNumber || c.policyId).filter(Boolean))
       const uniqueCustomers = new Set(commissions.map(c => c.customerAccount || c.customerId).filter(Boolean))
 
+      // ── HELPER: Format Cell Types & Widths ──
+      const autoFitColumns = (worksheet, dataArray) => {
+        if (!dataArray || dataArray.length === 0) return
+        const keys = Object.keys(dataArray[0])
+        const colWidths = keys.map(key => {
+          let maxLen = String(key).length
+          dataArray.forEach(row => {
+            const val = row[key]
+            if (val !== null && val !== undefined) {
+              const len = String(val).length
+              if (len > maxLen) maxLen = len
+            }
+          })
+          return { wch: Math.min(Math.max(maxLen + 4, 12), 45) }
+        })
+        worksheet['!cols'] = colWidths
+      }
+
       // ── SHEET 1: Payout Summary ───────────────────────────────────────────
-      const summaryRows = [
-        { 'SUMMARY METRIC': 'Payout Month', 'VALUE': MONTHS[selectedMonth - 1]?.label || selectedMonth },
-        { 'SUMMARY METRIC': 'Payout Year', 'VALUE': selectedYear },
-        { 'SUMMARY METRIC': 'Total Agents', 'VALUE': agentSummaries.length },
-        { 'SUMMARY METRIC': 'Total Policies', 'VALUE': uniquePolicies.size },
-        { 'SUMMARY METRIC': 'Total Customers', 'VALUE': uniqueCustomers.size },
-        { 'SUMMARY METRIC': 'Total Ledger Entries', 'VALUE': commissions.length },
-        { 'SUMMARY METRIC': 'Total Gross Commission (₹)', 'VALUE': totalGross },
-        { 'SUMMARY METRIC': 'Total TDS 5% (₹)', 'VALUE': totalTds },
-        { 'SUMMARY METRIC': 'Total Admin Charge 5% (₹)', 'VALUE': totalAdmin },
-        { 'SUMMARY METRIC': 'Other Deductions (₹)', 'VALUE': 0 },
-        { 'SUMMARY METRIC': 'Total Net Payable (₹)', 'VALUE': totalNet },
-        {},
-        { 'SUMMARY METRIC': '=== AGENT-WISE PAYOUT SUMMARY ===', 'VALUE': '' }
+      const summaryHeaderRows = [
+        ['APEX MULTISOLUTIONS'],
+        ['COMMISSION PAYOUT REPORT'],
+        [''],
+        ['Payout Month:', MONTHS[selectedMonth - 1]?.label || selectedMonth],
+        ['Payout Year:', selectedYear],
+        ['Generated Date:', generatedDateStr],
+        [''],
+        ['SUMMARY METRICS', 'VALUE'],
+        ['Total Agents', agentSummaries.length],
+        ['Total Policies', uniquePolicies.size],
+        ['Total Customers', uniqueCustomers.size],
+        ['Total Commission Entries', commissions.length],
+        ['Total Gross Commission (₹)', totalGross],
+        ['Total TDS 5% (₹)', totalTds],
+        ['Total Admin Charge 5% (₹)', totalAdmin],
+        ['Other Deductions (₹)', 0],
+        ['TOTAL NET PAYABLE (₹)', totalNet],
+        [''],
+        ['AGENT-WISE PAYOUT SUMMARY'],
+        []
       ]
 
-      const agentSummaryTable = agentSummaries.map(a => ({
-        'Agent Code': a.agentCode,
-        'Agent Name': a.agentName,
-        'Rank': a.rank,
-        'Entries / Policies': a.policiesCount,
-        'Gross Commission (₹)': a.grossCommission,
-        'TDS 5% (₹)': a.tds,
-        'Admin Charge 5% (₹)': a.adminCharge,
-        'Other Deductions (₹)': a.otherDeductions,
-        'Net Payable (₹)': a.netPayable,
-        'Status': a.status
+      const agentSummaryTable = agentSummaries.map((a, idx) => ({
+        'Sr. No.': idx + 1,
+        'Agent Code': String(a.agentCode || '—'),
+        'Agent Name': String(a.agentName || '—'),
+        'Rank': String(a.rank || '—'),
+        'Number of Policies / Entries': a.policiesCount,
+        'Gross Commission (₹)': Number(a.grossCommission.toFixed(2)),
+        'TDS 5% (₹)': Number(a.tds.toFixed(2)),
+        'Admin Charge 5% (₹)': Number(a.adminCharge.toFixed(2)),
+        'Other Deductions (₹)': 0,
+        'Net Payable (₹)': Number(a.netPayable.toFixed(2)),
+        'Status': String(a.status || 'generated')
       }))
 
-      const ws1 = xlsx.utils.json_to_sheet(summaryRows)
-      xlsx.utils.sheet_add_json(ws1, agentSummaryTable, { origin: 'A15' })
+      // Append totals row
+      agentSummaryTable.push({
+        'Sr. No.': '',
+        'Agent Code': 'TOTALS',
+        'Agent Name': '',
+        'Rank': '',
+        'Number of Policies / Entries': commissions.length,
+        'Gross Commission (₹)': Number(totalGross.toFixed(2)),
+        'TDS 5% (₹)': Number(totalTds.toFixed(2)),
+        'Admin Charge 5% (₹)': Number(totalAdmin.toFixed(2)),
+        'Other Deductions (₹)': 0,
+        'Net Payable (₹)': Number(totalNet.toFixed(2)),
+        'Status': ''
+      })
+
+      const ws1 = xlsx.utils.aoa_to_sheet(summaryHeaderRows)
+      xlsx.utils.sheet_add_json(ws1, agentSummaryTable, { origin: 'A21' })
+      autoFitColumns(ws1, agentSummaryTable)
 
       // ── SHEET 2: Policy Details ───────────────────────────────────────────
       const policyDetailsRows = commissions.map((c, idx) => {
@@ -231,94 +285,146 @@ export default function Payouts() {
         const commAdmin = commGross * 0.05
         const commNet = commGross - commTds - commAdmin
 
+        const bank = u.bankDetails || {}
+        const hasBank = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
+
         return {
           'Sr. No.': idx + 1,
-          'Agent Code': u.sponsorCode || u.agentCode || c.sponsorCode || '—',
-          'Agent Name': c.agentName || u.name || '—',
-          'Agent Rank': c.receivingRank || u.rank || '—',
-          'Agent Designation': c.receivingRankCode || rankNumberToCode[u.rank] || '—',
-          'Agent Mobile': u.phone || '—',
-          'Agent Email': u.email || '—',
-          'Account Holder Name': u.bankDetails?.accountHolderName || u.name || '—',
-          'Bank Name': u.bankDetails?.bankName || '—',
-          'Account Number': u.bankDetails?.accountNumber || '—',
-          'IFSC Code': u.bankDetails?.ifscCode || '—',
-          'Bank Branch': u.bankDetails?.branch || '—',
-          'PAN Number': u.pan || u.panNumber || '—',
-          'Customer CIF ID': c.customerAccount || cust.customerId || '—',
-          'Customer Name': c.customerName || cust.name || '—',
-          'Customer Mobile': cust.phone || '—',
-          'Customer Address': cust.address || '—',
-          'Customer Branch': branch.name || cust.branchId || '—',
-          'Policy Number': c.policyNumber || plan.policyNumber || '—',
-          'Plan Code': c.planCode || plan.type || '—',
-          'Plan Type': c.planType || plan.planType || '—',
+          'Agent Code': { v: String(u.sponsorCode || u.agentCode || c.sponsorCode || '—'), t: 's' },
+          'Agent Name': String(c.agentName || u.name || '—'),
+          'Agent Rank': String(c.receivingRank || u.rank || '—'),
+          'Agent Designation': String(c.receivingRankCode || rankNumberToCode[u.rank] || '—'),
+          'Agent Mobile': String(u.phone || '—'),
+          'Agent Email': String(u.email || '—'),
+          'PAN Number': { v: String(u.pan || u.panNumber || '—'), t: 's' },
+
+          'Account Holder Name': String(bank.accountHolderName?.trim() || u.name || (hasBank ? '—' : 'Bank Details Pending')),
+          'Bank Name': String(bank.bankName?.trim() || (hasBank ? '—' : 'Bank Details Pending')),
+          'Account Number': { v: String(bank.accountNumber?.trim() || (hasBank ? '—' : 'Bank Details Pending')), t: 's' },
+          'IFSC Code': { v: String(bank.ifscCode?.trim() || (hasBank ? '—' : 'Bank Details Pending')), t: 's' },
+          'Bank Branch': String(bank.branch?.trim() || (hasBank ? '—' : 'Bank Details Pending')),
+
+          'Customer CIF ID': { v: String(c.customerAccount || cust.customerId || '—'), t: 's' },
+          'Customer Name': String(c.customerName || cust.name || '—'),
+          'Customer Mobile': String(cust.phone || '—'),
+          'Customer Address': String(cust.address || '—'),
+          'Customer Branch': String(branch.name || cust.branchId || '—'),
+
+          'Policy Number': { v: String(c.policyNumber || plan.policyNumber || '—'), t: 's' },
+          'Plan Code': String(c.planCode || plan.type || '—'),
+          'Plan Type': String(c.planType || plan.planType || '—'),
           'Policy Start Date': plan.startDate ? (plan.startDate.toDate ? plan.startDate.toDate().toISOString().split('T')[0] : String(plan.startDate).split('T')[0]) : '—',
-          'Monthly Amount (₹)': plan.monthlyAmount || 0,
-          'Total Policy Amount (₹)': plan.totalPaid || plan.fdAmount || c.businessAmount || 0,
-          'Policy Status': plan.status || 'active',
+          'FD Amount (₹)': Number((plan.fdAmount || (plan.planType === 'FD' ? plan.amount : 0) || 0).toFixed(2)),
+          'Maturity Amount (₹)': Number((plan.maturityAmount || 0).toFixed(2)),
+          'RD Monthly Amount (₹)': Number((plan.monthlyAmount || 0).toFixed(2)),
+          'Total Policy Amount (₹)': Number((plan.totalPaid || plan.fdAmount || c.businessAmount || 0).toFixed(2)),
+          'Policy Status': String(plan.status || 'active'),
+
           'Payment Date': c.calculationDate ? (c.calculationDate.toDate ? c.calculationDate.toDate().toISOString().split('T')[0] : String(c.calculationDate).split('T')[0]) : '—',
-          'Payment Business Amount (₹)': c.businessAmount || 0,
+          'Payment / Business Amount (₹)': Number((c.businessAmount || 0).toFixed(2)),
           'Installment Number': c.installment || 1,
-          'Commission Type': c.commissionType || 'direct',
-          'Gross Commission (₹)': commGross,
+
+          'Commission Type': String(c.commissionType || 'direct'),
+          'Commission Rate (%)': Number((c.percentage || 0).toFixed(2)),
+          'Gross Commission (₹)': Number(commGross.toFixed(2)),
           'Gap Commission': isGap ? 'Yes' : 'No',
-          'Absorbed Lower Ranks': absorbedRanksText,
-          'Commission Reason': c.compressionReason || '—',
-          'TDS 5% (₹)': commTds,
-          'Admin Charge 5% (₹)': commAdmin,
-          'Net Payable (₹)': commNet,
+          'Absorbed Lower Ranks': String(absorbedRanksText || '—'),
+          'Commission Reason': String(c.compressionReason || '—'),
+
+          'TDS 5% (₹)': Number(commTds.toFixed(2)),
+          'Admin Charge 5% (₹)': Number(commAdmin.toFixed(2)),
+          'Other Deductions (₹)': 0,
+          'Net Payable (₹)': Number(commNet.toFixed(2))
         }
       })
 
       const ws2 = xlsx.utils.json_to_sheet(policyDetailsRows)
+      autoFitColumns(ws2, policyDetailsRows)
 
       // ── SHEET 3: Commission Details ───────────────────────────────────────────
       const commDetailsRows = commissions.map((c, idx) => {
         const isGap = c.compression === true || (c.commissionType === 'adjustment') || Boolean(c.compressionReason && c.compressionReason.includes('Vacant'))
         return {
           'Sr. No.': idx + 1,
-          'Commission Entry ID': c.id,
-          'Agent Code': c.sponsorCode || '—',
-          'Agent Name': c.agentName || '—',
-          'Receiving Rank': `${c.receivingRank || ''} (${c.receivingRankCode || ''})`,
-          'Policy Number': c.policyNumber || '—',
-          'Customer Name': c.customerName || '—',
-          'Plan Code': c.planCode || '—',
-          'Business Amount (₹)': c.businessAmount || 0,
-          'Commission Rate (%)': c.percentage,
-          'Commission Amount (₹)': c.amount || 0,
-          'Commission Type': c.commissionType || 'direct',
+          'Commission Entry ID': { v: String(c.id), t: 's' },
+          'Agent Code': { v: String(c.sponsorCode || '—'), t: 's' },
+          'Agent Name': String(c.agentName || '—'),
+          'Receiving Rank': String(`${c.receivingRank || ''} (${c.receivingRankCode || ''})`),
+          'Policy Number': { v: String(c.policyNumber || '—'), t: 's' },
+          'Customer Name': String(c.customerName || '—'),
+          'Plan Code': String(c.planCode || '—'),
+          'Plan Type': String(c.planType || '—'),
+          'Business Amount (₹)': Number((c.businessAmount || 0).toFixed(2)),
+          'Commission Rate (%)': Number((c.percentage || 0).toFixed(2)),
+          'Commission Amount (₹)': Number((c.amount || 0).toFixed(2)),
+          'Commission Type': String(c.commissionType || 'direct'),
           'Gap Commission': isGap ? 'Yes' : 'No',
-          'Absorbed Lower Ranks': getAbsorbedRanksText(c),
-          'Compression Reason': c.compressionReason || '—',
-          'Status': c.status || 'unpaid',
+          'Absorbed Lower Ranks': String(getAbsorbedRanksText(c) || '—'),
+          'Compression Reason': String(c.compressionReason || '—'),
+          'Status': String(c.status || 'unpaid'),
           'Calculation Date': c.calculationDate ? (c.calculationDate.toDate ? c.calculationDate.toDate().toISOString().split('T')[0] : String(c.calculationDate).split('T')[0]) : '—'
         }
       })
 
       const ws3 = xlsx.utils.json_to_sheet(commDetailsRows)
+      autoFitColumns(ws3, commDetailsRows)
 
       // ── SHEET 4: Bank Payout ──────────────────────────────────────────────────
+      const bankHeaderRows = [
+        ['APEX MULTISOLUTIONS'],
+        ['BANK PAYOUT INSTRUCTION / RECONCILIATION REPORT'],
+        [''],
+        ['Payout Month:', MONTHS[selectedMonth - 1]?.label || selectedMonth],
+        ['Payout Year:', selectedYear],
+        ['Generated Date:', generatedDateStr],
+        [''],
+        []
+      ]
+
       const bankPayoutRows = agentSummaries.map((a, idx) => ({
         'Sr. No.': idx + 1,
-        'Agent Code': a.agentCode,
-        'Agent Name': a.agentName,
-        'PAN Number': a.pan,
-        'Account Holder Name': a.accountHolder,
-        'Bank Name': a.bankName,
-        'Account Number': a.accountNumber,
-        'IFSC Code': a.ifsc,
-        'Bank Branch': a.branch,
-        'Gross Commission (₹)': a.grossCommission,
-        'TDS 5% (₹)': a.tds,
-        'Admin Charge 5% (₹)': a.adminCharge,
-        'Other Deductions (₹)': a.otherDeductions,
-        'Net Payable (₹)': a.netPayable,
-        'Payout ID': a.payoutId
+        'Agent Code': { v: String(a.agentCode || '—'), t: 's' },
+        'Agent Name': String(a.agentName || '—'),
+        'PAN Number': { v: String(a.pan || '—'), t: 's' },
+        'Account Holder Name': String(a.accountHolder || 'Bank Details Pending'),
+        'Bank Name': String(a.bankName || 'Bank Details Pending'),
+        'Account Number': { v: String(a.accountNumber || 'Bank Details Pending'), t: 's' },
+        'IFSC Code': { v: String(a.ifsc || 'Bank Details Pending'), t: 's' },
+        'Bank Branch': String(a.branch || 'Bank Details Pending'),
+        'Gross Commission (₹)': Number(a.grossCommission.toFixed(2)),
+        'TDS 5% (₹)': Number(a.tds.toFixed(2)),
+        'Admin Charge 5% (₹)': Number(a.adminCharge.toFixed(2)),
+        'Other Deductions (₹)': 0,
+        'Net Payable (₹)': Number(a.netPayable.toFixed(2)),
+        'Payout ID': { v: String(a.payoutId || '—'), t: 's' },
+        'Payout Period': String(`${MONTHS[selectedMonth - 1]?.label || selectedMonth} ${selectedYear}`),
+        'Status': String(a.status || 'generated')
       }))
 
-      const ws4 = xlsx.utils.json_to_sheet(bankPayoutRows)
+      // Append Bank Payout Totals row
+      bankPayoutRows.push({
+        'Sr. No.': '',
+        'Agent Code': 'TOTALS',
+        'Agent Name': '',
+        'PAN Number': '',
+        'Account Holder Name': '',
+        'Bank Name': '',
+        'Account Number': '',
+        'IFSC Code': '',
+        'Bank Branch': '',
+        'Gross Commission (₹)': Number(totalGross.toFixed(2)),
+        'TDS 5% (₹)': Number(totalTds.toFixed(2)),
+        'Admin Charge 5% (₹)': Number(totalAdmin.toFixed(2)),
+        'Other Deductions (₹)': 0,
+        'Net Payable (₹)': Number(totalNet.toFixed(2)),
+        'Payout ID': '',
+        'Payout Period': '',
+        'Status': ''
+      })
+
+      const ws4 = xlsx.utils.aoa_to_sheet(bankHeaderRows)
+      xlsx.utils.sheet_add_json(ws4, bankPayoutRows, { origin: 'A9' })
+      autoFitColumns(ws4, bankPayoutRows)
 
       // ── BUILD WORKBOOK ────────────────────────────────────────────────────────
       const wb = xlsx.utils.book_new()
@@ -543,7 +649,8 @@ export default function Payouts() {
             <table className="tbl text-xs">
               <thead>
                 <tr>
-                  <th>Agent Name</th>
+                  <th>Agent Details</th>
+                  <th>Bank Details</th>
                   <th>Entries</th>
                   <th>Gross Comm</th>
                   <th className="text-red-400">TDS (5%)</th>
@@ -554,51 +661,72 @@ export default function Payouts() {
                 </tr>
               </thead>
               <tbody>
-                {payoutsList.map(p => (
-                  <tr key={p.id}>
-                    <td>
-                      <span className="font-semibold text-ink-1 block">{p.agentName}</span>
-                      <span className="text-[10px] text-ink-2 font-mono">PAN: {p.panNumber}</span>
-                    </td>
-                    <td className="font-mono text-ink-1 font-bold">{p.policiesCount}</td>
-                    <td className="text-ink-1 font-semibold">{formatINR(p.grossCommission)}</td>
-                    <td className="text-red-400 font-semibold">{formatINR(p.tds)}</td>
-                    <td className="text-red-400 font-semibold">{formatINR(p.adminCharge)}</td>
-                    <td className="text-gold font-bold text-sm">{formatINR(p.netPayable)}</td>
-                    <td>
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="text-right space-x-2">
-                      <Link 
-                        to={`/admin/commission-bill/${p.id}`} 
-                        className="btn-dark py-1 px-3 text-[10px] uppercase font-bold"
-                      >
-                        View Bill
-                      </Link>
-                      {p.status === 'generated' && (
-                        <button 
-                          onClick={() => handleUpdateStatus(p.id, 'approved')} 
-                          className="btn-gold py-1 px-3 text-[10px] uppercase font-bold"
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {p.status === 'approved' && (
-                        <button 
-                          onClick={() => handleUpdateStatus(p.id, 'paid')} 
-                          className="btn-ok py-1 px-3 text-[10px] uppercase font-bold bg-ok text-white rounded hover:bg-ok/80"
-                        >
-                          Mark Paid
-                        </button>
-                      )}
-                      {p.status === 'paid' && (
-                        <span className="text-[10px] text-ink-2 italic font-medium block mt-1">
-                          Paid {p.paidDate ? fmtDate(p.paidDate) : ''}
+                {payoutsList.map(p => {
+                  const u = usersMap[p.agentId] || {}
+                  const bank = u.bankDetails || {}
+                  const hasBankDetails = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
+
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <span className="font-semibold text-ink-1 block">{p.agentName}</span>
+                        <span className="text-[10px] text-ink-2 font-mono">
+                          Code: {u.sponsorCode || p.agentCode || '—'} | PAN: {u.pan || u.panNumber || p.panNumber || '—'}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        {hasBankDetails ? (
+                          <div className="text-[11px] leading-tight space-y-0.5">
+                            <div className="font-semibold text-ink-1">{bank.bankName}</div>
+                            <div className="font-mono text-ink-2 text-[10px]">A/C: {bank.accountNumber} | IFSC: {bank.ifscCode}</div>
+                            <div className="text-[10px] text-ink-2">Branch: {bank.branch || '—'}</div>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded">
+                            Bank Details Pending
+                          </span>
+                        )}
+                      </td>
+                      <td className="font-mono text-ink-1 font-bold">{p.policiesCount}</td>
+                      <td className="text-ink-1 font-semibold">{formatINR(p.grossCommission)}</td>
+                      <td className="text-red-400 font-semibold">{formatINR(p.tds)}</td>
+                      <td className="text-red-400 font-semibold">{formatINR(p.adminCharge)}</td>
+                      <td className="text-gold font-bold text-sm">{formatINR(p.netPayable)}</td>
+                      <td>
+                        <StatusBadge status={p.status} />
+                      </td>
+                      <td className="text-right space-x-2">
+                        <Link 
+                          to={`/admin/commission-bill/${p.id}`} 
+                          className="btn-dark py-1 px-3 text-[10px] uppercase font-bold"
+                        >
+                          View Bill
+                        </Link>
+                        {p.status === 'generated' && (
+                          <button 
+                            onClick={() => handleUpdateStatus(p.id, 'approved')} 
+                            className="btn-gold py-1 px-3 text-[10px] uppercase font-bold"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {p.status === 'approved' && (
+                          <button 
+                            onClick={() => handleUpdateStatus(p.id, 'paid')} 
+                            className="btn-ok py-1 px-3 text-[10px] uppercase font-bold bg-ok text-white rounded hover:bg-ok/80"
+                          >
+                            Mark Paid
+                          </button>
+                        )}
+                        {p.status === 'paid' && (
+                          <span className="text-[10px] text-ink-2 italic font-medium block mt-1">
+                            Paid {p.paidDate ? fmtDate(p.paidDate) : ''}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
