@@ -20,12 +20,15 @@ export default function MyEarnings() {
   const uid = profile?.uid
   const sponsorCode = profile?.sponsorCode || ''
 
-  // Load Firestore collections dynamically
+  // Selected Month & Year for Monthly Agent Performance Summary
+  const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1)
+  const [perfYear, setPerfYear] = useState(new Date().getFullYear())
+
+  // Load Firestore collections dynamically - strictly scoped to authenticated agent's UID
   const ownPlans = useCollection('plans', uid ? [where('agentId', '==', uid)] : null)
   const commissions = useCollection('commission_ledger', uid ? [where('agentId', '==', uid)] : null)
   const payouts = useCollection('payouts', uid ? [where('agentId', '==', uid)] : null)
-  const ledger = useCollection('commission_ledger', sponsorCode ? [where('sponsorCode', '==', sponsorCode)] : null)
-  const allUsers = useCollection('users')
+  const payments = useCollection('payments', uid ? [where('agentId', '==', uid)] : null)
   const enrolledCustomers = useCollection('customers', uid ? [where('enrolledBy', '==', uid)] : null)
   const { data: settings } = useDoc('config/settings')
 
@@ -36,12 +39,9 @@ export default function MyEarnings() {
 
   // Commission View Details Modal States
   const [selectedComm, setSelectedComm] = useState(null)
-  const [allocationComms, setAllocationComms] = useState([])
-  const [allocationPayout, setAllocationPayout] = useState(null)
-  const [loadingAllocation, setLoadingAllocation] = useState(false)
-  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
 
-  const loading = ownPlans.loading || commissions.loading || payouts.loading || ledger.loading || allUsers.loading || enrolledCustomers.loading
+  const loading = ownPlans.loading || commissions.loading || payouts.loading || payments.loading || enrolledCustomers.loading
 
   // Calculations
   const stats = useMemo(() => {
@@ -83,23 +83,11 @@ export default function MyEarnings() {
 
     const lastPayout = sortedPayouts.find(p => p.status === 'paid')
 
-    // Sum of all-time business volume
+    // Lifetime Business Volume
     const lifetimeBusinessVolume = ownPlans.data.reduce((sum, p) => {
       const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
-      return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+      return sum + (isRD ? (p.monthlyAmount || 0) * 12 : (p.fdAmount || 0))
     }, 0)
-
-    // Calculate MLM Team business volume (direct downline only as per requirements)
-    const getDirectDownlineVolume = (parentId) => {
-      let vol = 0
-      allUsers.data.forEach(u => {
-        if (u.referredBy === parentId) {
-          vol += (u.businessVolume || 0)
-        }
-      })
-      return vol
-    }
-    const teamBusiness = getDirectDownlineVolume(uid)
 
     // Recent Policies sold
     const recentPolicies = [...ownPlans.data]
@@ -125,7 +113,6 @@ export default function MyEarnings() {
       monthlyBusinessVolume,
       currentMonthIncome,
       lifetimeBusinessVolume,
-      teamBusiness,
       lastPayout,
       sortedPayouts,
       recentPolicies,
@@ -135,143 +122,154 @@ export default function MyEarnings() {
       pendingCommission,
       paidCommission,
     }
-  }, [commissions.data, payouts.data, ownPlans.data, allUsers.data, enrolledCustomers.data, loading, profile?.rank, config, uid])
+  }, [commissions.data, payouts.data, ownPlans.data, enrolledCustomers.data, loading, profile?.rank, config, uid])
 
-  const handleViewDetails = async (c) => {
-    setSelectedComm(c)
-    setLoadingAllocation(true)
-    try {
-      // 1. Fetch all commissions for this policy in the same month/year
-      const q = query(
-        collection(db, 'commission_ledger'),
-        where('policyNumber', '==', c.policyNumber),
-        where('month', '==', c.month),
-        where('year', '==', c.year)
-      )
-      const snap = await getDocs(q)
-      const list = []
-      snap.forEach(d => list.push({ id: d.id, ...d.data() }))
-      setAllocationComms(list)
+  // ── MONTHLY PERFORMANCE COMPUTATION ──────────────────────────────────────────
+  const monthlyPerformance = useMemo(() => {
+    if (loading) return null
 
-      // 2. Fetch payout matching this month/year for the current agent
-      const pq = query(
-        collection(db, 'payouts'),
-        where('agentId', '==', uid),
-        where('month', '==', c.month),
-        where('year', '==', c.year)
-      )
-      const pSnap = await getDocs(pq)
-      if (!pSnap.empty) {
-        setAllocationPayout({ id: pSnap.docs[0].id, ...pSnap.docs[0].data() })
+    // Helper date comparison for target month & year
+    const matchMonthYear = (rawDate) => {
+      const d = toDate(rawDate)
+      if (!d || isNaN(d.getTime())) return false
+      return d.getMonth() + 1 === perfMonth && d.getFullYear() === perfYear
+    }
+
+    // 1. Policies created in selected month
+    const monthPlans = ownPlans.data.filter(p => {
+      const fallbackDate = p.startDate || p.date || p.createdAt
+      return matchMonthYear(fallbackDate)
+    })
+
+    let rdCount = 0, fdCount = 0, pensionCount = 0
+    let rdBusiness = 0, fdBusiness = 0, pensionBusiness = 0
+
+    monthPlans.forEach(p => {
+      const typeStr = (p.planType || p.type || '').toUpperCase()
+      if (typeStr.startsWith('RD')) {
+        rdCount++
+        rdBusiness += Number(p.monthlyAmount || p.amount || 0)
+      } else if (typeStr.startsWith('PENS')) {
+        pensionCount++
+        pensionBusiness += Number(p.fdAmount || p.monthlyAmount || p.amount || 0)
       } else {
-        setAllocationPayout(null)
+        fdCount++
+        fdBusiness += Number(p.fdAmount || p.amount || 0)
       }
-    } catch (err) {
-      console.error('Failed to load allocation data:', err)
-    } finally {
-      setLoadingAllocation(false)
-    }
-  }
+    })
 
-  const getHierarchyForModal = () => {
-    if (!selectedComm) return []
-    // 1. Reconstruct live path
-    const path = []
-    let currId = selectedComm.originalAgentId || selectedComm.agentId
-    const visited = new Set()
-    const usersMap = {}
-    allUsers.data.forEach(d => { usersMap[d.id] = d })
+    const totalPolicies = monthPlans.length
+    const totalBusiness = rdBusiness + fdBusiness + pensionBusiness
 
-    while (currId && currId !== 'none' && !visited.has(currId)) {
-      visited.add(currId)
-      const u = usersMap[currId]
-      if (!u) break
-      path.push({
-        id: currId,
-        name: u.name,
-        rank: u.rank,
-        sponsorCode: u.sponsorCode || ''
-      })
-      currId = u.referredBy
-    }
+    // 2. Commission Summary reading ALREADY-CALCULATED ledger docs (no recalculation)
+    const monthComms = commissions.data.filter(c => c.month === perfMonth && c.year === perfYear)
 
-    // Build levels from 1 to 18
-    const levels = []
-    for (let r = 1; r <= 18; r++) {
-      // Check if there is an override in historical commissions
-      const hist = allocationComms.find(x => Number(x.receivingRank) === r)
-      if (hist) {
-        levels.push({
-          rank: r,
-          agentId: hist.agentId,
-          agentName: hist.agentName,
-          amount: hist.amount || 0,
-          percentage: hist.percentage || 0,
-          isReceiver: hist.agentId === uid, // Highlight if matches logged-in agent
-          isOccupied: true,
-        })
+    let directComm = 0, gapComm = 0, uplineComm = 0, grossComm = 0
+
+    monthComms.forEach(c => {
+      const amt = Number(c.amount || 0)
+      grossComm += amt
+      const typeStr = (c.commissionType || '').toLowerCase()
+      if (c.compression || c.compressionReason?.includes('Vacant')) {
+        gapComm += amt
+      } else if (typeStr === 'direct' || typeStr === 'direct_own') {
+        directComm += amt
       } else {
-        const liveAgent = path.find(x => Number(x.rank) === r)
-        if (liveAgent) {
-          levels.push({
-            rank: r,
-            agentId: liveAgent.id,
-            agentName: liveAgent.name,
-            amount: 0,
-            percentage: 0,
-            isReceiver: liveAgent.id === uid,
-            isOccupied: true,
-          })
-        } else {
-          levels.push({
-            rank: r,
-            agentId: null,
-            agentName: null,
-            isReceiver: false,
-            isOccupied: false,
-          })
-        }
+        uplineComm += amt
       }
+    })
+
+    const tds = grossComm * 0.05
+    const adminCharge = grossComm * 0.05
+    const netComm = grossComm - tds - adminCharge
+
+    // 3. Activity Summary
+    const monthCustomers = enrolledCustomers.data.filter(c => matchMonthYear(c.createdAt))
+    const monthPayments = payments.data.filter(p => matchMonthYear(p.paidDate || p.createdAt))
+
+    // 4. Policy Details for selected month
+    const policyDetails = monthPlans.map(p => {
+      const isRD = (p.planType || p.type || '').toUpperCase().startsWith('RD')
+      const busAmt = isRD ? Number(p.monthlyAmount || 0) : Number(p.fdAmount || 0)
+      const payAmt = Number(p.totalPaid || p.monthlyAmount || p.fdAmount || 0)
+
+      // Find matched commission for this policy
+      const matchedComms = monthComms.filter(c => c.policyNumber === p.policyNumber || c.policyId === p.id)
+      const earned = matchedComms.reduce((sum, c) => sum + Number(c.amount || 0), 0)
+      const commStatus = matchedComms.length > 0 ? matchedComms[0].status : (p.status || 'unpaid')
+
+      return {
+        id: p.id,
+        policyNumber: p.policyNumber || p.planAccountNumber || '—',
+        customerName: p.customerName || '—',
+        planCode: p.type || p.planCode || '—',
+        planType: p.planType || (isRD ? 'RD' : 'FD'),
+        startDate: p.startDate ? fmtDate(p.startDate) : '—',
+        businessAmount: busAmt,
+        paymentAmount: payAmt,
+        commissionEarned: earned,
+        commissionStatus: commStatus
+      }
+    })
+
+    return {
+      rdCount, fdCount, pensionCount, totalPolicies,
+      rdBusiness, fdBusiness, pensionBusiness, totalBusiness,
+      directComm, gapComm, uplineComm, grossComm, tds, adminCharge, netComm,
+      customersAddedCount: monthCustomers.length,
+      policiesCreatedCount: totalPolicies,
+      paymentsCount: monthPayments.length,
+      policyDetails
     }
-    return levels
-  }
+  }, [ownPlans.data, commissions.data, enrolledCustomers.data, payments.data, perfMonth, perfYear, loading])
 
-  const downloadStatementPdf = async () => {
-    if (!selectedComm) return
-    const element = document.getElementById('commission-statement-pdf')
-    if (!element) return
+  // ── EXPORT PAYOUT EXCEL FOR AGENT ──────────────────────────────────────────────
+  const handleExportAgentPayoutExcel = () => {
+    if (!payouts.data || payouts.data.length === 0) {
+      toast.error('No payout history available for export.')
+      return
+    }
 
-    setDownloadingPdf(true)
+    setExportingExcel(true)
+    const toastId = toast.loading('Generating Agent Payout Excel...')
+
     try {
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      })
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      
-      const imgWidth = 210
-      const pageHeight = 295
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
+      const bank = profile?.bankDetails || {}
+      const hasBankDetails = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
+      const exportRows = payouts.data.map((p, idx) => ({
+        'Sr. No.': idx + 1,
+        'Agent Code': profile?.sponsorCode || profile?.agentCode || '—',
+        'Agent Name': profile?.name || '—',
+        'PAN Number': profile?.pan || profile?.panNumber || '—',
+        'Account Holder Name': bank.accountHolderName?.trim() || profile?.name || (hasBankDetails ? '—' : 'Bank Details Pending'),
+        'Bank Name': bank.bankName?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+        'Account Number': bank.accountNumber?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+        'IFSC Code': bank.ifscCode?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+        'Bank Branch': bank.branch?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
+        'Gross Commission (₹)': p.grossCommission || 0,
+        'TDS 5% (₹)': p.tds || 0,
+        'Admin Charge 5% (₹)': p.adminCharge || 0,
+        'Other Deductions (₹)': p.otherDeductions || 0,
+        'Net Payable (₹)': p.netPayable || 0,
+        'Payout ID': p.id || '—',
+        'Payout Period': `${p.month}/${p.year}`,
+        'Status': p.status || 'generated'
+      }))
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-      }
-      
-      pdf.save(`Commission_Statement_${selectedComm.policyNumber}.pdf`)
+      const ws = xlsx.utils.json_to_sheet(exportRows)
+      const wb = xlsx.utils.book_new()
+      xlsx.utils.book_append_sheet(wb, ws, 'Agent Payout Statement')
+
+      const fileName = `AGENT_PAYOUT_STATEMENT_${profile?.sponsorCode || 'MY_ACCOUNT'}.xlsx`
+      xlsx.writeFile(wb, fileName)
+
+      toast.success('Agent Payout Excel exported successfully!', { id: toastId })
     } catch (err) {
-      console.error('Failed to generate PDF:', err)
+      console.error('Error exporting Agent Payout Excel:', err)
+      toast.error(`Export failed: ${err.message}`, { id: toastId })
     } finally {
-      setDownloadingPdf(false)
+      setExportingExcel(false)
     }
   }
 
@@ -287,18 +285,6 @@ export default function MyEarnings() {
       </div>
     )
   }
-
-  const hierarchyLevels = getHierarchyForModal()
-  const totalCommissionDistributed = allocationComms.reduce((sum, x) => sum + (x.amount || 0), 0)
-
-  // Payment details calculations for selected details modal
-  const allocationPayoutDetails = allocationPayout || (selectedComm ? {
-    grossCommission: selectedComm.amount,
-    tds: selectedComm.amount * 0.05,
-    adminCharge: selectedComm.amount * 0.05,
-    netPayable: selectedComm.amount * 0.9,
-    paidDate: null
-  } : null)
 
   const companyName = settings?.companyName || 'Apex Multisolutions'
   const headOffice = settings?.headOffice || ''
@@ -481,11 +467,21 @@ export default function MyEarnings() {
 
       {/* Payout statement and income history */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Payout Statements List */}
+        {/* Payout Statements List & Excel Export */}
         <div className="card p-5 space-y-4 md:col-span-1">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">
-            Monthly Payout History
-          </h3>
+          <div className="flex items-center justify-between border-b border-navy-4/50 pb-1.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Monthly Payout History
+            </h3>
+            <button
+              onClick={handleExportAgentPayoutExcel}
+              disabled={exportingExcel || !stats.sortedPayouts.length}
+              className="btn-gold px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 disabled:opacity-50"
+            >
+              <IDoc size={12} />
+              {exportingExcel ? 'Exporting...' : 'Export Payout Excel'}
+            </button>
+          </div>
           {stats.sortedPayouts.length ? (
             <div className="space-y-3">
               {stats.sortedPayouts.map(p => (
@@ -506,7 +502,7 @@ export default function MyEarnings() {
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-ink-2 mt-1">
                     <span>Policies: {p.policiesCount}</span>
-                    <span className="font-bold text-ink-1 font-mono">{formatINR(p.totalPayable)}</span>
+                    <span className="font-bold text-ink-1 font-mono">{formatINR(p.netPayable || p.totalPayable)}</span>
                   </div>
                 </div>
               ))}
@@ -529,29 +525,29 @@ export default function MyEarnings() {
               <div className="grid grid-cols-2 gap-4 bg-navy-2/30 p-4 rounded-card border border-navy-4/50">
                 <div className="space-y-2">
                   <div>
-                    <span className="text-[10px] text-ink-2 uppercase block">Total Commission (MDA)</span>
-                    <span className="text-sm font-bold text-ink-1">{formatINR(selectedPayout.totalCommission)}</span>
+                    <span className="text-[10px] text-ink-2 uppercase block">Gross Commission</span>
+                    <span className="text-sm font-bold text-ink-1">{formatINR(selectedPayout.grossCommission || selectedPayout.totalCommission)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-ink-2 uppercase block">Field Allowance (MFA)</span>
-                    <span className="text-sm font-bold text-ink-1">{selectedPayout.mfa > 0 ? formatINR(selectedPayout.mfa) : '₹0'}</span>
+                    <span className="text-[10px] text-ink-2 uppercase block">TDS (5%)</span>
+                    <span className="text-sm font-bold text-red-400">-{formatINR(selectedPayout.tds || 0)}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <span className="text-[10px] text-ink-2 uppercase block">Performance Bonus (PB)</span>
-                    <span className="text-sm font-bold text-ink-1">{selectedPayout.pb > 0 ? formatINR(selectedPayout.pb) : '₹0'}</span>
+                    <span className="text-[10px] text-ink-2 uppercase block">Admin Charge (5%)</span>
+                    <span className="text-sm font-bold text-red-400">-{formatINR(selectedPayout.adminCharge || 0)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-ink-2 uppercase block">Travel Allowance (TA)</span>
-                    <span className="text-sm font-bold text-ink-1">{selectedPayout.ta > 0 ? formatINR(selectedPayout.ta) : '₹0'}</span>
+                    <span className="text-[10px] text-ink-2 uppercase block">Other Deductions</span>
+                    <span className="text-sm font-bold text-ink-1">{formatINR(selectedPayout.otherDeductions || 0)}</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex justify-between items-center border-t border-navy-4 pt-3">
                 <span className="text-sm font-bold text-ink-1 font-serif">Total Net Payable</span>
-                <span className="text-lg font-bold text-gold font-serif">{formatINR(selectedPayout.totalPayable)}</span>
+                <span className="text-lg font-bold text-gold font-serif">{formatINR(selectedPayout.netPayable || selectedPayout.totalPayable)}</span>
               </div>
             </div>
           ) : (
@@ -562,6 +558,193 @@ export default function MyEarnings() {
           )}
         </div>
       </div>
+
+      {/* ── MY MONTHLY PERFORMANCE SECTION ───────────────────────────────────── */}
+      {monthlyPerformance && (
+        <div className="card p-6 space-y-6 bg-navy-3/80 border border-gold-1/30">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-navy-4 pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-gold font-serif uppercase tracking-wider">
+                MY MONTHLY PERFORMANCE
+              </h2>
+              <p className="text-xs text-ink-2">Personal performance summary for the selected period.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div>
+                <label className="text-[10px] text-ink-2 uppercase font-bold block mb-1">Month</label>
+                <select
+                  value={perfMonth}
+                  onChange={e => setPerfMonth(Number(e.target.value))}
+                  className="bg-navy-2 border border-navy-4 rounded text-xs px-3 py-1.5 font-semibold text-ink-1 focus:border-gold"
+                >
+                  {[
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'
+                  ].map((m, idx) => (
+                    <option key={idx + 1} value={idx + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-2 uppercase font-bold block mb-1">Year</label>
+                <select
+                  value={perfYear}
+                  onChange={e => setPerfYear(Number(e.target.value))}
+                  className="bg-navy-2 border border-navy-4 rounded text-xs px-3 py-1.5 font-semibold text-ink-1 focus:border-gold"
+                >
+                  {[2024, 2025, 2026, 2027, 2028].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. POLICY / BUSINESS SUMMARY */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Policy / Business Summary
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">RD Policies / Business</span>
+                <span className="text-xs font-bold text-ink-1 block mt-0.5">{monthlyPerformance.rdCount} Policies</span>
+                <span className="text-sm font-extrabold text-gold font-mono">{formatINR(monthlyPerformance.rdBusiness)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">FD Policies / Business</span>
+                <span className="text-xs font-bold text-ink-1 block mt-0.5">{monthlyPerformance.fdCount} Policies</span>
+                <span className="text-sm font-extrabold text-gold font-mono">{formatINR(monthlyPerformance.fdBusiness)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Pension Policies / Business</span>
+                <span className="text-xs font-bold text-ink-1 block mt-0.5">{monthlyPerformance.pensionCount} Policies</span>
+                <span className="text-sm font-extrabold text-gold font-mono">{formatINR(monthlyPerformance.pensionBusiness)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4 border-l-2 border-l-gold">
+                <span className="text-[10px] text-ink-2 uppercase block font-bold">Total Policies / Business</span>
+                <span className="text-xs font-bold text-ink-1 block mt-0.5">{monthlyPerformance.totalPolicies} Policies</span>
+                <span className="text-sm font-extrabold text-gold font-mono">{formatINR(monthlyPerformance.totalBusiness)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. COMMISSION SUMMARY */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Commission Summary
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Direct Commission</span>
+                <span className="text-sm font-bold text-ink-1 font-mono">{formatINR(monthlyPerformance.directComm)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Gap / Compression</span>
+                <span className="text-sm font-bold text-ink-1 font-mono">{formatINR(monthlyPerformance.gapComm)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Upline Commission</span>
+                <span className="text-sm font-bold text-ink-1 font-mono">{formatINR(monthlyPerformance.uplineComm)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Gross Commission</span>
+                <span className="text-sm font-bold text-gold font-mono">{formatINR(monthlyPerformance.grossComm)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">TDS (5%)</span>
+                <span className="text-sm font-bold text-red-400 font-mono">-{formatINR(monthlyPerformance.tds)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[10px] text-ink-2 uppercase block">Admin Charge (5%)</span>
+                <span className="text-sm font-bold text-red-400 font-mono">-{formatINR(monthlyPerformance.adminCharge)}</span>
+              </div>
+              <div className="p-3 bg-navy-2/60 rounded border border-navy-4 border-l-2 border-l-ok col-span-2">
+                <span className="text-[10px] text-ink-2 uppercase block font-bold">Net Commission</span>
+                <span className="text-base font-extrabold text-ok font-mono">{formatINR(monthlyPerformance.netComm)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. ACTIVITY SUMMARY */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Activity Summary
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-center text-xs">
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">Customers Added</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.customersAddedCount}</span>
+              </div>
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">Policies Created</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.policiesCreatedCount}</span>
+              </div>
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">Payments / Installments</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.paymentsCount}</span>
+              </div>
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">RD Count</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.rdCount}</span>
+              </div>
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">FD Count</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.fdCount}</span>
+              </div>
+              <div className="p-2.5 bg-navy-2/60 rounded border border-navy-4">
+                <span className="text-[9px] text-ink-2 uppercase block">Pension Count</span>
+                <span className="text-base font-bold text-ink-1 mt-0.5 block">{monthlyPerformance.pensionCount}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. POLICY DETAILS */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
+              Policy Details ({monthlyPerformance.policyDetails.length})
+            </h3>
+            {monthlyPerformance.policyDetails.length ? (
+              <div className="table-wrap">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th>Policy Number</th>
+                      <th>Customer Name</th>
+                      <th>Plan Code</th>
+                      <th>Plan Type</th>
+                      <th>Start Date</th>
+                      <th className="text-right">Business Amount</th>
+                      <th className="text-right">Payment Amount</th>
+                      <th className="text-right">Commission Earned</th>
+                      <th className="text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyPerformance.policyDetails.map(p => (
+                      <tr key={p.id}>
+                        <td className="font-mono text-gold font-semibold">{p.policyNumber}</td>
+                        <td className="font-semibold text-ink-1">{p.customerName}</td>
+                        <td className="uppercase font-semibold text-ink-2">{p.planCode}</td>
+                        <td className="uppercase font-semibold text-ink-2">{p.planType}</td>
+                        <td className="font-mono text-ink-2">{p.startDate}</td>
+                        <td className="text-right font-mono font-semibold text-ink-1">{formatINR(p.businessAmount)}</td>
+                        <td className="text-right font-mono font-semibold text-ink-1">{formatINR(p.paymentAmount)}</td>
+                        <td className="text-right font-mono font-bold text-gold">{formatINR(p.commissionEarned)}</td>
+                        <td className="text-center">
+                          <StatusBadge status={p.commissionStatus} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-2 italic py-4 text-center">No policies created in the selected month/year.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Income ledger audits */}
       <div className="card p-5 space-y-4">
@@ -589,7 +772,7 @@ export default function MyEarnings() {
           </div>
         </div>
 
-        {ledger.data.length ? (
+        {commissions.data.length ? (
           <div className="table-wrap">
             <table className="tbl text-xs">
               <thead>
@@ -605,7 +788,7 @@ export default function MyEarnings() {
                 </tr>
               </thead>
               <tbody>
-                {ledger.data.map(log => (
+                {commissions.data.map(log => (
                   <tr key={log.id}>
                     <td className="font-mono text-ink-2">{log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
                     <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || '—'}</td>
@@ -621,7 +804,7 @@ export default function MyEarnings() {
                     <td className="text-center">
                       <button
                         type="button"
-                        onClick={() => handleViewDetails(log)}
+                        onClick={() => setSelectedComm(log)}
                         className="text-gold font-bold hover:underline text-[10px] uppercase tracking-wide"
                       >
                         View Details
@@ -633,7 +816,7 @@ export default function MyEarnings() {
             </table>
           </div>
         ) : (
-          <p className="text-xs text-ink-2 italic py-4 text-center">No ledger logs recorded under this sponsor account yet.</p>
+          <p className="text-xs text-ink-2 italic py-4 text-center">No personal commission ledger logs recorded under your account yet.</p>
         )}
       </div>
 
@@ -649,7 +832,7 @@ export default function MyEarnings() {
                 <p className="text-xs text-gray-500">Audit Trail: <span className="font-mono font-bold text-gray-700">{selectedComm.policyNumber}</span></p>
               </div>
               <button 
-                onClick={() => { setSelectedComm(null); setAllocationComms([]); setAllocationPayout(null) }}
+                onClick={() => setSelectedComm(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1"
               >
                 ✕
@@ -658,270 +841,139 @@ export default function MyEarnings() {
 
             {/* Modal Scrollable Content */}
             <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
-              
-              {loadingAllocation ? (
-                <div className="py-12 text-center text-gray-500 italic">Fetching complete allocation details...</div>
-              ) : (
-                <>
-                  {/* Printable/Canvas Container */}
-                  <div id="commission-statement-pdf" className="bg-white text-black p-8 font-sans space-y-6">
-                    
-                    {/* Header */}
-                    <div className="flex justify-between items-start border-b-2 border-gray-200 pb-6 gap-4">
-                      <div className="flex items-center gap-4">
-                        <Logo size={46} showText={false} />
-                        <div>
-                          <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
-                          {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Commission Statement</h2>
-                        <p className="text-xs text-gray-500 mt-1">Policy No: <span className="font-mono font-bold">{selectedComm.policyNumber}</span></p>
-                        <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{selectedComm.month}/{selectedComm.year}</span></p>
-                        <p className="text-xs text-gray-500 mt-0.5">Generated: {new Date().toLocaleDateString()}</p>
-                      </div>
-                    </div>
-
-                    {/* Agent Details */}
-                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Agent Details</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
-                        <div>
-                          <span className="text-gray-500 block">Agent Name</span>
-                          <span className="font-bold text-gray-800">{profile?.name}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Agent Code</span>
-                          <span className="font-bold text-gray-800 font-mono">{sponsorCode || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Rank</span>
-                          <span className="font-bold text-gray-800">{rank.code} - {rank.name}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Policy Details */}
-                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Policy & Product Details</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-y-2 gap-x-4 text-xs">
-                        <div>
-                          <span className="text-gray-500 block">Policy Number</span>
-                          <span className="font-bold text-gray-800 font-mono">{selectedComm.policyNumber}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Customer</span>
-                          <span className="font-bold text-gray-800">{selectedComm.customerName}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Business Volume</span>
-                          <span className="font-bold text-gray-800">{formatINR(selectedComm.businessAmount || 0)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Plan Code</span>
-                          <span className="font-bold text-gray-800 uppercase font-mono">{selectedComm.planCode || selectedComm.planType || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Commission Earned</span>
-                          <span className="font-bold text-gold">{formatINR(selectedComm.amount)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Explanation section */}
-                    <div className="bg-gold-50/50 border border-gold-200 rounded-lg p-4">
-                      <h4 className="text-xs font-bold text-gold-900 uppercase tracking-wide mb-1">Why did I receive this commission?</h4>
-                      <p className="text-gray-700 leading-relaxed mb-3">You are part of the sponsor hierarchy for this policy. Commissions are distributed based on differential upline ranks and direct sales roles.</p>
-                      <div className="grid grid-cols-3 gap-2 text-center text-[10px] bg-white p-2 rounded border border-gold-100">
-                        <div>
-                          <span className="text-gray-500 block uppercase">Your Rank</span>
-                          <span className="font-bold text-gray-800 text-xs block mt-0.5">{rank.code} - {rank.name}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block uppercase">Configured %</span>
-                          <span className="font-bold text-gray-800 text-xs block mt-0.5">{Number(selectedComm.percentage || 0).toFixed(2)}%</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block uppercase">Commission Earned</span>
-                          <span className="font-bold text-gold text-xs block mt-0.5">{formatINR(selectedComm.amount)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* COMPLETE Sponsor Hierarchy */}
+              {/* Printable Container */}
+              <div id="commission-statement-pdf" className="bg-white text-black p-8 font-sans space-y-6">
+                
+                {/* Header */}
+                <div className="flex justify-between items-start border-b-2 border-gray-200 pb-6 gap-4">
+                  <div className="flex items-center gap-4">
+                    <Logo size={46} showText={false} />
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">COMPLETE Sponsor Hierarchy Path (Rank 1 - 18)</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {hierarchyLevels.map((lvl) => {
-                          const rInfo = getRank(lvl.rank)
-                          const isReceiver = lvl.agentId === uid
-                          return (
-                            <div 
-                              key={lvl.rank}
-                              className={`flex items-center justify-between p-2 rounded border text-[10px] ${
-                                isReceiver 
-                                  ? 'bg-gold-50 border-gold-300 font-bold ring-1 ring-gold-400/20 shadow-sm' 
-                                  : lvl.isOccupied 
-                                    ? 'bg-white border-gray-200 text-gray-800' 
-                                    : 'bg-gray-50/50 border-gray-100 text-gray-300 italic'
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                  isReceiver
-                                    ? 'bg-gold-600 text-white'
-                                    : lvl.isOccupied
-                                      ? 'bg-navy-100 text-navy-800'
-                                      : 'bg-gray-200 text-gray-400'
-                                }`}>
-                                  R{lvl.rank}
-                                </span>
-                                <span className="truncate max-w-[80px] font-medium" title={rInfo.name}>{rInfo.code}</span>
-                              </div>
-
-                              <div className="truncate text-right pl-2 min-w-0 flex-1">
-                                {lvl.isOccupied ? (
-                                  <div className="truncate">
-                                    <span className={isReceiver ? 'text-gold-900 font-black' : 'text-gray-900'}>
-                                      {lvl.agentName}
-                                    </span>
-                                    {isReceiver && <span className="text-[8px] text-gold-600 font-bold block mt-0.5">(You)</span>}
-                                  </div>
-                                ) : (
-                                  <span>—</span>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                      <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
+                      {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
                     </div>
-
-                    {/* COMPLETE Commission Allocation Table */}
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">COMPLETE Commission Allocation Ledger</h4>
-                      <div className="overflow-x-auto border border-gray-100 rounded-lg">
-                        <table className="w-full text-left border-collapse text-[10px]">
-                          <thead>
-                            <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold">
-                              <th className="py-2 px-3">Rank</th>
-                              <th className="py-2 px-3">Agent</th>
-                              <th className="py-2 px-3 text-center">Comm %</th>
-                              <th className="py-2 px-3 text-right">Commission Amount</th>
-                              <th className="py-2 px-3 text-center">Type</th>
-                              <th className="py-2 px-3 text-center">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {allocationComms
-                              .slice()
-                              .sort((a, b) => Number(a.receivingRank || 1) - Number(b.receivingRank || 1))
-                              .map((c, idx) => {
-                                const isReceiver = c.agentId === uid
-                                return (
-                                  <tr 
-                                    key={c.id || idx}
-                                    className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 ${
-                                      isReceiver ? 'bg-gold-50 font-bold' : ''
-                                    }`}
-                                  >
-                                    <td className="py-2 px-3 font-mono">R{c.receivingRank || 1}</td>
-                                    <td className="py-2 px-3">
-                                      <span className={isReceiver ? 'text-gold-900 font-black' : 'text-gray-900'}>{c.agentName}</span>
-                                      <span className="text-[9px] text-gray-400 font-mono block">{c.sponsorCode || '—'}</span>
-                                    </td>
-                                    <td className="py-2 px-3 text-center font-mono">{Number(c.percentage || 0).toFixed(2)}%</td>
-                                    <td className="py-2 px-3 text-right font-bold text-gray-800">{formatINR(c.amount)}</td>
-                                    <td className="py-2 px-3 text-center uppercase">
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                        {c.commissionType === 'Direct' || c.commissionType === 'direct' || c.commissionType === 'direct_own' ? 'Direct' : 'Differential'}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 px-3 text-center uppercase">
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                        c.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                      }`}>
-                                        {c.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                )
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="flex justify-between items-center text-xs font-bold text-gray-700 mt-2 px-1">
-                        <span>Total Commission Distributed:</span>
-                        <span className="text-gold font-black">{formatINR(totalCommissionDistributed)}</span>
-                      </div>
-                    </div>
-
-                    {/* Payment Details */}
-                    <div className="border-t border-gray-100 pt-4">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Cycle Payout Details</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100 text-[10px]">
-                        <div>
-                          <span className="text-gray-500 block">Gross Commission</span>
-                          <span className="font-bold text-gray-800 text-xs">{formatINR(allocationPayoutDetails.grossCommission || allocationPayoutDetails.totalPayable || selectedComm.amount)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">TDS Deduction (5%)</span>
-                          <span className="font-bold text-red-600 text-xs">-{formatINR(allocationPayoutDetails.tds || (selectedComm.amount * 0.05))}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Admin Charge (5%)</span>
-                          <span className="font-bold text-red-600 text-xs">-{formatINR(allocationPayoutDetails.adminCharge || (selectedComm.amount * 0.05))}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Net Commission</span>
-                          <span className="font-bold text-green-600 text-xs">{formatINR(allocationPayoutDetails.netPayable || (selectedComm.amount * 0.9))}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Payment Date</span>
-                          <span className="font-bold text-gray-800 text-xs font-mono">
-                            {allocationPayoutDetails.paidDate ? fmtDate(allocationPayoutDetails.paidDate) : 'Pending Payout Cycle'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="text-[10px] text-gray-400 border-t border-gray-100 pt-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
-                      <p>This is an official computer-generated statement and does not require physical signature under auditing rules.</p>
-                      <div className="w-40 border-t border-gray-300 mt-4 text-center text-[9px] font-bold text-gray-500 uppercase tracking-widest pt-1">
-                        Authorised Signature
-                      </div>
-                    </div>
-
                   </div>
-                </>
-              )}
+                  <div className="text-right">
+                    <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Commission Statement</h2>
+                    <p className="text-xs text-gray-500 mt-1">Policy No: <span className="font-mono font-bold">{selectedComm.policyNumber}</span></p>
+                    <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{selectedComm.month}/{selectedComm.year}</span></p>
+                    <p className="text-xs text-gray-500 mt-0.5">Generated: {new Date().toLocaleDateString()}</p>
+                  </div>
+                </div>
 
+                {/* Agent Details */}
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Agent Details</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Agent Name</span>
+                      <span className="font-bold text-gray-800">{profile?.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Agent Code</span>
+                      <span className="font-bold text-gray-800 font-mono">{sponsorCode || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Rank</span>
+                      <span className="font-bold text-gray-800">{rank.code} - {rank.name}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Policy Details */}
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Policy & Product Details</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-y-2 gap-x-4 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Policy Number</span>
+                      <span className="font-bold text-gray-800 font-mono">{selectedComm.policyNumber}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Customer</span>
+                      <span className="font-bold text-gray-800">{selectedComm.customerName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Business Volume</span>
+                      <span className="font-bold text-gray-800">{formatINR(selectedComm.businessAmount || 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Plan Code</span>
+                      <span className="font-bold text-gray-800 uppercase font-mono">{selectedComm.planCode || selectedComm.planType || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Commission Earned</span>
+                      <span className="font-bold text-gold">{formatINR(selectedComm.amount)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Explanation section */}
+                <div className="bg-gold-50/50 border border-gold-200 rounded-lg p-4">
+                  <h4 className="text-xs font-bold text-gold-900 uppercase tracking-wide mb-1">Why did I receive this commission?</h4>
+                  <p className="text-gray-700 leading-relaxed mb-3">You are part of the sponsor hierarchy for this policy. Commissions are distributed based on differential upline ranks and direct sales roles.</p>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[10px] bg-white p-2 rounded border border-gold-100">
+                    <div>
+                      <span className="text-gray-500 block uppercase">Your Rank</span>
+                      <span className="font-bold text-gray-800 text-xs block mt-0.5">{rank.code} - {rank.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block uppercase">Configured %</span>
+                      <span className="font-bold text-gray-800 text-xs block mt-0.5">{Number(selectedComm.percentage || 0).toFixed(2)}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block uppercase">Commission Earned</span>
+                      <span className="font-bold text-gold text-xs block mt-0.5">{formatINR(selectedComm.amount)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Details */}
+                <div className="border-t border-gray-100 pt-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Statement Breakdown</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100 text-[10px]">
+                    <div>
+                      <span className="text-gray-500 block">Gross Commission</span>
+                      <span className="font-bold text-gray-800 text-xs">{formatINR(selectedComm.amount || 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">TDS Deduction (5%)</span>
+                      <span className="font-bold text-red-600 text-xs">-{formatINR((selectedComm.amount || 0) * 0.05)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Admin Charge (5%)</span>
+                      <span className="font-bold text-red-600 text-xs">-{formatINR((selectedComm.amount || 0) * 0.05)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Net Commission</span>
+                      <span className="font-bold text-green-600 text-xs">{formatINR((selectedComm.amount || 0) * 0.9)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="text-[10px] text-gray-400 border-t border-gray-100 pt-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
+                  <p>This is an official computer-generated statement and does not require physical signature under auditing rules.</p>
+                  <div className="w-40 border-t border-gray-300 mt-4 text-center text-[9px] font-bold text-gray-500 uppercase tracking-widest pt-1">
+                    Authorised Signature
+                  </div>
+                </div>
+
+              </div>
             </div>
 
             {/* Modal Action Footer */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl print:hidden">
               <button 
                 type="button"
-                onClick={downloadStatementPdf}
-                disabled={loadingAllocation || downloadingPdf}
-                className="btn-gold px-4 py-2 text-xs uppercase font-bold tracking-wide disabled:opacity-50"
-              >
-                {downloadingPdf ? 'Generating PDF...' : 'Download Statement'}
-              </button>
-              <button 
-                type="button"
                 onClick={() => window.print()}
-                disabled={loadingAllocation || downloadingPdf}
-                className="btn-dark px-4 py-2 text-xs uppercase font-bold tracking-wide flex items-center gap-1.5 disabled:opacity-50"
+                className="btn-dark px-4 py-2 text-xs uppercase font-bold tracking-wide flex items-center gap-1.5"
               >
                 <IPrint size={14} /> Print Statement
               </button>
               <button 
                 type="button" 
-                onClick={() => { setSelectedComm(null); setAllocationComms([]); setAllocationPayout(null) }}
+                onClick={() => setSelectedComm(null)}
                 className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 text-xs uppercase font-bold tracking-wide rounded-card"
               >
                 Close

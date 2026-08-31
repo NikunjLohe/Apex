@@ -66,9 +66,9 @@ service cloud.firestore {
     match /counters/{name} { allow read, write: if isStaff(); }
 
     // Commission and Payout data
-    match /commissions/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /commission_ledger/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /payouts/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /commissions/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
+    match /commission_ledger/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
+    match /payouts/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
 
 
     // App config (settings) — staff read, admin write.
