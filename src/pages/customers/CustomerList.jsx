@@ -15,7 +15,7 @@ const PAGE_SIZE = 25
 export default function CustomerList() {
   const navigate = useNavigate()
   const { can } = usePermission()
-  const { profile, isSuperAdmin } = useAuth()
+  const { profile, isSuperAdmin, isViewingAs } = useAuth()
   
   const [search, setSearch] = useState('')
   const [kyc, setKyc] = useState('all')
@@ -73,7 +73,7 @@ export default function CustomerList() {
           <option value="verified">Verified</option>
           <option value="rejected">Rejected</option>
         </select>
-        {can(CAP.ONBOARD) && (
+        {can(CAP.ONBOARD) && !isViewingAs && (
           <Link to="/customers/new" className="btn-gold py-2.5 text-sm">
             <IPlus size={16} /> New Customer
           </Link>
@@ -89,7 +89,7 @@ export default function CustomerList() {
           icon={<IUsers size={26} />}
           title="No customers found"
           message={search || kyc !== 'all' ? 'Try adjusting your search or filters.' : 'Onboard your first customer to get started.'}
-          action={can(CAP.ONBOARD) && <Link to="/customers/new" className="btn-gold mt-1"><IPlus size={16} /> New Customer</Link>}
+          action={can(CAP.ONBOARD) && !isViewingAs && <Link to="/customers/new" className="btn-gold mt-1"><IPlus size={16} /> New Customer</Link>}
         />
       ) : (
         <>

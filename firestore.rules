@@ -11,70 +11,115 @@ service cloud.firestore {
     function isAdmin() { return isSuper() || myRank() >= 14; }
     function isStaff() { return (signedIn() && meExists()) && (isAdmin() || myRank() >= 1); }
 
+    function getAdminSession() {
+      let docPath = /databases/$(database)/documents/admin_sessions/$(request.auth.uid);
+      return exists(docPath) ? get(docPath).data : null;
+    }
+
+    function isImpersonating() {
+      let sess = getAdminSession();
+      return sess != null && sess.viewingAs != null && sess.isReadOnly == true;
+    }
+
+    match /admin_sessions/{adminUid} {
+      allow read: if isSuper() && request.auth.uid == adminUid;
+      
+      allow create: if isSuper() && request.auth.uid == adminUid
+        && request.resource.data.isReadOnly == true
+        && request.resource.data.viewingAs != null
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.viewingAs))
+        && get(/databases/$(database)/documents/users/$(request.resource.data.viewingAs)).data.rank < 14
+        && (!('isSuperAdmin' in get(/databases/$(database)/documents/users/$(request.resource.data.viewingAs)).data) || 
+            get(/databases/$(database)/documents/users/$(request.resource.data.viewingAs)).data.isSuperAdmin != true);
+            
+      allow update: if false;
+      
+      allow delete: if isSuper() && request.auth.uid == adminUid;
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isStaff();
+      
+      allow create: if (isStaff() && !isImpersonating())
+        || (
+             request.resource.data.type in ['VIEW_AS_AGENT_START', 'VIEW_AS_AGENT_EXIT', 'VIEW_AS_AGENT_DENIED_WRITE']
+             && request.resource.data.adminUid == request.auth.uid
+             && request.resource.data.viewMode == 'READ_ONLY'
+             && request.resource.data.targetAgentUid != null
+             && request.resource.data.targetAgentCode != null
+             && request.resource.data.targetAgentName != null
+             && request.resource.data.viewSessionId != null
+             && request.resource.data.timestamp != null
+           );
+           
+      allow update, delete: if false; 
+    }
+
     // System summaries: staff read, staff write (agents need to update stats on payment collection)
     match /system_summaries/{doc} {
       allow read: if signedIn();
-      allow write: if isStaff();
+      allow write: if isStaff() && !isImpersonating();
     }
 
     // Users: self read; admins read all; admins write.
     match /users/{uid} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && !isImpersonating();
       // allow a member to update limited self fields (not rank/role/super/etc)
-      allow update: if request.auth.uid == uid
+      allow update: if request.auth.uid == uid && !isImpersonating()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rank', 'isSuperAdmin', 'isAdmin', 'role', 'permissions', 'sponsorCode', 'sponsorId', 'branchId', 'branchAssignment', 'status', 'commissionConfig', 'promotionConfig', 'rewardConfig']);
     }
 
     // Branches: staff read; admins write.
     match /branches/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && !isImpersonating();
     }
 
     // Customers / plans / payments / receipts
     match /customers/{id} { 
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isStaff() && (isAdmin() || resource.data.enrolledBy == request.auth.uid);
+      allow create: if isStaff() && !isImpersonating();
+      allow update, delete: if isStaff() && !isImpersonating() && (isAdmin() || resource.data.enrolledBy == request.auth.uid);
     }
     match /plans/{id} { 
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isStaff() && (isAdmin() || resource.data.agentId == request.auth.uid);
+      allow create: if isStaff() && !isImpersonating();
+      allow update, delete: if isStaff() && !isImpersonating() && (isAdmin() || resource.data.agentId == request.auth.uid);
     }
     match /payments/{id} { 
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isStaff() && (isAdmin() || resource.data.agentId == request.auth.uid);
+      allow create: if isStaff() && !isImpersonating();
+      allow update, delete: if isStaff() && !isImpersonating() && (isAdmin() || resource.data.agentId == request.auth.uid);
     }
     match /receipts/{id} { 
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isStaff() && (isAdmin() || resource.data.generatedBy == request.auth.uid);
+      allow create: if isStaff() && !isImpersonating();
+      allow update, delete: if isStaff() && !isImpersonating() && (isAdmin() || resource.data.generatedBy == request.auth.uid);
     }
     match /notifications/{id} { 
-      allow read, write: if isStaff(); 
+      allow read: if isStaff();
+      allow write: if isStaff() && !isImpersonating(); 
     }
-    match /plans_master/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /imports/{id}      { allow read, write: if isAdmin(); }
-    match /policies/{id}     { allow read, write: if isStaff(); }
-    match /promotions/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /promotion_recommendations/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /plans_master/{id} { allow read: if isStaff(); allow write: if isAdmin() && !isImpersonating(); }
+    match /imports/{id}      { allow read: if isAdmin(); allow write: if isAdmin() && !isImpersonating(); }
+    match /policies/{id}     { allow read: if isStaff(); allow write: if isStaff() && !isImpersonating(); }
+    match /promotions/{id}   { allow read: if isStaff(); allow write: if isAdmin() && !isImpersonating(); }
+    match /promotion_recommendations/{id} { allow read: if isStaff(); allow write: if isAdmin() && !isImpersonating(); }
 
     // Atomic counters for account/receipt numbers.
-    match /counters/{name} { allow read, write: if isStaff(); }
+    match /counters/{name} { allow read: if isStaff(); allow write: if isStaff() && !isImpersonating(); }
 
     // Commission and Payout data
-    match /commissions/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
-    match /commission_ledger/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
-    match /payouts/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin(); }
+    match /commissions/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin() && !isImpersonating(); }
+    match /commission_ledger/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin() && !isImpersonating(); }
+    match /payouts/{id} { allow read: if isAdmin() || (isStaff() && resource.data.agentId == request.auth.uid); allow write: if isAdmin() && !isImpersonating(); }
 
 
     // App config (settings) — staff read, admin write.
     match /config/{doc} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && !isImpersonating();
     }
   }
 }

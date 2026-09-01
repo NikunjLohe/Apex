@@ -5,7 +5,7 @@ import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
 import { useAuth } from '../../contexts/AuthContext'
 import AgentProfileCompletionModal from '../AgentProfileCompletionModal'
-import { IClose } from '../ui/icons'
+import { IClose, IAlert } from '../ui/icons'
 
 // Map path prefixes → page title for the topbar.
 const TITLES = [
@@ -44,7 +44,7 @@ function titleFor(pathname) {
 
 export default function Layout() {
   const location = useLocation()
-  const { profile } = useAuth()
+  const { profile, isViewingAs, stopViewingAs, realProfile } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
 
@@ -122,6 +122,24 @@ export default function Layout() {
 
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar title={title} onMenu={() => setDrawer(d => !d)} />
+
+        {isViewingAs && (
+          <div className="bg-red-500/10 border-b border-red-500/30 px-4 py-2 flex items-center justify-between shadow-sm backdrop-blur-sm z-30 sticky top-16 lg:top-0">
+            <div className="flex items-center gap-2 text-red-500 font-medium text-sm">
+              <IAlert size={18} />
+              <span>
+                VIEWING AS AGENT: <span className="font-bold">{profile?.name}</span> • {profile?.sponsorCode || profile?.agentCode}
+              </span>
+            </div>
+            <button
+              onClick={stopViewingAs}
+              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-full transition-colors shadow-sm"
+            >
+              EXIT VIEW
+            </button>
+          </div>
+        )}
+
         <main className="flex-1 p-4 lg:p-6">
           <ErrorBoundary>
             <Outlet />

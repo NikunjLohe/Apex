@@ -31,7 +31,7 @@ export default function CustomerProfile() {
     [payments.data]
   )
 
-  const { profile, isSuperAdmin } = useAuth()
+  const { profile, isSuperAdmin, isViewingAs } = useAuth()
   const isAgent = !isSuperAdmin && (profile?.rank || 0) < 10
 
   if (loading) return <div className="mx-auto max-w-4xl"><SkeletonForm fields={5} /></div>
@@ -69,15 +69,21 @@ export default function CustomerProfile() {
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => setEditOpen(true)} className="btn-ghost py-2 text-sm"><IEdit size={16} /> Edit KYC</button>
-          {can(CAP.ADMIN) && customer.kycStatus !== 'verified' && (
+          {!isViewingAs && (
+            <button type="button" onClick={() => setEditOpen(true)} className="btn-ghost py-2 text-sm"><IEdit size={16} /> Edit KYC</button>
+          )}
+          {can(CAP.ADMIN) && !isViewingAs && customer.kycStatus !== 'verified' && (
             <button type="button" onClick={() => setKycAction('verified')} className="btn-ghost py-2 text-sm text-ok"><ICheck size={16} /> Verify KYC</button>
           )}
-          {can(CAP.ADMIN) && customer.kycStatus !== 'rejected' && (
+          {can(CAP.ADMIN) && !isViewingAs && customer.kycStatus !== 'rejected' && (
             <button type="button" onClick={() => setKycAction('rejected')} className="btn-ghost py-2 text-sm text-danger"><IClose size={16} /> Reject</button>
           )}
-          <Link to={`/customers/${id}/enroll`} className="btn-gold py-2 text-sm"><IPlus size={16} /> Enroll in Plan</Link>
-          <Link to={`/payments/collect?customer=${id}`} className="btn-ghost py-2 text-sm"><ICash size={16} /> Collect Payment</Link>
+          {!isViewingAs && (
+            <Link to={`/customers/${id}/enroll`} className="btn-gold py-2 text-sm"><IPlus size={16} /> Enroll in Plan</Link>
+          )}
+          {!isViewingAs && (
+            <Link to={`/payments/collect?customer=${id}`} className="btn-ghost py-2 text-sm"><ICash size={16} /> Collect Payment</Link>
+          )}
         </div>
       </div>
 
@@ -165,7 +171,7 @@ function Info({ title, rows }) {
 function PlansTab({ plans, customerId, navigate }) {
   if (plans.loading) return <SkeletonForm fields={3} />
   if (!plans.data.length)
-    return <EmptyState icon={<IPlus size={24} />} title="No plans yet" message="Enroll this customer in an RD or FD plan." action={<Link to={`/customers/${customerId}/enroll`} className="btn-gold mt-1">Enroll in Plan</Link>} />
+    return <EmptyState icon={<IPlus size={24} />} title="No plans yet" message="Enroll this customer in an RD or FD plan." action={!isViewingAs && <Link to={`/customers/${customerId}/enroll`} className="btn-gold mt-1">Enroll in Plan</Link>} />
   return (
     <div className="space-y-3">
       {plans.data.map((p) => {

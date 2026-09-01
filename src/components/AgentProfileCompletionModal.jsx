@@ -19,8 +19,10 @@ const profileCompletionSchema = z.object({
 })
 
 export default function AgentProfileCompletionModal() {
-  const { user, logout } = useAuth()
+  const { user, logout, isViewingAs } = useAuth()
   const [submitting, setSubmitting] = useState(false)
+
+  if (isViewingAs) return null
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(profileCompletionSchema),

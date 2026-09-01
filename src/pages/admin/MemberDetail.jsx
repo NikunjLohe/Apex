@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { where, getDocs, query, collection, getDoc, doc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { where, getDocs, query, collection, getDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { auth, db } from '../../firebase'
+import { useAuth } from '../../contexts/AuthContext'
 import { useDoc, useCollection, fetchCollection } from '../../hooks/useFirestore'
 import { updateMember } from '../../lib/admin'
 import { useRanks } from '../../contexts/RanksContext'
@@ -10,7 +12,7 @@ import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { 
-  IUsers, ICash, ITrophy, IShield, INetwork, IBuilding, IClock, IDoc, IPlus 
+  IUsers, ICash, ITrophy, IShield, INetwork, IBuilding, IClock, IDoc, IPlus, IAlert 
 } from '../../components/ui/icons'
 import { computeEarnings } from '../../lib/earnings'
 import toast from 'react-hot-toast'
@@ -20,6 +22,8 @@ export default function MemberDetail() {
   const agentDoc = useDoc(id ? `users/${id}` : null)
   const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
+  const { user: currentUser, startViewingAs, realProfile } = useAuth()
+  const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
 
   // Lazy recursive downline loader — avoids loading all users
   const [downline, setDownline] = useState([])
@@ -33,10 +37,41 @@ export default function MemberDetail() {
   const [downlinePlans, setDownlinePlans] = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [resetModalOpen, setResetModalOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   const m = agentDoc.data
   const rank = getRank(m?.rank)
   const next = nextRank(m?.rank)
+
+  const handleResetPassword = async () => {
+    if (!m || !id) return
+    setResetting(true)
+    const toastId = toast.loading(`Initiating password reset for ${m.name}…`)
+    try {
+      if (m.email && m.email.includes('@') && !m.email.endsWith('@apex.local')) {
+        try {
+          await sendPasswordResetEmail(auth, m.email)
+        } catch (authErr) {
+          console.warn('[PasswordReset] sendPasswordResetEmail notice:', authErr)
+        }
+      }
+
+      await updateDoc(doc(db, 'users', id), {
+        mustChangePassword: true,
+        passwordResetAt: serverTimestamp(),
+        passwordResetBy: currentUser?.uid || 'admin'
+      })
+
+      toast.success(`Password reset initiated for ${m.name} (${m.sponsorCode || ''}). Force password change active.`, { id: toastId })
+      setResetModalOpen(false)
+    } catch (err) {
+      console.error('Error resetting password:', err)
+      toast.error(`Failed to reset password: ${err.message}`, { id: toastId })
+    } finally {
+      setResetting(false)
+    }
+  }
 
   // Lazy recursive downline fetch
   useEffect(() => {
@@ -128,6 +163,18 @@ export default function MemberDetail() {
     }
   }
 
+  const handleStartViewAs = async () => {
+    if (!m) return
+    const toastId = toast.loading(`Starting View As Agent mode...`)
+    try {
+      await startViewingAs(m)
+      toast.success(`Now viewing as ${m.name}`, { id: toastId })
+    } catch (err) {
+      toast.error(`Failed to start viewing mode: ${err.message}`, { id: toastId })
+    }
+    setViewAsModalOpen(false)
+  }
+
   const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
   const sponsorName = useCallback((uid) => {
     if (!uid) return '—'
@@ -183,6 +230,21 @@ export default function MemberDetail() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {realProfile?.isSuperAdmin && m?.rank < 14 && m?.isSuperAdmin !== true && (
+              <button
+                onClick={() => setViewAsModalOpen(true)}
+                className="btn-gold py-2 px-4 text-xs font-bold uppercase rounded-md shadow-sm"
+              >
+                View As Agent
+              </button>
+            )}
+            <button
+              onClick={() => setResetModalOpen(true)}
+              className="btn-dark py-2 px-4 text-xs font-bold uppercase rounded-md border border-gold/40 text-gold hover:border-gold shadow-sm flex items-center gap-1.5"
+            >
+              <IShield size={14} className="text-amber-400" />
+              Reset Password
+            </button>
             <button
               onClick={toggleStatus}
               disabled={updatingStatus}
@@ -514,6 +576,81 @@ export default function MemberDetail() {
 
         </div>
       </div>
+
+      {/* Reset Password Confirmation Modal */}
+      {resetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-4">
+          <div className="card w-full max-w-md p-6 space-y-4 border border-navy-4">
+            <h3 className="text-lg font-bold text-ink-1 flex items-center gap-2">
+              <IShield size={20} className="text-amber-400" /> Reset Agent Password
+            </h3>
+            <p className="text-xs text-ink-2 leading-relaxed">
+              Are you sure you want to initiate a password reset for <strong className="text-ink-1">{m.name}</strong> (<span className="font-mono text-gold-1">{m.sponsorCode}</span>)?
+            </p>
+            <div className="bg-navy-3/60 p-3 rounded text-xs space-y-1 font-mono text-ink-2 border border-navy-4">
+              <div>Email: {m.email || '—'}</div>
+              <div>Agent Code: {m.sponsorCode || '—'}</div>
+              <div>Password Status: {m.mustChangePassword ? 'Force Change Active' : 'Normal'}</div>
+            </div>
+            <p className="text-[11px] text-ink-2 italic">
+              This action dispatches a reset authorization email and flags the user account to require a password change on next login. No plaintext passwords are displayed or stored.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={resetting}
+                onClick={() => setResetModalOpen(false)}
+                className="btn-ghost py-2 px-4 text-xs font-bold uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={resetting}
+                onClick={handleResetPassword}
+                className="btn-gold py-2 px-4 text-xs font-bold uppercase bg-amber-500 text-navy-1 hover:bg-amber-400"
+              >
+                {resetting ? 'Initiating...' : 'Confirm Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View As Agent Confirmation Modal */}
+      {viewAsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-4">
+          <div className="card w-full max-w-md p-6 space-y-4 border border-navy-4">
+            <h3 className="text-lg font-bold text-ink-1 flex items-center gap-2">
+              <IAlert size={20} className="text-red-500" /> Confirm View As Agent
+            </h3>
+            <p className="text-xs text-ink-2 leading-relaxed">
+              You are about to view the application as <strong className="text-ink-1">{m.name}</strong> (<span className="font-mono text-gold-1">{m.sponsorCode}</span>).
+            </p>
+            <div className="bg-navy-3/60 p-3 rounded text-xs space-y-2 text-ink-2 border border-navy-4">
+              <div className="text-red-400 font-bold uppercase tracking-wider text-[10px]">Read-Only Mode</div>
+              <p>Actions will be performed in an impersonated context.</p>
+              <p>Firestore security rules will enforce strict <strong>read-only</strong> access while viewing as an agent. You cannot create, update, or delete policies, customers, or payments.</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setViewAsModalOpen(false)}
+                className="btn-ghost py-1.5 px-4 text-sm font-bold uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleStartViewAs}
+                className="bg-red-500 hover:bg-red-600 text-white py-1.5 px-5 rounded-full text-sm font-bold uppercase shadow-sm transition-colors"
+              >
+                Start Viewing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
