@@ -128,7 +128,7 @@ export function AuthProvider({ children }) {
 
   // --- View As Agent Implementations ---
   const isViewingAs = Boolean(adminSession?.isReadOnly && adminSession?.viewingAs && targetProfile)
-  const profile = isViewingAs ? targetProfile : realProfile
+  const profile = isViewingAs ? { ...targetProfile, mustChangePassword: false } : realProfile
   
   // For permission calculations, use the effective profile
   const rank = profile?.rank || 0
