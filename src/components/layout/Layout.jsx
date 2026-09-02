@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
@@ -44,11 +44,17 @@ function titleFor(pathname) {
 
 export default function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { profile, isViewingAs, stopViewingAs, realProfile } = useAuth()
   const [drawer, setDrawer] = useState(false)
   const title = titleFor(location.pathname)
 
   const closeDrawer = () => setDrawer(false)
+
+  const handleExitView = async () => {
+    await stopViewingAs()
+    navigate('/dashboard')
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -132,7 +138,7 @@ export default function Layout() {
               </span>
             </div>
             <button
-              onClick={stopViewingAs}
+              onClick={handleExitView}
               className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-full transition-colors shadow-sm"
             >
               EXIT VIEW
