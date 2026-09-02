@@ -167,10 +167,14 @@ export default function MemberDetail() {
   const handleStartViewAs = async () => {
     if (!m) return
     const toastId = toast.loading(`Starting View As Agent mode...`)
+    
+    // Navigate away from the admin-only route BEFORE changing identity,
+    // to prevent the route guard from throwing a 403 during the transition.
+    navigate('/dashboard')
+    
     try {
       await startViewingAs(m)
       toast.success(`Now viewing as ${m.name}`, { id: toastId })
-      navigate('/dashboard')
     } catch (err) {
       toast.error(`Failed to start viewing mode: ${err.message}`, { id: toastId })
     }
