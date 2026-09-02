@@ -460,7 +460,11 @@ export default function Payouts() {
       const commSnap = await getDocs(commQuery)
       const commissions = []
       commSnap.forEach(d => {
-        commissions.push({ id: d.id, ...d.data() })
+        const data = d.data()
+        // IMPORTANT: Prevent duplicate payouts by ensuring this unpaid commission isn't already attached to a payout
+        if (!data.payoutId) {
+          commissions.push({ id: d.id, ...data })
+        }
       })
 
       if (commissions.length === 0) {
@@ -516,6 +520,11 @@ export default function Payouts() {
           generatedDate: serverTimestamp(),
           paidDate: null,
           commissionEntryIds: commList.map(c => c.id)
+        })
+
+        // Attach payoutId to the commission entries so they aren't processed again
+        commList.forEach(c => {
+          batch.update(doc(db, 'commission_ledger', c.id), { payoutId: payoutRef.id })
         })
       }
 
