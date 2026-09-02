@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { where, getDocs, query, collection, getDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { auth, db } from '../../firebase'
@@ -19,6 +19,7 @@ import toast from 'react-hot-toast'
 
 export default function MemberDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const agentDoc = useDoc(id ? `users/${id}` : null)
   const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
@@ -169,6 +170,7 @@ export default function MemberDetail() {
     try {
       await startViewingAs(m)
       toast.success(`Now viewing as ${m.name}`, { id: toastId })
+      navigate('/dashboard')
     } catch (err) {
       toast.error(`Failed to start viewing mode: ${err.message}`, { id: toastId })
     }
