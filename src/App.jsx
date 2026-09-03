@@ -43,6 +43,7 @@ const CustomerDetail = lazy(() => import('./pages/admin/CustomerDetail'))
 const Policies = lazy(() => import('./pages/admin/Policies'))
 const PolicyDetail = lazy(() => import('./pages/admin/PolicyDetail'))
 const AllReports = lazy(() => import('./pages/admin/AllReports'))
+const MonthlyBusiness = lazy(() => import('./pages/admin/MonthlyBusiness'))
 const SystemLogs = lazy(() => import('./pages/admin/SystemLogs'))
 const SeedDemo = lazy(() => import('./pages/admin/SeedDemo'))
 const NotFound = lazy(() => import('./pages/errors/NotFound'))
@@ -212,6 +213,7 @@ export default function App() {
               {/* Super admin */}
               <Route path="/admin/overview" element={<Protected capability={CAP.SUPER_ADMIN}><Overview /></Protected>} />
               <Route path="/admin/all-reports" element={<Protected capability={CAP.SUPER_ADMIN}><AllReports /></Protected>} />
+              <Route path="/admin/monthly-business" element={<Protected capability={CAP.SUPER_ADMIN}><MonthlyBusiness /></Protected>} />
               <Route path="/admin/logs" element={<Protected capability={CAP.SUPER_ADMIN}><SystemLogs /></Protected>} />
               <Route path="/unauthorized" element={<Unauthorized />} />
             </Route>

@@ -34,8 +34,9 @@ const ADMIN_GROUPS = [
     items: [
       { to: '/dashboard',         label: 'Dashboard',       Icon: IDashboard, cap: null,              end: true },
       { to: '/my-profile',        label: 'My Profile',      Icon: IUsers,     cap: null },
-      { to: '/admin/overview',    label: 'Overview',        Icon: IBuilding,  cap: CAP.SUPER_ADMIN },
-      { to: '/admin/all-reports', label: 'All Reports',     Icon: IReport,    cap: CAP.SUPER_ADMIN },
+      { to: '/admin/overview',         label: 'Overview',         Icon: IBuilding,  cap: CAP.SUPER_ADMIN },
+      { to: '/admin/all-reports',      label: 'All Reports',      Icon: IReport,    cap: CAP.SUPER_ADMIN },
+      { to: '/admin/monthly-business', label: 'Monthly Business', Icon: ICalendar,  cap: CAP.SUPER_ADMIN },
     ],
   },
   {
