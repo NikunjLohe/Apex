@@ -33,7 +33,14 @@ export function calculateCommissions({
   installmentNumber = 1,
 }) {
   const code = String(plan.planCode).toUpperCase()
-  const yr = Number(plan.policyYear) || 1
+  
+  const rawYr = plan.policyYear
+  const yr = rawYr !== undefined && rawYr !== null && rawYr !== '' ? Number(rawYr) : null
+  
+  if (!yr || isNaN(yr)) {
+    throw new Error(`Missing or invalid policyYear for plan ${code} (Policy: ${policyInfo.number}). Cannot calculate commission safely.`)
+  }
+  
   const isRDPlan = String(plan.planType).toUpperCase() === 'RD'
 
   // Helper to get commission rate from Master config
@@ -49,80 +56,119 @@ export function calculateCommissions({
   
   const activeRanks = (ranksList && ranksList.length > 0) ? ranksList : DEFAULT_RANKS
 
-  // Identify selling agent rank
-  const sellerRankNum = Number(baseAgent.rank) || 1
-
-  // Calculate total vacant lower rank rates for ranks strictly below sellerRankNum
-  let vacantLowerRatesSum = 0
-  const vacantRanksAbsorbed = []
-
-  for (let r = 1; r < sellerRankNum; r++) {
+  // 1. Calculate the Hard Cap Maximum Pool based on configured ranks 1-18
+  let maximumPool = 0
+  for (let r = 1; r <= 18; r++) {
     const rankObj = activeRanks.find(rk => Number(rk.rank) === r)
     const rankCode = rankObj?.code || 'AO'
-    const rRate = getRate(rankCode)
-    if (rRate > 0) {
-      vacantLowerRatesSum += rRate
-      vacantRanksAbsorbed.push({ rank: r, code: rankCode, rate: rRate * 100 })
-    }
+    maximumPool += getRate(rankCode)
   }
+  // Add a tiny epsilon for floating point safety, handled by toFixed
+  maximumPool = Number((maximumPool).toFixed(6))
 
   let currentAgent = baseAgent
+  
+  let highestRankPaid = 0
+  let totalAllocatedRate = 0
 
   // Traverse the upline (Sponsor Hierarchy) all the way to the top
   while (currentAgent) {
     const currentRankNum = Number(currentAgent.rank) || 1
     const currentRankObj = activeRanks.find(r => Number(r.rank) === currentRankNum)
     const rankCode = currentRankObj?.code || 'AO'
-    const rankRate = getRate(rankCode)
 
-    if (rankRate > 0 || (currentAgent.id === baseAgent.id && vacantLowerRatesSum > 0)) {
-      const isSeller = (currentAgent.id === baseAgent.id)
-      const effectiveRate = isSeller ? (rankRate + vacantLowerRatesSum) : rankRate
-      const effectivePercentage = Number((effectiveRate * 100).toFixed(4))
-      const effectiveAmount = Number((businessAmount * effectiveRate).toFixed(2))
-
-      const hasCompression = isSeller && vacantRanksAbsorbed.length > 0
-      const compressionReason = isSeller
-        ? (hasCompression
-            ? `${rankCode} Commission (Direct + ${vacantRanksAbsorbed.map(v => v.code).join('+')} Vacant Lower Ranks)`
-            : `${rankCode} Commission (Direct)`)
-        : `${rankCode} Commission (Upline Commission)`
-
-      entries.push({
-        agentId: currentAgent.id,
-        agentName: currentAgent.name,
-        sponsorCode: currentAgent.sponsorCode || '',
-        receivingRank: currentRankNum,
-        receivingRankCode: rankCode,
-        
-        customerId: customer.id,
-        customerName: customer.name,
-        customerAccount: customer.account,
-        policyId: policyInfo.id,
-        policyNumber: policyInfo.number,
-        planCode: code,
-        planType: isRDPlan ? 'RD' : 'FD',
-        policyYear: yr,
-        installment: installmentNumber, 
-        
-        businessAmount: businessAmount,
-        percentage: effectivePercentage,
-        amount: effectiveAmount,
-        
-        originalRank: baseAgent.rank,
-        originalAgentId: baseAgent.id,
-        
-        commissionType: isSeller ? 'direct' : 'upline', // Direct for seller, Upline for sponsor
-        compression: hasCompression,
-        compressionReason: compressionReason,
-        compressedFromRank: hasCompression ? vacantRanksAbsorbed.map(v => v.rank) : null,
-        
-        month: monthNum,
-        year: yearNum,
-        calculationDate: serverTimestamp(),
-        status: 'unpaid',
-      })
+    // Duplicate / Lower Rank Prevention
+    // If the current agent's rank has already been covered, skip paying them.
+    if (currentRankNum <= highestRankPaid) {
+      if (currentAgent.referredBy && usersMap[currentAgent.referredBy]) {
+        currentAgent = usersMap[currentAgent.referredBy]
+        continue
+      } else {
+        break
+      }
     }
+
+    let uplineVacantRateSum = 0
+    const uplineVacantRanksAbsorbed = []
+    
+    // Gap compression: sweep skipped ranks from highestRankPaid + 1 to currentRankNum - 1
+    for (let r = highestRankPaid + 1; r < currentRankNum; r++) {
+      const gapRankObj = activeRanks.find(rk => Number(rk.rank) === r)
+      const gapCode = gapRankObj?.code || 'AO'
+      const gapRate = getRate(gapCode)
+      if (gapRate > 0) {
+        uplineVacantRateSum += gapRate
+        uplineVacantRanksAbsorbed.push({ rank: r, code: gapCode, rate: gapRate * 100 })
+      }
+    }
+
+    const rankRate = getRate(rankCode)
+    let effectiveRate = rankRate + uplineVacantRateSum
+
+    if (effectiveRate > 0) {
+      // Hard Commission Cap Protection
+      if (Number((totalAllocatedRate + effectiveRate).toFixed(6)) > maximumPool) {
+        effectiveRate = maximumPool - totalAllocatedRate
+      }
+
+      if (effectiveRate > 0) {
+        totalAllocatedRate += effectiveRate
+        const effectivePercentage = Number((effectiveRate * 100).toFixed(4))
+        const effectiveAmount = Number((businessAmount * effectiveRate).toFixed(2))
+
+        const isSeller = (currentAgent.id === baseAgent.id)
+        const hasCompression = uplineVacantRanksAbsorbed.length > 0
+        
+        let compressionReason = ''
+        if (isSeller) {
+          compressionReason = hasCompression
+              ? `${rankCode} Commission (Direct + ${uplineVacantRanksAbsorbed.map(v => v.code).join('+')} Vacant Lower Ranks)`
+              : `${rankCode} Commission (Direct)`
+        } else {
+          compressionReason = hasCompression
+              ? `${rankCode} Commission (Upline + ${uplineVacantRanksAbsorbed.map(v => v.code).join('+')} Vacant Upline Ranks)`
+              : `${rankCode} Commission (Upline Commission)`
+        }
+
+        entries.push({
+          agentId: currentAgent.id,
+          agentName: currentAgent.name,
+          sponsorCode: currentAgent.sponsorCode || '',
+          receivingRank: currentRankNum,
+          receivingRankCode: rankCode,
+          
+          customerId: customer.id,
+          customerName: customer.name,
+          customerAccount: customer.account,
+          policyId: policyInfo.id,
+          policyNumber: policyInfo.number,
+          planCode: code,
+          planType: isRDPlan ? 'RD' : 'FD',
+          policyYear: yr,
+          installment: installmentNumber, 
+          
+          businessAmount: businessAmount,
+          percentage: effectivePercentage,
+          amount: effectiveAmount,
+          
+          originalRank: baseAgent.rank,
+          originalAgentId: baseAgent.id,
+          
+          commissionType: isSeller ? 'direct' : 'upline', 
+          compression: hasCompression,
+          compressionReason: compressionReason,
+          compressedFromRank: hasCompression ? uplineVacantRanksAbsorbed.map(v => v.rank) : null,
+          
+          month: monthNum,
+          year: yearNum,
+          calculationDate: serverTimestamp(),
+          status: 'unpaid',
+        })
+      }
+    }
+    
+    // Advance highestRankPaid
+    highestRankPaid = currentRankNum
 
     if (currentAgent.referredBy && usersMap[currentAgent.referredBy]) {
       currentAgent = usersMap[currentAgent.referredBy]
