@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { format, endOfMonth } from 'date-fns'
 import { useCollection } from '../../hooks/useFirestore'
 import { formatINR, fmtDate, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -17,6 +17,11 @@ import {
   IUsers,
   IChevronDown,
 } from '../../components/ui/icons'
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 /** Helper to derive standardized term label from plan type and installments */
 function formatTerm(plan) {
@@ -48,6 +53,83 @@ function getCategory(plan, payment) {
   return 'RD'
 }
 
+/** Build business detail items from a sorted payment array using shared FD/PENS dedup maps */
+function buildDetailItems(sortedPayments, planMaps, fdSeenGlobal, pensSeenGlobal, monthTag) {
+  const rdItems = []
+  const fdItems = []
+  const pensItems = []
+
+  sortedPayments.forEach((pay) => {
+    const plan = planMaps.byId[pay.planId] || planMaps.byAcc[pay.planAccountNumber] || {}
+    const category = getCategory(plan, pay)
+    const termLabel = formatTerm(plan)
+    const policyNumber = pay.planAccountNumber || plan.policyNumber || plan.planAccountNumber || '—'
+    const customerName = pay.customerName || plan.customerName || '—'
+    const agentName = pay.agentName || plan.agentName || '—'
+    const businessDate = pay.paidDate
+
+    if (category === 'RD') {
+      const amount = Number(pay.amount) || Number(plan.monthlyAmount) || 0
+      rdItems.push({
+        id: pay.id,
+        policyNumber,
+        customerName,
+        agentName,
+        planCode: plan.type || 'RD',
+        category: 'RD',
+        term: termLabel,
+        businessDate,
+        businessAmount: amount,
+        status: pay.status || plan.status || 'active',
+        planId: plan.id || pay.planId,
+        month: monthTag,
+      })
+    } else if (category === 'FD') {
+      const planKey = plan.id || policyNumber
+      if (!fdSeenGlobal.has(planKey)) {
+        fdSeenGlobal.add(planKey)
+        const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
+        fdItems.push({
+          id: pay.id,
+          policyNumber,
+          customerName,
+          agentName,
+          planCode: plan.type || 'FD',
+          category: 'FD',
+          term: termLabel,
+          businessDate,
+          businessAmount: amount,
+          status: pay.status || plan.status || 'active',
+          planId: plan.id || pay.planId,
+          month: monthTag,
+        })
+      }
+    } else if (category === 'PENS') {
+      const planKey = plan.id || policyNumber
+      if (!pensSeenGlobal.has(planKey)) {
+        pensSeenGlobal.add(planKey)
+        const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
+        pensItems.push({
+          id: pay.id,
+          policyNumber,
+          customerName,
+          agentName,
+          planCode: plan.type || 'PENS',
+          category: 'PENS',
+          term: termLabel,
+          businessDate,
+          businessAmount: amount,
+          status: pay.status || plan.status || 'active',
+          planId: plan.id || pay.planId,
+          month: monthTag,
+        })
+      }
+    }
+  })
+
+  return { rdItems, fdItems, pensItems }
+}
+
 export default function MonthlyBusiness() {
   const paymentsCollection = useCollection('payments')
   const plansCollection = useCollection('plans')
@@ -55,8 +137,14 @@ export default function MonthlyBusiness() {
 
   const loading = paymentsCollection.loading || plansCollection.loading || usersCollection.loading
 
+  // Report mode: 'month' | 'year'
+  const [reportMode, setReportMode] = useState('month')
+
   const currentMonthStr = format(new Date(), 'yyyy-MM')
+  const currentYear = new Date().getFullYear()
+
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr)
+  const [selectedYear, setSelectedYear] = useState(currentYear)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterTerm, setFilterTerm] = useState('all')
@@ -91,7 +179,20 @@ export default function MonthlyBusiness() {
     return Array.from(set).sort().reverse()
   }, [paymentsCollection.data, currentMonthStr])
 
-  // Process business data for selected month
+  // Derive available years from payments data
+  const availableYears = useMemo(() => {
+    const set = new Set([currentYear])
+    paymentsCollection.data.forEach((p) => {
+      const d = toDate(p.paidDate)
+      if (d) {
+        const y = d.getFullYear()
+        if (y <= currentYear) set.add(y)
+      }
+    })
+    return Array.from(set).sort().reverse()
+  }, [paymentsCollection.data, currentYear])
+
+  // ─── Monthly Data (unchanged logic) ────────────────────────────────────────
   const monthlyData = useMemo(() => {
     if (loading) {
       return {
@@ -286,9 +387,170 @@ export default function MonthlyBusiness() {
     }
   }, [selectedMonth, paymentsCollection.data, planMaps, loading])
 
+  // ─── Yearly Data ────────────────────────────────────────────────────────────
+  const yearlyData = useMemo(() => {
+    if (reportMode !== 'year' || loading) return null
+
+    const startDate = new Date(selectedYear, 0, 1, 0, 0, 0, 0)
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59, 999)
+
+    // All payments in the year, sorted ascending by paidDate for stable first-occurrence detection
+    const yearPayments = paymentsCollection.data
+      .filter((p) => {
+        const d = toDate(p.paidDate)
+        return d && d >= startDate && d <= endDate
+      })
+      .sort((a, b) => {
+        const da = toDate(a.paidDate) || new Date(0)
+        const db = toDate(b.paidDate) || new Date(0)
+        return da - db
+      })
+
+    // Process month-by-month with shared FD/PENS global dedup
+    const fdSeenGlobal = new Set()
+    const pensSeenGlobal = new Set()
+
+    // Accumulate all yearly detail items tagged with month number
+    const allRd = []
+    const allFd = []
+    const allPens = []
+
+    // monthBreakdown built per-month
+    const monthBreakdown = MONTH_NAMES.map((monthLabel, idx) => {
+      const m = idx + 1 // 1-based month
+      const monthStart = new Date(selectedYear, idx, 1, 0, 0, 0, 0)
+      const monthEnd = endOfMonth(monthStart)
+      monthEnd.setHours(23, 59, 59, 999)
+
+      const monthPays = yearPayments.filter((p) => {
+        const d = toDate(p.paidDate)
+        return d && d >= monthStart && d <= monthEnd
+      })
+
+      const { rdItems, fdItems, pensItems } = buildDetailItems(
+        monthPays,
+        planMaps,
+        fdSeenGlobal,
+        pensSeenGlobal,
+        m,
+      )
+
+      allRd.push(...rdItems)
+      allFd.push(...fdItems)
+      allPens.push(...pensItems)
+
+      const rdBusiness = rdItems.reduce((s, i) => s + i.businessAmount, 0)
+      const rdPolicies = new Set(rdItems.map((i) => i.planId || i.policyNumber)).size
+      const fdBusiness = fdItems.reduce((s, i) => s + i.businessAmount, 0)
+      const fdPolicies = fdItems.length
+      const pensBusiness = pensItems.reduce((s, i) => s + i.businessAmount, 0)
+      const pensPolicies = pensItems.length
+      const totalBusiness = rdBusiness + fdBusiness + pensBusiness
+      const totalPolicies = rdPolicies + fdPolicies + pensPolicies
+
+      return {
+        monthLabel,
+        month: m,
+        rdBusiness,
+        rdPolicies,
+        fdBusiness,
+        fdPolicies,
+        pensBusiness,
+        pensPolicies,
+        totalBusiness,
+        totalPolicies,
+      }
+    })
+
+    // Term summaries for full year
+    const rdTermMap = {}
+    allRd.forEach((item) => {
+      if (!rdTermMap[item.term]) {
+        rdTermMap[item.term] = { term: item.term, policiesSet: new Set(), business: 0 }
+      }
+      rdTermMap[item.term].policiesSet.add(item.planId || item.policyNumber)
+      rdTermMap[item.term].business += item.businessAmount
+    })
+    const rdTermSummary = Object.values(rdTermMap).map((t) => ({
+      term: t.term,
+      policies: t.policiesSet.size,
+      business: t.business,
+    })).sort((a, b) => a.term.localeCompare(b.term))
+
+    const fdTermMap = {}
+    allFd.forEach((item) => {
+      if (!fdTermMap[item.term]) {
+        fdTermMap[item.term] = { term: item.term, policies: 0, business: 0 }
+      }
+      fdTermMap[item.term].policies += 1
+      fdTermMap[item.term].business += item.businessAmount
+    })
+    const fdTermSummary = Object.values(fdTermMap).map((t) => ({
+      term: t.term,
+      policies: t.policies,
+      business: t.business,
+    })).sort((a, b) => a.term.localeCompare(b.term))
+
+    const pensTermMap = {}
+    allPens.forEach((item) => {
+      const prod = 'Pension'
+      if (!pensTermMap[prod]) {
+        pensTermMap[prod] = { product: prod, policies: 0, business: 0 }
+      }
+      pensTermMap[prod].policies += 1
+      pensTermMap[prod].business += item.businessAmount
+    })
+    const pensSummary = Object.values(pensTermMap)
+
+    // Yearly totals
+    const rdPoliciesCount = new Set(allRd.map((i) => i.planId || i.policyNumber)).size
+    const rdBusinessTotal = allRd.reduce((s, i) => s + i.businessAmount, 0)
+    const fdPoliciesCount = allFd.length
+    const fdBusinessTotal = allFd.reduce((s, i) => s + i.businessAmount, 0)
+    const pensPoliciesCount = allPens.length
+    const pensBusinessTotal = allPens.reduce((s, i) => s + i.businessAmount, 0)
+    const totalBusiness = rdBusinessTotal + fdBusinessTotal + pensBusinessTotal
+    const totalPolicies = rdPoliciesCount + fdPoliciesCount + pensPoliciesCount
+
+    const topSummary = {
+      totalBusiness,
+      totalPolicies,
+      rdBusiness: rdBusinessTotal,
+      rdPolicies: rdPoliciesCount,
+      fdBusiness: fdBusinessTotal,
+      fdPolicies: fdPoliciesCount,
+      pensBusiness: pensBusinessTotal,
+      pensPolicies: pensPoliciesCount,
+    }
+
+    const overallSummary = [
+      { type: 'RD', name: 'Recurring Deposit (RD)', policies: rdPoliciesCount, business: rdBusinessTotal },
+      { type: 'FD', name: 'Fixed Deposit (FD)', policies: fdPoliciesCount, business: fdBusinessTotal },
+      { type: 'PENS', name: 'Pension Plan', policies: pensPoliciesCount, business: pensBusinessTotal },
+    ]
+
+    const allDetailItems = [...allRd, ...allFd, ...allPens]
+
+    return {
+      allDetailItems,
+      rdDetailItems: allRd,
+      fdDetailItems: allFd,
+      pensDetailItems: allPens,
+      rdTermSummary,
+      fdTermSummary,
+      pensSummary,
+      overallSummary,
+      topSummary,
+      monthBreakdown,
+    }
+  }, [reportMode, selectedYear, paymentsCollection.data, planMaps, loading])
+
+  // Active data source based on mode
+  const activeData = reportMode === 'month' ? monthlyData : yearlyData
+
   // Filtered detail list based on search & dropdown filters
   const filteredDetails = useMemo(() => {
-    return monthlyData.allDetailItems.filter((item) => {
+    return (activeData?.allDetailItems || []).filter((item) => {
       if (filterCategory !== 'all' && item.category !== filterCategory) return false
       if (filterTerm !== 'all' && item.term !== filterTerm) return false
 
@@ -301,14 +563,14 @@ export default function MonthlyBusiness() {
       }
       return true
     })
-  }, [monthlyData.allDetailItems, filterCategory, filterTerm, searchQuery])
+  }, [activeData, filterCategory, filterTerm, searchQuery])
 
   // Available Terms for the term filter dropdown
   const availableTermOptions = useMemo(() => {
     const set = new Set()
-    monthlyData.allDetailItems.forEach((i) => set.add(i.term))
+    ;(activeData?.allDetailItems || []).forEach((i) => set.add(i.term))
     return Array.from(set).sort()
-  }, [monthlyData.allDetailItems])
+  }, [activeData])
 
   // Format month name for display (e.g., "August 2026")
   const selectedMonthLabel = useMemo(() => {
@@ -316,110 +578,223 @@ export default function MonthlyBusiness() {
     return format(new Date(y, m - 1, 1), 'MMMM yyyy')
   }, [selectedMonth])
 
+  // Period label for display
+  const periodLabel = reportMode === 'month' ? selectedMonthLabel : `Year ${selectedYear}`
+
+  // Reset filters when switching modes
+  const handleModeSwitch = (mode) => {
+    setReportMode(mode)
+    setSearchQuery('')
+    setFilterCategory('all')
+    setFilterTerm('all')
+  }
+
   // Export Excel handler
   const handleExportExcel = () => {
-    if (monthlyData.allDetailItems.length === 0) {
-      toast.error('No business data to export for this month.')
+    if ((activeData?.allDetailItems || []).length === 0) {
+      toast.error(`No business data to export for ${periodLabel}.`)
       return
     }
 
     const wb = xlsx.utils.book_new()
 
-    // Sheet 1: Monthly Summary
-    const summaryRows = [
-      { Metric: 'Selected Month', Value: selectedMonthLabel },
-      { Metric: 'Total Business', Value: monthlyData.topSummary.totalBusiness },
-      { Metric: 'Total Policies', Value: monthlyData.topSummary.totalPolicies },
-      { Metric: 'RD Business', Value: monthlyData.topSummary.rdBusiness },
-      { Metric: 'RD Policies', Value: monthlyData.topSummary.rdPolicies },
-      { Metric: 'FD Business', Value: monthlyData.topSummary.fdBusiness },
-      { Metric: 'FD Policies', Value: monthlyData.topSummary.fdPolicies },
-      { Metric: 'Pension Business', Value: monthlyData.topSummary.pensBusiness },
-      { Metric: 'Pension Policies', Value: monthlyData.topSummary.pensPolicies },
-    ]
-    const wsSummary = xlsx.utils.json_to_sheet(summaryRows)
-    xlsx.utils.book_append_sheet(wb, wsSummary, 'Monthly Summary')
+    if (reportMode === 'month') {
+      // ── Monthly Export (unchanged) ──
+      const summaryRows = [
+        { Metric: 'Selected Month', Value: selectedMonthLabel },
+        { Metric: 'Total Business', Value: monthlyData.topSummary.totalBusiness },
+        { Metric: 'Total Policies', Value: monthlyData.topSummary.totalPolicies },
+        { Metric: 'RD Business', Value: monthlyData.topSummary.rdBusiness },
+        { Metric: 'RD Policies', Value: monthlyData.topSummary.rdPolicies },
+        { Metric: 'FD Business', Value: monthlyData.topSummary.fdBusiness },
+        { Metric: 'FD Policies', Value: monthlyData.topSummary.fdPolicies },
+        { Metric: 'Pension Business', Value: monthlyData.topSummary.pensBusiness },
+        { Metric: 'Pension Policies', Value: monthlyData.topSummary.pensPolicies },
+      ]
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(summaryRows), 'Monthly Summary')
 
-    // Sheet 2: Term Breakdown
-    const termBreakdownRows = [
-      ...monthlyData.rdTermSummary.map((r) => ({
-        'Business Type': 'RD',
-        Term: r.term,
-        Policies: r.policies,
-        'Business Amount': r.business,
-      })),
-      ...monthlyData.fdTermSummary.map((f) => ({
-        'Business Type': 'FD',
-        Term: f.term,
-        Policies: f.policies,
-        'Business Amount': f.business,
-      })),
-      ...monthlyData.pensSummary.map((p) => ({
-        'Business Type': 'Pension',
-        Term: p.product,
-        Policies: p.policies,
-        'Business Amount': p.business,
-      })),
-    ]
-    const wsTerm = xlsx.utils.json_to_sheet(termBreakdownRows)
-    xlsx.utils.book_append_sheet(wb, wsTerm, 'Term Breakdown')
+      const termBreakdownRows = [
+        ...monthlyData.rdTermSummary.map((r) => ({
+          'Business Type': 'RD', Term: r.term, Policies: r.policies, 'Business Amount': r.business,
+        })),
+        ...monthlyData.fdTermSummary.map((f) => ({
+          'Business Type': 'FD', Term: f.term, Policies: f.policies, 'Business Amount': f.business,
+        })),
+        ...monthlyData.pensSummary.map((p) => ({
+          'Business Type': 'Pension', Term: p.product, Policies: p.policies, 'Business Amount': p.business,
+        })),
+      ]
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(termBreakdownRows), 'Term Breakdown')
 
-    // Sheet 3: Policy Details
-    const detailRows = monthlyData.allDetailItems.map((item, idx) => ({
-      'Sr. No.': idx + 1,
-      'Policy Number': item.policyNumber,
-      'Customer Name': item.customerName,
-      Plan: item.planCode,
-      Term: item.term,
-      'Selling Agent': item.agentName,
-      'Business Date': fmtDate(item.businessDate),
-      'Business Amount': item.businessAmount,
-      Status: item.status,
-    }))
-    const wsDetail = xlsx.utils.json_to_sheet(detailRows)
-    xlsx.utils.book_append_sheet(wb, wsDetail, 'Policy Details')
+      const detailRows = monthlyData.allDetailItems.map((item, idx) => ({
+        'Sr. No.': idx + 1,
+        'Policy Number': item.policyNumber,
+        'Customer Name': item.customerName,
+        Plan: item.planCode,
+        Term: item.term,
+        'Selling Agent': item.agentName,
+        'Business Date': fmtDate(item.businessDate),
+        'Business Amount': item.businessAmount,
+        Status: item.status,
+      }))
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(detailRows), 'Policy Details')
 
-    const fileName = `apex-monthly-business-${selectedMonth}.xlsx`
-    xlsx.writeFile(wb, fileName)
-    toast.success(`Exported ${fileName} successfully!`)
+      const fileName = `apex-monthly-business-${selectedMonth}.xlsx`
+      xlsx.writeFile(wb, fileName)
+      toast.success(`Exported ${fileName} successfully!`)
+    } else {
+      // ── Yearly Export ──
+      const ts = yearlyData.topSummary
+      const yearlySummaryRows = [
+        { Metric: 'Selected Year', Value: selectedYear },
+        { Metric: 'Total Business', Value: ts.totalBusiness },
+        { Metric: 'Total Policies', Value: ts.totalPolicies },
+        { Metric: 'RD Business', Value: ts.rdBusiness },
+        { Metric: 'RD Policies', Value: ts.rdPolicies },
+        { Metric: 'FD Business', Value: ts.fdBusiness },
+        { Metric: 'FD Policies', Value: ts.fdPolicies },
+        { Metric: 'Pension Business', Value: ts.pensBusiness },
+        { Metric: 'Pension Policies', Value: ts.pensPolicies },
+      ]
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(yearlySummaryRows), 'Yearly Summary')
+
+      const termBreakdownRows = [
+        ...yearlyData.rdTermSummary.map((r) => ({
+          'Business Type': 'RD', Term: r.term, Policies: r.policies, 'Business Amount': r.business,
+        })),
+        ...yearlyData.fdTermSummary.map((f) => ({
+          'Business Type': 'FD', Term: f.term, Policies: f.policies, 'Business Amount': f.business,
+        })),
+        ...(yearlyData.pensSummary || []).map((p) => ({
+          'Business Type': 'Pension', Term: p.product, Policies: p.policies, 'Business Amount': p.business,
+        })),
+      ]
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(termBreakdownRows), 'Term Breakdown')
+
+      const monthBreakdownRows = yearlyData.monthBreakdown.map((row) => ({
+        Month: row.monthLabel,
+        'RD Business': row.rdBusiness,
+        'RD Policies': row.rdPolicies,
+        'FD Business': row.fdBusiness,
+        'FD Policies': row.fdPolicies,
+        'Pension Business': row.pensBusiness,
+        'Pension Policies': row.pensPolicies,
+        'Total Business': row.totalBusiness,
+        'Total Policies': row.totalPolicies,
+      }))
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(monthBreakdownRows), 'Monthly Breakdown')
+
+      const detailRows = yearlyData.allDetailItems.map((item, idx) => ({
+        'Sr. No.': idx + 1,
+        'Policy Number': item.policyNumber,
+        'Customer Name': item.customerName,
+        Plan: item.planCode,
+        Term: item.term,
+        'Selling Agent': item.agentName,
+        'Business Date': fmtDate(item.businessDate),
+        'Business Amount': item.businessAmount,
+        Status: item.status,
+      }))
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(detailRows), 'Policy Details')
+
+      const fileName = `apex-yearly-business-${selectedYear}.xlsx`
+      xlsx.writeFile(wb, fileName)
+      toast.success(`Exported ${fileName} successfully!`)
+    }
   }
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+  const displayData = activeData
+  const topSummary = displayData?.topSummary || {
+    totalBusiness: 0, totalPolicies: 0,
+    rdBusiness: 0, rdPolicies: 0,
+    fdBusiness: 0, fdPolicies: 0,
+    pensBusiness: 0, pensPolicies: 0,
+  }
+  const hasData = (displayData?.allDetailItems || []).length > 0
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header & Month Selector */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-navy-4/50 pb-4">
         <div>
           <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight flex items-center gap-2">
             <ICalendar className="text-gold-1" size={26} /> Monthly Business
           </h2>
           <p className="text-xs text-ink-2 mt-0.5">
-            Admin reporting dashboard for monthly RD, FD, and Pension business breakdown.
+            Admin reporting dashboard for monthly and yearly RD, FD, and Pension business.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-initial">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="field text-sm font-semibold text-gold bg-navy-3 border-gold-1/40 pr-8 cursor-pointer w-full"
+        <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+          {/* Mode Toggle */}
+          <div className="flex rounded-md overflow-hidden border border-gold-1/40">
+            <button
+              id="toggle-month-mode"
+              onClick={() => handleModeSwitch('month')}
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+                reportMode === 'month'
+                  ? 'bg-gold-1 text-navy-1'
+                  : 'bg-navy-3 text-ink-2 hover:text-ink-1'
+              }`}
             >
-              {availableMonths.map((m) => {
-                const [y, mm] = m.split('-').map(Number)
-                const label = format(new Date(y, mm - 1, 1), 'MMMM yyyy')
-                return (
-                  <option key={m} value={m}>
-                    {label}
-                  </option>
-                )
-              })}
-            </select>
+              Month
+            </button>
+            <button
+              id="toggle-year-mode"
+              onClick={() => handleModeSwitch('year')}
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors border-l border-gold-1/40 ${
+                reportMode === 'year'
+                  ? 'bg-gold-1 text-navy-1'
+                  : 'bg-navy-3 text-ink-2 hover:text-ink-1'
+              }`}
+            >
+              Year
+            </button>
           </div>
 
+          {/* Period Selector */}
+          {reportMode === 'month' ? (
+            <div className="relative flex-1 sm:flex-initial">
+              <select
+                id="month-selector"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="field text-sm font-semibold text-gold bg-navy-3 border-gold-1/40 pr-8 cursor-pointer w-full"
+              >
+                {availableMonths.map((m) => {
+                  const [y, mm] = m.split('-').map(Number)
+                  const label = format(new Date(y, mm - 1, 1), 'MMMM yyyy')
+                  return (
+                    <option key={m} value={m}>
+                      {label}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+          ) : (
+            <div className="relative flex-1 sm:flex-initial">
+              <select
+                id="year-selector"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="field text-sm font-semibold text-gold bg-navy-3 border-gold-1/40 pr-8 cursor-pointer w-full"
+              >
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
+            id="export-excel-btn"
             onClick={handleExportExcel}
             className="btn-gold py-2 px-3.5 text-xs flex justify-center items-center gap-1.5 uppercase font-bold tracking-wide"
-            title="Export Excel Report"
+            title={reportMode === 'month' ? 'Export Monthly Excel Report' : 'Export Yearly Excel Report'}
           >
             <IDownload size={15} /> Export Excel
           </button>
@@ -437,35 +812,35 @@ export default function MonthlyBusiness() {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div className="card p-4 border border-gold-1/30 bg-navy-3/80 shadow-lg">
               <p className="text-[11px] font-bold uppercase tracking-wider text-ink-2">TOTAL BUSINESS</p>
-              <p className="mt-1 text-2xl font-bold font-mono text-gold">{formatINR(monthlyData.topSummary.totalBusiness)}</p>
-              <p className="mt-1 text-xs text-ink-2 font-medium">{monthlyData.topSummary.totalPolicies} Total Policies</p>
+              <p className="mt-1 text-2xl font-bold font-mono text-gold">{formatINR(topSummary.totalBusiness)}</p>
+              <p className="mt-1 text-xs text-ink-2 font-medium">{topSummary.totalPolicies} Total Policies</p>
             </div>
 
             <div className="card p-4 border border-navy-4 bg-navy-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-ink-2">RD BUSINESS</p>
-              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(monthlyData.topSummary.rdBusiness)}</p>
-              <p className="mt-1 text-xs text-ink-2 font-medium">{monthlyData.topSummary.rdPolicies} RD Policies</p>
+              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(topSummary.rdBusiness)}</p>
+              <p className="mt-1 text-xs text-ink-2 font-medium">{topSummary.rdPolicies} RD Policies</p>
             </div>
 
             <div className="card p-4 border border-navy-4 bg-navy-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-ink-2">FD BUSINESS</p>
-              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(monthlyData.topSummary.fdBusiness)}</p>
-              <p className="mt-1 text-xs text-ink-2 font-medium">{monthlyData.topSummary.fdPolicies} FD Policies</p>
+              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(topSummary.fdBusiness)}</p>
+              <p className="mt-1 text-xs text-ink-2 font-medium">{topSummary.fdPolicies} FD Policies</p>
             </div>
 
             <div className="card p-4 border border-navy-4 bg-navy-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-ink-2">PENSION BUSINESS</p>
-              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(monthlyData.topSummary.pensBusiness)}</p>
-              <p className="mt-1 text-xs text-ink-2 font-medium">{monthlyData.topSummary.pensPolicies} Pension Policies</p>
+              <p className="mt-1 text-2xl font-bold font-mono text-ink-1">{formatINR(topSummary.pensBusiness)}</p>
+              <p className="mt-1 text-xs text-ink-2 font-medium">{topSummary.pensPolicies} Pension Policies</p>
             </div>
           </div>
 
-          {monthlyData.allDetailItems.length === 0 ? (
+          {!hasData ? (
             <div className="card p-8 text-center my-6">
               <EmptyState
                 icon={<IReport size={32} className="text-gold-1 mx-auto" />}
-                title={`No business recorded for ${selectedMonthLabel}`}
-                message="There were no payments or investments logged in Firestore for this selected month."
+                title={`No business recorded for ${periodLabel}`}
+                message="There were no payments or investments logged in Firestore for this selected period."
               />
             </div>
           ) : (
@@ -476,7 +851,7 @@ export default function MonthlyBusiness() {
                 <div className="card p-5 border border-navy-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-2 border-b border-navy-4/50 flex justify-between items-center">
                     <span>RD Term Breakdown</span>
-                    <span className="font-mono text-ink-2">{monthlyData.topSummary.rdPolicies} Policies</span>
+                    <span className="font-mono text-ink-2">{topSummary.rdPolicies} Policies</span>
                   </h3>
                   <div className="table-wrap mt-3">
                     <table className="tbl text-xs">
@@ -488,12 +863,12 @@ export default function MonthlyBusiness() {
                         </tr>
                       </thead>
                       <tbody>
-                        {monthlyData.rdTermSummary.length === 0 ? (
+                        {(displayData?.rdTermSummary || []).length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="text-center text-ink-2 py-3">No RD business in this month</td>
+                            <td colSpan={3} className="text-center text-ink-2 py-3">No RD business in this period</td>
                           </tr>
                         ) : (
-                          monthlyData.rdTermSummary.map((row) => (
+                          (displayData?.rdTermSummary || []).map((row) => (
                             <tr key={row.term}>
                               <td className="font-semibold text-ink-1">{row.term}</td>
                               <td className="text-right font-mono">{row.policies}</td>
@@ -505,8 +880,8 @@ export default function MonthlyBusiness() {
                       <tfoot>
                         <tr className="bg-navy-2/60 font-bold border-t border-navy-4">
                           <td className="text-gold">TOTAL RD</td>
-                          <td className="text-right font-mono text-ink-1">{monthlyData.topSummary.rdPolicies}</td>
-                          <td className="text-right font-mono text-gold">{formatINR(monthlyData.topSummary.rdBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.rdPolicies}</td>
+                          <td className="text-right font-mono text-gold">{formatINR(topSummary.rdBusiness)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -517,7 +892,7 @@ export default function MonthlyBusiness() {
                 <div className="card p-5 border border-navy-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-2 border-b border-navy-4/50 flex justify-between items-center">
                     <span>FD Term Breakdown</span>
-                    <span className="font-mono text-ink-2">{monthlyData.topSummary.fdPolicies} Policies</span>
+                    <span className="font-mono text-ink-2">{topSummary.fdPolicies} Policies</span>
                   </h3>
                   <div className="table-wrap mt-3">
                     <table className="tbl text-xs">
@@ -529,12 +904,12 @@ export default function MonthlyBusiness() {
                         </tr>
                       </thead>
                       <tbody>
-                        {monthlyData.fdTermSummary.length === 0 ? (
+                        {(displayData?.fdTermSummary || []).length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="text-center text-ink-2 py-3">No FD business in this month</td>
+                            <td colSpan={3} className="text-center text-ink-2 py-3">No FD business in this period</td>
                           </tr>
                         ) : (
-                          monthlyData.fdTermSummary.map((row) => (
+                          (displayData?.fdTermSummary || []).map((row) => (
                             <tr key={row.term}>
                               <td className="font-semibold text-ink-1">{row.term}</td>
                               <td className="text-right font-mono">{row.policies}</td>
@@ -546,8 +921,8 @@ export default function MonthlyBusiness() {
                       <tfoot>
                         <tr className="bg-navy-2/60 font-bold border-t border-navy-4">
                           <td className="text-gold">TOTAL FD</td>
-                          <td className="text-right font-mono text-ink-1">{monthlyData.topSummary.fdPolicies}</td>
-                          <td className="text-right font-mono text-gold">{formatINR(monthlyData.topSummary.fdBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.fdPolicies}</td>
+                          <td className="text-right font-mono text-gold">{formatINR(topSummary.fdBusiness)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -558,7 +933,7 @@ export default function MonthlyBusiness() {
                 <div className="card p-5 border border-navy-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-2 border-b border-navy-4/50 flex justify-between items-center">
                     <span>Pension Breakdown</span>
-                    <span className="font-mono text-ink-2">{monthlyData.topSummary.pensPolicies} Policies</span>
+                    <span className="font-mono text-ink-2">{topSummary.pensPolicies} Policies</span>
                   </h3>
                   <div className="table-wrap mt-3">
                     <table className="tbl text-xs">
@@ -570,12 +945,12 @@ export default function MonthlyBusiness() {
                         </tr>
                       </thead>
                       <tbody>
-                        {monthlyData.pensSummary.length === 0 ? (
+                        {(displayData?.pensSummary || []).length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="text-center text-ink-2 py-3">No Pension business in this month</td>
+                            <td colSpan={3} className="text-center text-ink-2 py-3">No Pension business in this period</td>
                           </tr>
                         ) : (
-                          monthlyData.pensSummary.map((row) => (
+                          (displayData?.pensSummary || []).map((row) => (
                             <tr key={row.product}>
                               <td className="font-semibold text-ink-1">{row.product}</td>
                               <td className="text-right font-mono">{row.policies}</td>
@@ -587,8 +962,8 @@ export default function MonthlyBusiness() {
                       <tfoot>
                         <tr className="bg-navy-2/60 font-bold border-t border-navy-4">
                           <td className="text-gold">TOTAL PENSION</td>
-                          <td className="text-right font-mono text-ink-1">{monthlyData.topSummary.pensPolicies}</td>
-                          <td className="text-right font-mono text-gold">{formatINR(monthlyData.topSummary.pensBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.pensPolicies}</td>
+                          <td className="text-right font-mono text-gold">{formatINR(topSummary.pensBusiness)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -599,7 +974,7 @@ export default function MonthlyBusiness() {
                 <div className="card p-5 border border-navy-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-2 border-b border-navy-4/50 flex justify-between items-center">
                     <span>Overall Business Summary</span>
-                    <span className="font-mono text-ink-2">{selectedMonthLabel}</span>
+                    <span className="font-mono text-ink-2">{periodLabel}</span>
                   </h3>
                   <div className="table-wrap mt-3">
                     <table className="tbl text-xs">
@@ -611,7 +986,7 @@ export default function MonthlyBusiness() {
                         </tr>
                       </thead>
                       <tbody>
-                        {monthlyData.overallSummary.map((row) => (
+                        {(displayData?.overallSummary || []).map((row) => (
                           <tr key={row.type}>
                             <td className="font-semibold text-ink-1">{row.name}</td>
                             <td className="text-right font-mono">{row.policies}</td>
@@ -622,14 +997,72 @@ export default function MonthlyBusiness() {
                       <tfoot>
                         <tr className="bg-navy-2/60 font-bold border-t border-navy-4">
                           <td className="text-gold">TOTAL</td>
-                          <td className="text-right font-mono text-ink-1">{monthlyData.topSummary.totalPolicies}</td>
-                          <td className="text-right font-mono text-gold">{formatINR(monthlyData.topSummary.totalBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.totalPolicies}</td>
+                          <td className="text-right font-mono text-gold">{formatINR(topSummary.totalBusiness)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                 </div>
               </div>
+
+              {/* ── YEAR MODE: Month-by-Month Breakdown ─────────────────────── */}
+              {reportMode === 'year' && yearlyData?.monthBreakdown && (
+                <div className="card p-5 border border-navy-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-2 border-b border-navy-4/50 flex justify-between items-center">
+                    <span>Month-by-Month Breakdown</span>
+                    <span className="font-mono text-ink-2">{selectedYear}</span>
+                  </h3>
+                  <div className="table-wrap mt-3">
+                    <table className="tbl text-xs">
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th className="text-right">RD Business</th>
+                          <th className="text-right">RD Policies</th>
+                          <th className="text-right">FD Business</th>
+                          <th className="text-right">FD Policies</th>
+                          <th className="text-right">Pension Business</th>
+                          <th className="text-right">Pension Policies</th>
+                          <th className="text-right">Total Business</th>
+                          <th className="text-right">Total Policies</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {yearlyData.monthBreakdown.map((row) => {
+                          const isEmpty = row.totalBusiness === 0
+                          return (
+                            <tr key={row.month} className={isEmpty ? 'opacity-40' : ''}>
+                              <td className="font-semibold text-ink-1">{row.monthLabel}</td>
+                              <td className="text-right font-mono">{row.rdBusiness > 0 ? formatINR(row.rdBusiness) : '—'}</td>
+                              <td className="text-right font-mono">{row.rdPolicies > 0 ? row.rdPolicies : '—'}</td>
+                              <td className="text-right font-mono">{row.fdBusiness > 0 ? formatINR(row.fdBusiness) : '—'}</td>
+                              <td className="text-right font-mono">{row.fdPolicies > 0 ? row.fdPolicies : '—'}</td>
+                              <td className="text-right font-mono">{row.pensBusiness > 0 ? formatINR(row.pensBusiness) : '—'}</td>
+                              <td className="text-right font-mono">{row.pensPolicies > 0 ? row.pensPolicies : '—'}</td>
+                              <td className="text-right font-mono font-bold text-gold">{row.totalBusiness > 0 ? formatINR(row.totalBusiness) : '—'}</td>
+                              <td className="text-right font-mono">{row.totalPolicies > 0 ? row.totalPolicies : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-navy-2/60 font-bold border-t border-navy-4">
+                          <td className="text-gold">TOTAL {selectedYear}</td>
+                          <td className="text-right font-mono text-ink-1">{formatINR(topSummary.rdBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.rdPolicies}</td>
+                          <td className="text-right font-mono text-ink-1">{formatINR(topSummary.fdBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.fdPolicies}</td>
+                          <td className="text-right font-mono text-ink-1">{formatINR(topSummary.pensBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.pensPolicies}</td>
+                          <td className="text-right font-mono text-gold">{formatINR(topSummary.totalBusiness)}</td>
+                          <td className="text-right font-mono text-ink-1">{topSummary.totalPolicies}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Policy Detail Table & Search/Filter Section */}
               <div className="space-y-4 pt-2">
