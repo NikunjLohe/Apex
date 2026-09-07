@@ -6,7 +6,8 @@
 import { initializeApp, getApp, getApps, deleteApp } from 'firebase/app'
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, getDoc, getDocs, setDoc, updateDoc, collection, serverTimestamp, runTransaction, query, where } from 'firebase/firestore'
-import { db } from '../firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '../firebase'
 import { updateDashboardSummary } from './summary'
 
 const firebaseConfig = {
@@ -195,6 +196,20 @@ export async function createBranch(form, existingBranches = []) {
 
 export function updateBranch(id, data) {
   return updateDoc(doc(db, 'branches', id), { ...data, updatedAt: serverTimestamp() })
+}
+
+/**
+ * Change member email address via server-side Cloud Function.
+ * Enforces Super Admin authorization, duplicate checks, atomic Auth+Firestore updates,
+ * audit logging, and compensating rollback on failure.
+ */
+export async function changeMemberEmail(targetUid, newEmail) {
+  if (!functions) {
+    throw new Error('Firebase Functions service is not initialized.')
+  }
+  const changeEmailFn = httpsCallable(functions, 'changeUserEmail')
+  const result = await changeEmailFn({ targetUid, newEmail })
+  return result.data
 }
 
 /** Best-effort cleanup of the secondary app (optional). */

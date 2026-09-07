@@ -12,6 +12,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IPlus, IUsers, ISearch, IShield } from '../../components/ui/icons'
 import MemberModal from '../../components/MemberModal'
+import ChangeEmailModal from '../../components/ChangeEmailModal'
 import toast from 'react-hot-toast'
 
 export default function Members() {
@@ -23,9 +24,10 @@ export default function Members() {
   const [filterProfile, setFilterProfile] = useState(searchParams.get('profile') || '')
   const [modal, setModal] = useState(null) // { mode:'new'|'edit', member }
   const [resetTarget, setResetTarget] = useState(null) // member for password reset
+  const [changeEmailTarget, setChangeEmailTarget] = useState(null) // member for email change
   const [resetting, setResetting] = useState(false)
   const navigate = useNavigate()
-  const { user: currentUser, profile: currentProfile } = useAuth()
+  const { user: currentUser, profile: currentProfile, isSuperAdmin } = useAuth()
   const { data: settings } = useDoc('config/settings')
 
   const isProfileComplete = (m) => {
@@ -174,6 +176,9 @@ export default function Members() {
                     </td>
                     <td className="text-right space-x-2">
                       <Link to={`/admin/members/${m.id}`} className="text-xs font-semibold text-gold hover:underline">View Profile</Link>
+                      {isSuperAdmin && (
+                        <button type="button" onClick={() => setChangeEmailTarget(m)} className="text-xs font-semibold text-sky-400 hover:underline">Change Email</button>
+                      )}
                       <button type="button" onClick={() => setResetTarget(m)} className="text-xs font-semibold text-amber-400 hover:underline">Reset Password</button>
                       <button type="button" onClick={() => setModal({ mode: 'edit', member: m })} className="text-xs font-semibold text-gold hover:underline">Edit</button>
                     </td>
@@ -183,6 +188,14 @@ export default function Members() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Change Email Modal */}
+      {changeEmailTarget && (
+        <ChangeEmailModal
+          targetUser={changeEmailTarget}
+          onClose={() => setChangeEmailTarget(null)}
+        />
       )}
 
       {/* Reset Password Confirmation Modal */}

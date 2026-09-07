@@ -12,8 +12,9 @@ import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { 
-  IUsers, ICash, ITrophy, IShield, INetwork, IBuilding, IClock, IDoc, IPlus, IAlert 
+  IUsers, ICash, ITrophy, IShield, INetwork, IBuilding, IClock, IDoc, IPlus, IAlert, IMail
 } from '../../components/ui/icons'
+import ChangeEmailModal from '../../components/ChangeEmailModal'
 import { computeEarnings } from '../../lib/earnings'
 import toast from 'react-hot-toast'
 
@@ -25,6 +26,7 @@ export default function MemberDetail() {
   const { config, nextRank, getRank } = useRanks()
   const { user: currentUser, startViewingAs, realProfile } = useAuth()
   const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
+  const [changeEmailModalOpen, setChangeEmailModalOpen] = useState(false)
 
   // Lazy recursive downline loader — avoids loading all users
   const [downline, setDownline] = useState([])
@@ -242,6 +244,15 @@ export default function MemberDetail() {
                 className="btn-gold py-2 px-4 text-xs font-bold uppercase rounded-md shadow-sm"
               >
                 View As Agent
+              </button>
+            )}
+            {realProfile?.isSuperAdmin && (
+              <button
+                onClick={() => setChangeEmailModalOpen(true)}
+                className="btn-dark py-2 px-4 text-xs font-bold uppercase rounded-md border border-sky-500/40 text-sky-400 hover:border-sky-400 shadow-sm flex items-center gap-1.5"
+              >
+                <IMail size={14} className="text-sky-400" />
+                Change Email
               </button>
             )}
             <button
@@ -621,6 +632,14 @@ export default function MemberDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Change Email Modal */}
+      {changeEmailModalOpen && (
+        <ChangeEmailModal
+          targetUser={{ id: m.id, uid: m.id, name: m.name, sponsorCode: m.sponsorCode, email: m.email }}
+          onClose={() => setChangeEmailModalOpen(false)}
+        />
       )}
 
       {/* View As Agent Confirmation Modal */}

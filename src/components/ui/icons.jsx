@@ -34,3 +34,4 @@ export const IDoc = (p) => (<S {...p}><path d="M6 2h8l4 4v16H6z"/><path d="M14 2
 export const IClock = (p) => (<S {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></S>)
 export const IPhone = (p) => (<S {...p}><path d="M5 3h4l1 5-2.5 1.5a11 11 0 005 5L18 12l5 1v4a2 2 0 01-2 2A16 16 0 013 5a2 2 0 012-2z"/></S>)
 export const IEdit = (p) => (<S {...p}><path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></S>)
+export const IMail = (p) => (<S {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></S>)
