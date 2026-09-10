@@ -46,9 +46,22 @@ export const planSchema = z
     fdAmount: z.coerce.number().optional(),
     paymentDate: z.coerce.number().min(1).max(28).optional(),
     startDate: z.string().min(1, 'Start date is required'),
+    policyYear: z.coerce.number().optional(),
   })
   .superRefine((val, ctx) => {
-    if (val.type.startsWith('RD')) {
+    const typeUpper = val.type.toUpperCase()
+    if (typeUpper === 'PENS') {
+      ctx.addIssue({ path: ['type'], code: 'custom', message: 'Explicit Pension duration (PENS1Y–PENS5Y) is required.' })
+    }
+    const pensMatch = typeUpper.match(/^PENS([1-5])Y$/)
+    if (pensMatch && val.policyYear !== undefined && val.policyYear !== null && !isNaN(val.policyYear)) {
+      const codeYr = Number(pensMatch[1])
+      if (val.policyYear !== codeYr) {
+        ctx.addIssue({ path: ['policyYear'], code: 'custom', message: `Product ${val.type} conflicts with policy year ${val.policyYear}. Policy year must be ${codeYr}.` })
+      }
+    }
+
+    if (typeUpper.startsWith('RD')) {
       if (!val.monthlyAmount || val.monthlyAmount < 500)
         ctx.addIssue({ path: ['monthlyAmount'], code: 'custom', message: 'Minimum ₹500' })
       if (!val.paymentDate)

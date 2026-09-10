@@ -8,6 +8,7 @@ import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IUsers, ICash, IBuilding, ISettings, IAlert } from '../../components/ui/icons'
 import { addYears } from 'date-fns'
+import { isPension, getPensionPolicyYear, planYears } from '../../data/compensation'
 import { useRanks } from '../../contexts/RanksContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermission } from '../../hooks/usePermission'
@@ -455,11 +456,27 @@ export default function PolicyDetail() {
               <div className="space-y-3.5">
                 <div>
                   <span className="block text-[10px] text-ink-2">Plan Product</span>
-                  <span className="font-semibold text-ink-1 uppercase">{p.type || '—'}</span>
+                  <span className="font-semibold text-ink-1 uppercase">
+                    {isPension(p.type, p.planType)
+                      ? (getPensionPolicyYear(p.type, p.policyYear || p.duration) ? `Pension ${getPensionPolicyYear(p.type, p.policyYear || p.duration)} Years (${p.type})` : 'Pension')
+                      : (p.type || '—')}
+                  </span>
                 </div>
                 <div>
                   <span className="block text-[10px] text-ink-2">Plan Term (Duration)</span>
-                  <span className="font-semibold text-ink-1">{p.duration || 1} {p.duration === 1 ? 'Year' : 'Years'}</span>
+                  <span className="font-semibold text-ink-1">
+                    {isPension(p.type, p.planType)
+                      ? (getPensionPolicyYear(p.type, p.policyYear || p.duration) ? `${getPensionPolicyYear(p.type, p.policyYear || p.duration)} Years` : 'Not Specified')
+                      : (planYears(p.type) || p.duration ? `${planYears(p.type) || p.duration} ${ (planYears(p.type) || p.duration) === 1 ? 'Year' : 'Years'}` : '—')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-ink-2">Policy Year</span>
+                  <span className="font-semibold text-ink-1 font-mono">
+                    {isPension(p.type, p.planType)
+                      ? (getPensionPolicyYear(p.type, p.policyYear || p.duration) ? `${getPensionPolicyYear(p.type, p.policyYear || p.duration)}` : 'Not Specified')
+                      : (p.policyYear || planYears(p.type) || '—')}
+                  </span>
                 </div>
                 <div>
                   <span className="block text-[10px] text-ink-2">Deposit Value</span>

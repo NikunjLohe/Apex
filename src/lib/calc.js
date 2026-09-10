@@ -2,7 +2,7 @@
 // Plan maturity & schedule calculations (pure functions).
 // ============================================================================
 import { addMonths, addYears } from 'date-fns'
-import { planYears, planIndex, isRD } from '../data/compensation'
+import { planYears, planIndex, isRD } from '../data/compensation.js'
 
 /**
  * Compute plan derived fields at enrollment.
@@ -11,9 +11,12 @@ import { planYears, planIndex, isRD } from '../data/compensation'
  * Maturity uses the FD_PENSION %% (per annum, applied per year) as the growth
  * rate at a baseline rank index 0 (AO) — the customer-facing savings rate.
  */
-export function computePlan({ type, monthlyAmount = 0, fdAmount = 0, startDate = new Date(), rateRankIndex = 0, ranksConfig }) {
-  const years = planYears(type)
-  const idx = planIndex(type)
+export function computePlan({ type, monthlyAmount = 0, fdAmount = 0, startDate = new Date(), rateRankIndex = 0, ranksConfig, policyYear }) {
+  const years = planYears(type) || (policyYear ? Number(policyYear) : null)
+  if (!years || isNaN(years) || years < 1 || years > 5) {
+    throw new Error(`Explicit term duration missing or invalid for plan "${type}". Explicit duration (1-5 years) required.`)
+  }
+  const idx = years - 1
   const fdPensionTable = ranksConfig?.FD_PENSION || []
   const rate = fdPensionTable[rateRankIndex]?.[idx] ?? 0 // per-annum rate (decimal)
   const start = startDate instanceof Date ? startDate : new Date(startDate)

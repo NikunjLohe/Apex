@@ -2,7 +2,7 @@ import { doc, setDoc, collection, serverTimestamp, increment, updateDoc } from '
 import { db } from '../firebase'
 import { generatePlanAccountNumber } from './ids'
 import { computePlan } from './calc'
-import { isRD } from '../data/compensation'
+import { isRD, isPension, getPensionPolicyYear, planYears } from '../data/compensation'
 import { updateDashboardSummary } from './summary'
 
 /**
@@ -10,6 +10,19 @@ import { updateDashboardSummary } from './summary'
  * account number, then bumps the customer's plansCount.
  */
 export async function createPlan({ form, customer, agent, ranksConfig }) {
+  const isPensionPlan = isPension(form.type, form.planType)
+  const isRDPlan = isRD(form.type, form.planType)
+  const derivedPlanType = isRDPlan ? 'RD' : (isPensionPlan ? 'PENS' : 'FD')
+  let policyYear = null
+  if (isPensionPlan) {
+    policyYear = getPensionPolicyYear(form.type, form.policyYear)
+    if (!policyYear) {
+      throw new Error(`Explicit Pension duration required (PENS1Y–PENS5Y). Cannot create Pension policy without explicit duration.`)
+    }
+  } else {
+    policyYear = planYears(form.type) || (form.policyYear ? Number(form.policyYear) : 1)
+  }
+
   const planAccountNumber = await generatePlanAccountNumber()
   const computed = computePlan({
     type: form.type,
@@ -17,6 +30,7 @@ export async function createPlan({ form, customer, agent, ranksConfig }) {
     fdAmount: Number(form.fdAmount) || 0,
     startDate: form.startDate ? new Date(form.startDate) : new Date(),
     ranksConfig,
+    policyYear,
   })
 
   const ref = doc(collection(db, 'plans'))
@@ -28,7 +42,9 @@ export async function createPlan({ form, customer, agent, ranksConfig }) {
     agentName: agent?.name || '',
     branchId: agent?.branchId || customer.branchId || null,
     type: form.type,
-    planType: form.planType || (isRD(form.type) ? 'RD' : 'FD'),
+    planType: derivedPlanType,
+    policyYear,
+    duration: policyYear,
     monthlyAmount: computed.monthlyAmount,
     fdAmount: computed.fdAmount,
     totalInstallments: computed.totalInstallments,
@@ -36,7 +52,7 @@ export async function createPlan({ form, customer, agent, ranksConfig }) {
     startDate: computed.startDate,
     maturityDate: computed.maturityDate,
     nextDueDate: computed.nextDueDate,
-    paymentDate: isRD(form.type, form.planType) ? Number(form.paymentDate) || 1 : null,
+    paymentDate: isRDPlan ? Number(form.paymentDate) || 1 : null,
     status: 'active',
     totalPaid: 0,
     maturityAmount: computed.maturityAmount,

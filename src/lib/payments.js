@@ -3,7 +3,7 @@ import { addMonths } from 'date-fns'
 import { db } from '../firebase'
 import { generateReceiptNumber } from './ids'
 import { toDate, daysBetween } from '../utils/format'
-import { isRD } from '../data/compensation'
+import { isRD, isPension, getPensionPolicyYear, planYears } from '../data/compensation'
 import { updateDashboardSummary } from './summary'
 import { calculateCommissions } from './commissionEngine'
 
@@ -66,11 +66,24 @@ export async function recordPayment({ plan, customer, agent, form }) {
 
     // Only generate FD/Pension commission on the first payment
     if (!skipCommission && (isRDPlan || installmentNumber === 1)) {
+      const isPensionPlan = isPension(p.type, p.planType)
+      let policyYear = p.policyYear !== undefined && p.policyYear !== null && p.policyYear !== '' ? Number(p.policyYear) : null
+      if (!policyYear) {
+        if (isPensionPlan) {
+          policyYear = getPensionPolicyYear(p.type, null)
+          if (!policyYear) {
+            throw new Error(`Policy Year missing for Pension policy "${p.planAccountNumber || p.policyNumber || plan.id}". Cannot calculate commission safely until policy year is explicitly verified.`)
+          }
+        } else {
+          policyYear = planYears(p.type) || 1
+        }
+      }
+
       const baseAgent = p.agentId && usersMap[p.agentId] ? usersMap[p.agentId] : null
       if (baseAgent) {
         const commissionResults = calculateCommissions({
           businessAmount: isRDPlan ? Number(form.amount) : Number(p.fdAmount || form.amount),
-          plan: { planCode: p.type, planType: p.planType || (isRDPlan ? 'RD' : 'FD'), policyYear: 1 },
+          plan: { planCode: p.type, planType: p.planType || (isRDPlan ? 'RD' : (isPensionPlan ? 'PENS' : 'FD')), policyYear },
           baseAgent: baseAgent,
           usersMap,
           commissionMaster,

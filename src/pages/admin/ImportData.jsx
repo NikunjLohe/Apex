@@ -343,9 +343,46 @@ export default function ImportData() {
             errors.push(`Duplicate Customer CIF: ${cId} already registered in database`)
           }
 
-          // 3. Plan Master check
-          const masterPlan = plansMaster.find(p => p.code.toLowerCase() === planCode || p.name.toLowerCase() === planCode)
-          if (!masterPlan) {
+          // Header lookup for optional Policy Year / Pension Term
+          const resolveRowPolicyYear = () => {
+            const possibleCols = ['policyyear', 'pensionterm', 'term', 'duration', 'policy year', 'pension term']
+            for (const col of excelCols) {
+              const norm = String(col).toLowerCase().replace(/[-_.]/g, '').replace(/\s+/g, '')
+              if (possibleCols.includes(norm)) {
+                const val = Number(row[col])
+                if (!isNaN(val) && val >= 1 && val <= 5) return val
+              }
+            }
+            return null
+          }
+          const rowPolicyYear = resolveRowPolicyYear()
+
+          // 3. Plan Master check & Pension resolution
+          let masterPlan = plansMaster.find(p => p.code.toLowerCase() === planCode || p.name.toLowerCase() === planCode)
+          let isPens = planCode.toUpperCase().startsWith('PENS') || (masterPlan && (masterPlan.type === 'PENS' || masterPlan.code.startsWith('PENS')))
+          let pensYear = null
+          const pensCodeMatch = planCode.toUpperCase().match(/^PENS([1-5])Y$/)
+          if (pensCodeMatch) {
+            pensYear = Number(pensCodeMatch[1])
+          } else if (isPens && rowPolicyYear) {
+            pensYear = rowPolicyYear
+          }
+
+          if (isPens && !pensYear) {
+            isValid = false
+            errors.push(`Pension duration/policy year missing for policy "${policyNo}". Must specify PENS1Y–PENS5Y or include Policy Year column.`)
+          }
+
+          if (pensCodeMatch && rowPolicyYear && pensYear !== rowPolicyYear) {
+            isValid = false
+            errors.push(`Product ${planCode.toUpperCase()} conflicts with Policy Year column (${rowPolicyYear}). Must match ${pensYear}.`)
+          }
+
+          const resolvedPlanCode = pensYear ? `PENS${pensYear}Y` : (masterPlan?.code || planCode.toUpperCase())
+          const resolvedPlanType = isPens ? 'PENS' : (masterPlan?.type || (planCode.toUpperCase().startsWith('RD') ? 'RD' : 'FD'))
+          const resolvedDuration = pensYear || masterPlan?.duration || (planCode.toUpperCase().match(/(\d)Y$/)?.[1] ? Number(planCode.toUpperCase().match(/(\d)Y$/)[1]) : null)
+
+          if (!masterPlan && !pensCodeMatch && !isPens) {
             isValid = false
             errors.push(`Plan Code ${row[activeMapping.planCode] || planCode} not found in Plans master.`)
           }
@@ -361,12 +398,12 @@ export default function ImportData() {
           }
 
           // 5. Amount validation
-          const isRDType = masterPlan && masterPlan.type === 'RD'
+          const isRDType = resolvedPlanType === 'RD'
           if (isRDType && mAmount <= 0) {
             isValid = false
             errors.push('RD Plan requires positive Monthly Amount')
           }
-          if (masterPlan && masterPlan.type === 'FD' && tAmount <= 0) {
+          if (!isRDType && tAmount <= 0) {
             isValid = false
             errors.push('FD/Pension requires positive Total Amount')
           }
@@ -396,9 +433,10 @@ export default function ImportData() {
             address,
             agentCode,
             policyNumber: policyNo,
-            planCode: masterPlan?.code || planCode.toUpperCase(),
-            planType: masterPlan?.type || (planCode.toUpperCase().startsWith('PENS') ? 'FD' : planCode.toUpperCase().startsWith('FD') ? 'FD' : 'RD'),
-            duration: masterPlan?.duration || 1,
+            planCode: resolvedPlanCode,
+            planType: resolvedPlanType,
+            policyYear: pensYear || resolvedDuration,
+            duration: resolvedDuration,
             monthlyAmount: mAmount,
             totalAmount: tAmount,
             startDate: parsedDate,
@@ -487,6 +525,7 @@ export default function ImportData() {
             fdAmount: !isRDPlan ? row.totalAmount : 0,
             startDate: row.startDate || new Date(),
             ranksConfig,
+            policyYear: row.policyYear,
           })
 
           batch.set(policyRef, {
@@ -500,6 +539,8 @@ export default function ImportData() {
             branchId: agentRef.branchId || null,
             type: row.planCode,
             planType: row.planType,
+            policyYear: row.policyYear || computed.years,
+            duration: row.duration || computed.years,
             monthlyAmount: computed.monthlyAmount,
             fdAmount: computed.fdAmount,
             totalInstallments: computed.totalInstallments,

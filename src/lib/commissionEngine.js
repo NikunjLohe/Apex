@@ -1,5 +1,6 @@
 import { serverTimestamp } from 'firebase/firestore'
 import { RANKS as DEFAULT_RANKS } from '../data/ranks.js'
+import { isPension, isRD } from '../data/compensation.js'
 
 /**
  * calculateCommissions
@@ -33,6 +34,9 @@ export function calculateCommissions({
   installmentNumber = 1,
 }) {
   const code = String(plan.planCode).toUpperCase()
+  const isPensionPlan = isPension(plan.planCode, plan.planType)
+  const isRDPlan = isRD(plan.planCode, plan.planType)
+  const lookupCode = isPensionPlan ? 'PENS' : code
   
   const rawYr = plan.policyYear
   const yr = rawYr !== undefined && rawYr !== null && rawYr !== '' ? Number(rawYr) : null
@@ -40,14 +44,12 @@ export function calculateCommissions({
   if (!yr || isNaN(yr)) {
     throw new Error(`Missing or invalid policyYear for plan ${code} (Policy: ${policyInfo.number}). Cannot calculate commission safely.`)
   }
-  
-  const isRDPlan = String(plan.planType).toUpperCase() === 'RD'
 
   // Helper to get commission rate from Master config
   const getRate = (rankCode) => {
     const rankCodeStr = String(rankCode || 'AO').toUpperCase()
-    if (commissionMaster && commissionMaster[code]?.[yr]?.[rankCodeStr] !== undefined) {
-      return Number(commissionMaster[code][yr][rankCodeStr]) / 100
+    if (commissionMaster && commissionMaster[lookupCode]?.[yr]?.[rankCodeStr] !== undefined) {
+      return Number(commissionMaster[lookupCode][yr][rankCodeStr]) / 100
     }
     return 0
   }
@@ -143,7 +145,7 @@ export function calculateCommissions({
           policyId: policyInfo.id,
           policyNumber: policyInfo.number,
           planCode: code,
-          planType: isRDPlan ? 'RD' : 'FD',
+          planType: isRDPlan ? 'RD' : (isPensionPlan ? 'PENS' : 'FD'),
           policyYear: yr,
           installment: installmentNumber, 
           

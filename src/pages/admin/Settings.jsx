@@ -171,7 +171,13 @@ export default function Settings() {
         { name: 'RD 2 Year', code: 'RD2Y', duration: 2, type: 'RD', status: 'active' },
         { name: 'RD 3 Year', code: 'RD3Y', duration: 3, type: 'RD', status: 'active' },
         { name: 'RD 4 Year', code: 'RD4Y', duration: 4, type: 'RD', status: 'active' },
-        { name: 'Pension', code: 'PENS', duration: 5, type: 'FD', status: 'active' },
+        { name: 'RD 5 Year', code: 'RD5Y', duration: 5, type: 'RD', status: 'active' },
+        { name: 'Pension', code: 'PENS', duration: 5, type: 'PENS', status: 'active' },
+        { name: 'Pension 1 Year', code: 'PENS1Y', duration: 1, type: 'PENS', status: 'active' },
+        { name: 'Pension 2 Years', code: 'PENS2Y', duration: 2, type: 'PENS', status: 'active' },
+        { name: 'Pension 3 Years', code: 'PENS3Y', duration: 3, type: 'PENS', status: 'active' },
+        { name: 'Pension 4 Years', code: 'PENS4Y', duration: 4, type: 'PENS', status: 'active' },
+        { name: 'Pension 5 Years', code: 'PENS5Y', duration: 5, type: 'PENS', status: 'active' },
       ]
       defaults.forEach(async (p) => {
         await addDoc(collection(db, 'plans_master'), p)

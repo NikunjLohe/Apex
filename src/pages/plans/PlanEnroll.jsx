@@ -73,9 +73,10 @@ export default function PlanEnroll() {
     const tId = toast.loading('Creating plan…')
     try {
       const selectedPlan = activePlans.find(p => p.code === form.type)
+      const isPens = String(form.type).toUpperCase().startsWith('PENS') || selectedPlan?.type === 'PENS'
       const enrichedForm = {
         ...form,
-        planType: selectedPlan?.type || 'RD'
+        planType: isPens ? 'PENS' : (selectedPlan?.type || (form.type.startsWith('RD') ? 'RD' : 'FD'))
       }
       const { planAccountNumber } = await createPlan({
         form: enrichedForm,
@@ -108,9 +109,13 @@ export default function PlanEnroll() {
                 {activePlans.filter(p => (p.type || 'RD').toUpperCase() === 'RD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
               <optgroup label="Fixed Deposit (FD)">
-                {activePlans.filter(p => (p.type || 'RD').toUpperCase() === 'FD').map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
+                {activePlans.filter(p => (p.type || '').toUpperCase() === 'FD' && !p.code.startsWith('PENS')).map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
+              </optgroup>
+              <optgroup label="Pension Plans">
+                {activePlans.filter(p => (p.type || '').toUpperCase() === 'PENS' || p.code.startsWith('PENS')).map((p) => <option key={p.code} value={p.code}>{p.code} — {p.name}</option>)}
               </optgroup>
             </select>
+            {errors.type && <p className="err">{errors.type.message}</p>}
           </div>
 
           {rd ? (

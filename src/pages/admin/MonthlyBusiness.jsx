@@ -26,7 +26,12 @@ const MONTH_NAMES = [
 /** Helper to derive standardized term label from plan type and installments */
 function formatTerm(plan) {
   const type = String(plan?.type || '').toUpperCase()
-  if (type === 'PENS' || plan?.planType === 'PENS') return 'Pension'
+  if (type.startsWith('PENS') || plan?.planType === 'PENS') {
+    const match = type.match(/^PENS([1-5])Y$/)
+    if (match) return `Pension ${match[1]} Year${Number(match[1]) > 1 ? 's' : ''}`
+    if (plan?.policyYear || plan?.duration) return `Pension ${plan.policyYear || plan.duration} Year${Number(plan.policyYear || plan.duration) > 1 ? 's' : ''}`
+    return 'Pension'
+  }
 
   const match = type.match(/(\d+)Y$/)
   if (match) {
