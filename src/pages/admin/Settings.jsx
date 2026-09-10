@@ -717,82 +717,157 @@ export default function Settings() {
               </div>
             </div>
 
-            {plansMaster.data.length ? (
-              <div className="space-y-4">
-                {/* Configuration Dropdowns */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-navy-2/30 p-4 rounded-card border border-navy-4/50">
-                  <div>
-                    <label className="label">1. Select Target Plan *</label>
-                    <select className="field text-xs" value={selectedPlanCode} onChange={(e) => { setSelectedPlanCode(e.target.value); setSelectedYear(1) }}>
-                      {plansMaster.data.map(p => <option key={p.id} value={p.code}>{p.name} ({p.code})</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">2. Select Policy Year *</label>
-                    <select className="field text-xs" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
-                      {Array.from({ length: selectedPlanObj?.duration || 1 }, (_, i) => i + 1).map(yr => (
-                        <option key={yr} value={yr}>Policy Year {yr}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+            {(() => {
+              // Build target options list ensuring explicit pension products and legacy PENS are presented nicely
+              const pensionYearMatch = String(selectedPlanCode || '').match(/^PENS([1-5])Y$/i)
+              const isExplicitPension = Boolean(pensionYearMatch)
+              const explicitPensionYear = pensionYearMatch ? Number(pensionYearMatch[1]) : null
 
-                {/* Commissions Grid */}
-                <div className="border border-navy-4 rounded-card overflow-hidden">
-                  <table className="tbl text-xs">
-                    <thead>
-                      <tr>
-                        <th>Rank Code</th>
-                        <th>Rank Name</th>
-                        <th className="w-48 text-center">Commission Percentage (%)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentRanks.map((r) => {
-                        const rate = commissionsState[selectedPlanCode]?.[selectedYear]?.[r.code] ?? 0
-                        const isFocused = focusedRankCode === r.code
-                        const displayValue = isFocused 
-                          ? tempRateValue 
-                          : (rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '0.00')
-                        return (
-                          <tr key={r.rank}>
-                            <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
-                            <td className="text-ink-2 font-medium">{r.name}</td>
-                            <td className="p-1 flex justify-center">
-                              <div className="relative w-36">
-                                <input 
-                                  type="text" 
-                                  className="field font-mono py-1 text-center w-full pr-7" 
-                                  value={displayValue} 
-                                  placeholder="0.00" 
-                                  onFocus={() => {
-                                    setFocusedRankCode(r.code)
-                                    setTempRateValue(rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '')
-                                  }}
-                                  onBlur={() => {
-                                    setFocusedRankCode(null)
-                                  }}
-                                  onChange={(e) => {
-                                    const val = e.target.value
-                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                      setTempRateValue(val)
-                                      handleCommissionChange(r.code, val)
-                                    }
-                                  }} 
-                                />
-                                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[10px] font-bold">%</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+              // Active policy year: if explicit pension (PENS1Y..PENS5Y), automatically lock to matching year
+              const effectiveYear = isExplicitPension ? explicitPensionYear : selectedYear
+
+              // Matrix lookup key: PENS1Y..PENS5Y map internally to the PENS commission matrix
+              const effectiveMatrixCode = isExplicitPension ? 'PENS' : selectedPlanCode
+
+              // Build dropdown options: include plansMaster data, formatting PENS as Pension (Legacy PENS)
+              const planOptionsMap = new Map()
+              plansMaster.data.forEach(p => {
+                let displayName = p.name
+                if (p.code === 'PENS') {
+                  displayName = 'Pension (Legacy PENS)'
+                }
+                planOptionsMap.set(p.code, { code: p.code, name: displayName, duration: p.duration })
+              })
+
+              // Fallback option guarantees if plans_master Firestore hasn't seeded yet
+              const defaultPensions = [
+                { code: 'PENS1Y', name: 'Pension 1 Year (PENS1Y)', duration: 1 },
+                { code: 'PENS2Y', name: 'Pension 2 Year (PENS2Y)', duration: 2 },
+                { code: 'PENS3Y', name: 'Pension 3 Year (PENS3Y)', duration: 3 },
+                { code: 'PENS4Y', name: 'Pension 4 Year (PENS4Y)', duration: 4 },
+                { code: 'PENS5Y', name: 'Pension 5 Year (PENS5Y)', duration: 5 },
+              ]
+              defaultPensions.forEach(dp => {
+                if (!planOptionsMap.has(dp.code)) {
+                  planOptionsMap.set(dp.code, dp)
+                }
+              })
+
+              const planOptions = Array.from(planOptionsMap.values())
+
+              const handlePlanSelectChange = (newCode) => {
+                setSelectedPlanCode(newCode)
+                const pMatch = String(newCode || '').match(/^PENS([1-5])Y$/i)
+                if (pMatch) {
+                  setSelectedYear(Number(pMatch[1]))
+                } else {
+                  setSelectedYear(1)
+                }
+              }
+
+              const handleRateInputChange = (rankCode, val) => {
+                setCommissionsState(prev => ({
+                  ...prev,
+                  [effectiveMatrixCode]: {
+                    ...(prev[effectiveMatrixCode] || {}),
+                    [effectiveYear]: {
+                      ...((prev[effectiveMatrixCode] || {})[effectiveYear] || {}),
+                      [rankCode]: Number(val) || 0
+                    }
+                  }
+                }))
+              }
+
+              return (
+                <div className="space-y-4">
+                  {/* Configuration Dropdowns */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-navy-2/30 p-4 rounded-card border border-navy-4/50">
+                    <div>
+                      <label className="label">1. Select Target Plan *</label>
+                      <select
+                        className="field text-xs"
+                        value={selectedPlanCode}
+                        onChange={(e) => handlePlanSelectChange(e.target.value)}
+                      >
+                        {planOptions.map(p => (
+                          <option key={p.code} value={p.code}>
+                            {p.name} ({p.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">
+                        2. Select Policy Year * {isExplicitPension && <span className="text-gold-1 text-[10px] font-normal ml-1">(Auto-locked for {selectedPlanCode})</span>}
+                      </label>
+                      <select
+                        className="field text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                        value={effectiveYear}
+                        disabled={isExplicitPension}
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      >
+                        {Array.from({ length: isExplicitPension ? 5 : (selectedPlanObj?.duration || 5) }, (_, i) => i + 1).map(yr => (
+                          <option key={yr} value={yr}>Policy Year {yr}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Commissions Grid */}
+                  <div className="border border-navy-4 rounded-card overflow-hidden">
+                    <table className="tbl text-xs">
+                      <thead>
+                        <tr>
+                          <th>Rank Code</th>
+                          <th>Rank Name</th>
+                          <th className="w-48 text-center">Commission Percentage (%)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentRanks.map((r) => {
+                          const rate = commissionsState[effectiveMatrixCode]?.[effectiveYear]?.[r.code] ?? 0
+                          const isFocused = focusedRankCode === r.code
+                          const displayValue = isFocused
+                            ? tempRateValue
+                            : (rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '0.00')
+                          return (
+                            <tr key={r.rank}>
+                              <td className="font-semibold text-ink-1 uppercase">{r.code}</td>
+                              <td className="text-ink-2 font-medium">{r.name}</td>
+                              <td className="p-1 flex justify-center">
+                                <div className="relative w-36">
+                                  <input
+                                    type="text"
+                                    className="field font-mono py-1 text-center w-full pr-7"
+                                    value={displayValue}
+                                    placeholder="0.00"
+                                    onFocus={() => {
+                                      setFocusedRankCode(r.code)
+                                      setTempRateValue(rate !== undefined && rate !== null ? Number(rate).toFixed(2) : '')
+                                    }}
+                                    onBlur={() => {
+                                      setFocusedRankCode(null)
+                                    }}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                        setTempRateValue(val)
+                                        handleRateInputChange(r.code, val)
+                                      }
+                                    }}
+                                  />
+                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[10px] font-bold">%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <p className="text-xs text-ink-2 italic text-center py-4">Configure Plans in Plan Master before managing commissions.</p>
-            )}
+              )
+            })()}
           </div>
         )}
 
