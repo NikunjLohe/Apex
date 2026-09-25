@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { addDays } from 'date-fns'
-import { useCollection } from '../../hooks/useFirestore'
+import { policiesAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatINR, fmtDate, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -9,22 +9,48 @@ import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { ICalendar } from '../../components/ui/icons'
 
 export default function Maturities() {
-  const plans = useCollection('plans')
   const { profile, isSuperAdmin } = useAuth()
+  const agentUid = profile?.uid || profile?.id
   const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+
   const [window, setWindow] = useState(30)
+  const [plansData, setPlansData] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    const filters = {}
+    if (scopeOwn && agentUid) filters.agentId = agentUid
+
+    policiesAPI.listPolicies(filters)
+      .then(res => {
+        if (mounted) {
+          setPlansData(res || [])
+          setLoading(false)
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load maturing policies:', err)
+        if (mounted) setLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [scopeOwn, agentUid])
 
   const maturing = useMemo(() => {
     const today = new Date()
+    today.setHours(0, 0, 0, 0)
     const limit = addDays(today, window)
-    return plans.data
+    return plansData
       .filter((p) => {
-        if (scopeOwn && p.agentId !== profile?.uid) return false
+        if (scopeOwn && p.agentId !== agentUid) return false
         const m = toDate(p.maturityDate)
         return m && m >= today && m <= limit && p.status !== 'closed'
       })
       .sort((a, b) => (toDate(a.maturityDate) - toDate(b.maturityDate)))
-  }, [plans.data, window, scopeOwn, profile?.uid])
+  }, [plansData, window, scopeOwn, agentUid])
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -39,7 +65,7 @@ export default function Maturities() {
         <p className="text-sm text-ink-2">{maturing.length} maturing</p>
       </div>
 
-      {plans.loading ? (
+      {loading ? (
         <SkeletonTable rows={8} cols={5} />
       ) : !maturing.length ? (
         <EmptyState icon={<ICalendar size={24} />} title={`No plans maturing in ${window} days`} />
@@ -51,8 +77,8 @@ export default function Maturities() {
               <tbody>
                 {maturing.map((p) => (
                   <tr key={p.id}>
-                    <td className="font-medium text-ink-1">{p.customerName}<div className="font-mono text-[11px] text-gold">{p.planAccountNumber}</div></td>
-                    <td className="text-ink-2">{p.type}</td>
+                    <td className="font-medium text-ink-1">{p.customerName}<div className="font-mono text-[11px] text-gold">{p.planAccountNumber || p.policyNumber}</div></td>
+                    <td className="text-ink-2">{p.type || p.planCode}</td>
                     <td className="text-ink-2">{fmtDate(p.maturityDate)}</td>
                     <td className="font-semibold">{formatINR(p.maturityAmount || 0)}</td>
                     <td><StatusBadge status={p.status} /></td>

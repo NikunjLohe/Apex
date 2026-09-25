@@ -1,11 +1,8 @@
 import { useState } from 'react'
 import { read, utils } from 'xlsx'
 import toast from 'react-hot-toast'
-import { collection, doc, writeBatch, serverTimestamp, getDocs, getDoc, query, where, increment, addDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { supabase, paymentsAPI, policiesAPI, auditAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { isRD } from '../../data/compensation'
-import { recordPayment } from '../../lib/payments'
 
 export default function PaymentImport() {
   const { profile } = useAuth()
@@ -66,6 +63,13 @@ export default function PaymentImport() {
   }
 
   const handleImport = async () => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Payment imports are disabled in View As Agent mode.')
+      return
+    }
+
     const validRows = data.filter(d => d.valid)
     if (validRows.length === 0) {
       toast.error('No valid rows to import')
@@ -83,30 +87,26 @@ export default function PaymentImport() {
     for (let i = 0; i < validRows.length; i++) {
       const row = validRows[i]
       try {
-        // Find the active policy (support both policyNumber and planAccountNumber)
-        let planSnap = await getDocs(query(collection(db, 'plans'), where('policyNumber', '==', row.policyNumber), where('status', '==', 'active')))
-        if (planSnap.empty) {
-          planSnap = await getDocs(query(collection(db, 'plans'), where('planAccountNumber', '==', row.policyNumber), where('status', '==', 'active')))
-        }
-        
-        if (planSnap.empty) {
+        // Find active policy from Supabase policies table
+        const { data: policies, error: pErr } = await supabase
+          .from('policies')
+          .select('id, policy_number, status')
+          .eq('policy_number', row.policyNumber)
+          .eq('status', 'active')
+
+        if (pErr || !policies || policies.length === 0) {
           throw new Error(`Active policy ${row.policyNumber} not found`)
         }
         
-        const planDoc = planSnap.docs[0]
-        const p = planDoc.data()
-        const planId = planDoc.id
+        const targetPolicy = policies[0]
 
-        await recordPayment({
-          plan: { id: planId, ...p },
-          customer: { id: p.customerId, name: p.customerName, accountNumber: p.customerAccount || p.planAccountNumber },
-          agent: p.agentId ? { uid: p.agentId, name: p.agentName } : null,
-          form: {
-            amount: Number(row.amount),
-            paymentMode: row.paymentMode,
-            transactionRef: row.transactionRef,
-            paidDate: row.paymentDate,
-          }
+        // Record payment atomically via Supabase RPC
+        await paymentsAPI.recordPayment({
+          policyId: targetPolicy.id,
+          amount: Number(row.amount),
+          paymentMode: row.paymentMode,
+          transactionRef: row.transactionRef,
+          paidDate: row.paymentDate instanceof Date ? row.paymentDate.toISOString() : new Date(row.paymentDate).toISOString(),
         })
 
         successCount++
@@ -117,6 +117,17 @@ export default function PaymentImport() {
       }
       
       setProgress(Math.round(((i + 1) / validRows.length) * 100))
+    }
+
+    // Write audit log
+    try {
+      await auditAPI.logAction('PAYMENT_IMPORT', {
+        totalRows: data.length,
+        successRows: successCount,
+        failedRows: failedCount + (data.length - validRows.length),
+      })
+    } catch (e) {
+      console.warn('Audit log write failed:', e)
     }
 
     setImportSummary({

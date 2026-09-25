@@ -1,15 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
-import { collection, doc, getDocs, setDoc, writeBatch, serverTimestamp, query, where, updateDoc } from 'firebase/firestore'
 import * as xlsx from 'xlsx'
-import { db } from '../../firebase'
+import { supabase, payoutsAPI, commissionsAPI, profilesAPI, policiesAPI, customersAPI, masterDataAPI } from '../../lib/supabase'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate } from '../../utils/format'
+import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import toast from 'react-hot-toast'
 import { ICash, ICheck, IAlert, IClock, IUsers, IDoc } from '../../components/ui/icons'
-import { updateDashboardSummary } from '../../lib/summary'
 import { Link } from 'react-router-dom'
 
 const MONTHS = [
@@ -59,25 +58,16 @@ export default function Payouts() {
   const fetchPayouts = async () => {
     setLoading(true)
     try {
-      const q = query(
-        collection(db, 'payouts'),
-        where('month', '==', selectedMonth),
-        where('year', '==', selectedYear)
-      )
-      const [snap, usersSnap] = await Promise.all([
-        getDocs(q),
-        getDocs(collection(db, 'users'))
+      const [list, profiles] = await Promise.all([
+        payoutsAPI.listPayouts({ month: selectedMonth, year: selectedYear }),
+        profilesAPI.listProfiles()
       ])
-      const list = []
-      snap.forEach(d => {
-        list.push({ id: d.id, ...d.data() })
-      })
       const uMap = {}
-      usersSnap.forEach(d => {
-        uMap[d.id] = { id: d.id, ...d.data() }
+      ;(profiles || []).forEach(d => {
+        uMap[d.id] = d
       })
       setUsersMap(uMap)
-      setPayoutsList(list)
+      setPayoutsList(list || [])
     } catch (err) {
       console.error('Error fetching payouts:', err)
       toast.error('Failed to load payouts')
@@ -102,40 +92,33 @@ export default function Payouts() {
 
     try {
       // 1. Fetch Commissions for selected Month & Year (Read-Only)
-      const commQuery = query(
-        collection(db, 'commission_ledger'),
-        where('month', '==', selectedMonth),
-        where('year', '==', selectedYear)
-      )
-      const commSnap = await getDocs(commQuery)
-      const commissions = []
-      commSnap.forEach(d => commissions.push({ id: d.id, ...d.data() }))
+      const commissions = await commissionsAPI.listCommissions({ month: selectedMonth, year: selectedYear })
 
-      if (commissions.length === 0) {
+      if (!commissions || commissions.length === 0) {
         toast.error('No payout data available for export.', { id: toastId })
         setExporting(false)
         return
       }
 
       // 2. Fetch Users, Plans, Customers, Branches in Parallel (Read-Only)
-      const [usersSnap, plansSnap, custSnap, branchSnap] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'plans')),
-        getDocs(collection(db, 'customers')),
-        getDocs(collection(db, 'branches'))
+      const [profiles, plans, custs, branches] = await Promise.all([
+        profilesAPI.listProfiles().catch(() => []),
+        policiesAPI.listPolicies().catch(() => []),
+        customersAPI.listCustomers().catch(() => []),
+        masterDataAPI.listBranches().catch(() => [])
       ])
 
       const usersMap = {}
-      usersSnap.forEach(d => { usersMap[d.id] = { id: d.id, ...d.data() } })
+      ;(profiles || []).forEach(d => { usersMap[d.id] = d })
 
       const plansMap = {}
-      plansSnap.forEach(d => { plansMap[d.id] = { id: d.id, ...d.data() } })
+      ;(plans || []).forEach(d => { plansMap[d.id] = d })
 
       const custMap = {}
-      custSnap.forEach(d => { custMap[d.id] = { id: d.id, ...d.data() } })
+      ;(custs || []).forEach(d => { custMap[d.id] = d })
 
       const branchMap = {}
-      branchSnap.forEach(d => { branchMap[d.id] = { id: d.id, ...d.data() } })
+      ;(branches || []).forEach(d => { branchMap[d.id] = d })
 
       // Group commissions by agent
       const groupedComms = {}
@@ -154,17 +137,18 @@ export default function Payouts() {
       for (const agentId in groupedComms) {
         const cList = groupedComms[agentId]
         const u = usersMap[agentId] || {}
-        const gross = cList.reduce((sum, c) => sum + (c.amount || 0), 0)
-        const tds = gross * 0.05
-        const adminCharge = gross * 0.05
-        const net = gross - tds - adminCharge
+        const pDoc = payoutsList.find(p => p.agentId === agentId)
+
+        const gross = pDoc ? getPayoutGross(pDoc) : cList.reduce((sum, c) => sum + (c.amount || 0), 0)
+        const tds = pDoc ? getPayoutTds(pDoc) : gross * 0.05
+        const adminCharge = pDoc ? getPayoutAdminCharge(pDoc) : gross * 0.05
+        const net = pDoc ? getPayoutNet(pDoc) : gross - tds - adminCharge
 
         totalGross += gross
         totalTds += tds
         totalAdmin += adminCharge
         totalNet += net
 
-        const pDoc = payoutsList.find(p => p.agentId === agentId)
         const bank = u.bankDetails || {}
         const hasBankDetails = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
 
@@ -445,91 +429,20 @@ export default function Payouts() {
     }
   }
 
-  // Generate Payout calculation process
+  // Generate Payout calculation process via Supabase RPC
   const handleGeneratePayouts = async () => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Payout generation is disabled in View As Agent mode.')
+      return
+    }
+
     setGenerating(true)
-    const toastId = toast.loading('Calculating monthly Commission Bills...')
+    const toastId = toast.loading('Calculating monthly Commission Bills via Supabase RPC...')
     try {
-      // 1. Fetch all unpaid commissions for target month/year from commission_ledger
-      const commQuery = query(
-        collection(db, 'commission_ledger'),
-        where('status', '==', 'unpaid'),
-        where('month', '==', selectedMonth),
-        where('year', '==', selectedYear)
-      )
-      const commSnap = await getDocs(commQuery)
-      const commissions = []
-      commSnap.forEach(d => {
-        const data = d.data()
-        // IMPORTANT: Prevent duplicate payouts by ensuring this unpaid commission isn't already attached to a payout
-        if (!data.payoutId) {
-          commissions.push({ id: d.id, ...data })
-        }
-      })
-
-      if (commissions.length === 0) {
-        toast.error('No unpaid commissions found for selected month & year', { id: toastId })
-        setGenerating(false)
-        return
-      }
-
-      // 2. Fetch all users (agents) to get PAN and details
-      const usersSnap = await getDocs(collection(db, 'users'))
-      const usersMap = {}
-      usersSnap.forEach(d => {
-        usersMap[d.id] = { id: d.id, ...d.data() }
-      })
-
-      // Group commissions by agent
-      const groupedComms = {}
-      commissions.forEach(c => {
-        if (!groupedComms[c.agentId]) {
-          groupedComms[c.agentId] = []
-        }
-        groupedComms[c.agentId].push(c)
-      })
-
-      const batch = writeBatch(db)
-
-      for (const agentId in groupedComms) {
-        const commList = groupedComms[agentId]
-        const agent = usersMap[agentId] || { name: commList[0].agentName, sponsorCode: commList[0].sponsorCode || '—', rank: 1, panNumber: 'UNASSIGNED' }
-        
-        const grossCommission = commList.reduce((sum, c) => sum + (c.amount || 0), 0)
-        
-        // Deductions: 5% TDS and 5% Admin Charge
-        const tds = grossCommission * 0.05
-        const adminCharge = grossCommission * 0.05
-        const netPayable = grossCommission - tds - adminCharge
-
-        // Construct Payout Document
-        const payoutRef = doc(collection(db, 'payouts'))
-        batch.set(payoutRef, {
-          agentId,
-          agentName: agent.name,
-          sponsorCode: agent.sponsorCode || '—',
-          panNumber: agent.panNumber || '—',
-          month: selectedMonth,
-          year: selectedYear,
-          policiesCount: commList.length,
-          grossCommission,
-          tds,
-          adminCharge,
-          netPayable,
-          status: 'generated',
-          generatedDate: serverTimestamp(),
-          paidDate: null,
-          commissionEntryIds: commList.map(c => c.id)
-        })
-
-        // Attach payoutId to the commission entries so they aren't processed again
-        commList.forEach(c => {
-          batch.update(doc(db, 'commission_ledger', c.id), { payoutId: payoutRef.id })
-        })
-      }
-
-      await batch.commit()
-      toast.success('Commission Bills created successfully!', { id: toastId })
+      const res = await payoutsAPI.generateMonthlyPayouts(selectedMonth, selectedYear)
+      toast.success(`Payout Generation Complete! Created: ${res?.payouts_created || 0} payouts`, { id: toastId })
       fetchPayouts()
     } catch (err) {
       console.error('Error generating payouts:', err)
@@ -541,39 +454,21 @@ export default function Payouts() {
 
   // Update payout status
   const handleUpdateStatus = async (payoutId, nextStatus) => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Payout status changes are disabled in View As Agent mode.')
+      return
+    }
+
     const loader = toast.loading(`Updating payout status to ${nextStatus}...`)
     try {
-      const payoutRef = doc(db, 'payouts', payoutId)
-      const updateData = { status: nextStatus }
-      
-      if (nextStatus === 'paid') {
-        updateData.paidDate = serverTimestamp()
-        const currentPayout = payoutsList.find(p => p.id === payoutId)
-
-        if (currentPayout) {
-          const batch = writeBatch(db)
-          let payoutTotal = currentPayout.netPayable || 0
-
-          // Update all linked commission_ledger entries
-          if (currentPayout.commissionEntryIds && currentPayout.commissionEntryIds.length > 0) {
-             for (const commId of currentPayout.commissionEntryIds) {
-                batch.update(doc(db, 'commission_ledger', commId), { status: 'paid' })
-             }
-          }
-
-          // Trigger dashboard summary update for paid commissions (QA-002 Fix)
-          await updateDashboardSummary({ totalCommission: payoutTotal })
-          
-          await batch.commit()
-        }
-      }
-
-      await updateDoc(payoutRef, updateData)
+      await payoutsAPI.updatePayoutStatus(payoutId, nextStatus)
       toast.success(`Payout successfully marked as ${nextStatus}!`, { id: loader })
       fetchPayouts()
     } catch (err) {
-      console.error(err)
-      toast.error('Failed to update payout status', { id: loader })
+      console.error('Error updating payout status:', err)
+      toast.error(`Failed to update payout status: ${err.message}`, { id: loader })
     }
   }
 
@@ -697,10 +592,10 @@ export default function Payouts() {
                         )}
                       </td>
                       <td className="font-mono text-ink-1 font-bold">{p.policiesCount}</td>
-                      <td className="text-ink-1 font-semibold">{formatINR(p.grossCommission)}</td>
-                      <td className="text-red-400 font-semibold">{formatINR(p.tds)}</td>
-                      <td className="text-red-400 font-semibold">{formatINR(p.adminCharge)}</td>
-                      <td className="text-gold font-bold text-sm">{formatINR(p.netPayable)}</td>
+                      <td className="text-ink-1 font-semibold">{formatINR(getPayoutGross(p))}</td>
+                      <td className="text-red-400 font-semibold">{formatINR(getPayoutTds(p))}</td>
+                      <td className="text-red-400 font-semibold">{formatINR(getPayoutAdminCharge(p))}</td>
+                      <td className="text-gold font-bold text-sm">{formatINR(getPayoutNet(p))}</td>
                       <td>
                         <StatusBadge status={p.status} />
                       </td>

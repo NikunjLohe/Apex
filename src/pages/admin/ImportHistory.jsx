@@ -12,7 +12,7 @@ export default function ImportHistory() {
   const imports = useCollection('imports')
   const [selectedImport, setSelectedImport] = useState(null)
 
-  const sortedImports = [...imports.data].sort((a, b) => {
+  const sortedImports = [...(imports.data || [])].sort((a, b) => {
     const timeA = a.importDate ? (a.importDate.seconds ? a.importDate.seconds * 1000 : new Date(a.importDate).getTime()) : 0
     const timeB = b.importDate ? (b.importDate.seconds ? b.importDate.seconds * 1000 : new Date(b.importDate).getTime()) : 0
     return timeB - timeA
@@ -34,7 +34,7 @@ export default function ImportHistory() {
       {/* Main Table */}
       {imports.loading ? (
         <SkeletonTable rows={8} cols={6} />
-      ) : !imports.data.length ? (
+      ) : !imports.data?.length ? (
         <EmptyState 
           icon={<IClock size={24} />} 
           title="No history logs recorded" 

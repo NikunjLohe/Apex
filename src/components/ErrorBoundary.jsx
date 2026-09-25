@@ -17,7 +17,7 @@ export default class ErrorBoundary extends Component {
   }
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
-    console.error('[APEX ErrorBoundary]', error, info)
+    console.error('[APEX ErrorBoundary Caught Error]:', error, error?.stack, info)
   }
   handleReset = () => this.setState({ hasError: false, error: null })
   render() {

@@ -19,7 +19,7 @@ export default function Topbar({ title, onMenu }) {
   const name = profile?.name || user?.displayName || user?.email || 'User'
   const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
 
-  const uid = user?.uid
+  const uid = user?.id || user?.uid
   const notifications = useCollection('notifications', uid ? [where('userId', '==', uid)] : null)
 
   // Local database catalogs for search
@@ -29,13 +29,13 @@ export default function Topbar({ title, onMenu }) {
   const allPlans = useCollection(!isAgent ? 'plans' : null)
 
   const unreadCount = useMemo(() => {
-    return (notifications.data || []).filter(n => !n.read).length
-  }, [notifications.data])
+    return (notifications?.data || []).filter(n => !n.read).length
+  }, [notifications?.data])
 
   const handleMarkAllRead = async () => {
     try {
       const batch = writeBatch(db)
-      notifications.data.forEach(n => {
+      ;(notifications?.data || []).forEach(n => {
         if (!n.read) {
           batch.update(doc(db, 'notifications', n.id), { read: true })
         }
@@ -203,7 +203,7 @@ export default function Topbar({ title, onMenu }) {
                 <div className="max-h-48 overflow-y-auto divide-y divide-navy-4/50">
                   {notifications.loading ? (
                     <p className="p-3 text-[10px] text-ink-2 italic text-center">Loading alerts...</p>
-                  ) : notifications.data.length === 0 ? (
+                  ) : !(notifications?.data?.length) ? (
                     <p className="p-3 text-[10px] text-ink-2 italic text-center">No new notifications.</p>
                   ) : (
                     notifications.data.slice(0, 10).map(n => (

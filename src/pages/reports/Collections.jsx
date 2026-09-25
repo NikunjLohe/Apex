@@ -1,32 +1,58 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { format, startOfMonth } from 'date-fns'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
-import { useCollection } from '../../hooks/useFirestore'
+import { paymentsAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatINR, formatCompactINR, fmtDate, toDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
-import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
+import { SkeletonStats } from '../../components/ui/LoadingSkeleton'
 import { IReport } from '../../components/ui/icons'
 
 export default function Collections() {
-  const payments = useCollection('payments')
   const { profile, isSuperAdmin } = useAuth()
+  const agentUid = profile?.uid || profile?.id
   const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+
   const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [mode, setMode] = useState('all')
 
+  const [paymentsData, setPaymentsData] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    const filters = {}
+    if (scopeOwn && agentUid) filters.agentId = agentUid
+
+    paymentsAPI.listPayments(filters)
+      .then(res => {
+        if (mounted) {
+          setPaymentsData(res || [])
+          setLoading(false)
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load payments:', err)
+        if (mounted) setLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [scopeOwn, agentUid])
+
   const filtered = useMemo(() => {
     const f = new Date(from); f.setHours(0, 0, 0, 0)
     const t = new Date(to); t.setHours(23, 59, 59, 999)
-    return payments.data.filter((p) => {
-      if (scopeOwn && p.agentId !== profile?.uid) return false
-      const d = toDate(p.paidDate)
+    return paymentsData.filter((p) => {
+      if (scopeOwn && p.agentId !== agentUid) return false
+      const d = toDate(p.paidDate || p.createdAt)
       if (!d || d < f || d > t) return false
       if (mode !== 'all' && p.paymentMode !== mode) return false
       return true
     })
-  }, [payments.data, from, to, mode, scopeOwn, profile?.uid])
+  }, [paymentsData, from, to, mode, scopeOwn, agentUid])
 
   const summary = useMemo(() => {
     const total = filtered.reduce((s, p) => s + (p.amount || 0), 0)
@@ -35,8 +61,11 @@ export default function Collections() {
     // group by day for chart
     const byDay = {}
     filtered.forEach((p) => {
-      const k = format(toDate(p.paidDate), 'dd MMM')
-      byDay[k] = (byDay[k] || 0) + (p.amount || 0)
+      const d = toDate(p.paidDate || p.createdAt)
+      if (d) {
+        const k = format(d, 'dd MMM')
+        byDay[k] = (byDay[k] || 0) + (p.amount || 0)
+      }
     })
     const chart = Object.entries(byDay).map(([day, amount]) => ({ day, amount: Math.round(amount) }))
     return { total, count: filtered.length, byMode, chart }
@@ -55,7 +84,7 @@ export default function Collections() {
         </div>
       </div>
 
-      {payments.loading ? (
+      {loading ? (
         <SkeletonStats count={4} />
       ) : (
         <>

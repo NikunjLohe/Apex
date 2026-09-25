@@ -4,11 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { where } from 'firebase/firestore'
 import { useAuth } from '../../contexts/AuthContext'
-import { useCollection } from '../../hooks/useFirestore'
+import { customersAPI, policiesAPI, paymentsAPI } from '../../lib/supabase'
 import { paymentSchema } from '../../lib/schemas'
-import { recordPayment } from '../../lib/payments'
 import { isRD } from '../../data/compensation'
 import { formatINR, fmtDate, toDate, daysBetween } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -17,35 +15,59 @@ import { ISearch, ICash, ICheck } from '../../components/ui/icons'
 
 export default function CollectPayment() {
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, isViewingAs, logDeniedWrite } = useAuth()
   const [params] = useSearchParams()
-  const customers = useCollection('customers')
 
+  const [customerList, setCustomerList] = useState([])
+  const [loadingCustomers, setLoadingCustomers] = useState(true)
   const [customer, setCustomer] = useState(null)
   const [plan, setPlan] = useState(null)
   const [search, setSearch] = useState('')
 
+  useEffect(() => {
+    let mounted = true
+    setLoadingCustomers(true)
+    customersAPI.listCustomers()
+      .then(res => {
+        if (mounted) {
+          setCustomerList(res || [])
+          setLoadingCustomers(false)
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load customers:', err)
+        if (mounted) setLoadingCustomers(false)
+      })
+    return () => { mounted = false }
+  }, [])
+
   // Preselect customer from query (?customer=id)
   useEffect(() => {
     const cid = params.get('customer')
-    if (cid && !customer) {
-      const c = customers.data.find((x) => x.id === cid)
+    if (cid && !customer && customerList.length > 0) {
+      const c = customerList.find((x) => x.id === cid || x.customerId === cid)
       if (c) setCustomer(c)
     }
-  }, [params, customers.data, customer])
+  }, [params, customerList, customer])
 
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return []
-    return customers.data
-      .filter((c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.accountNumber?.toLowerCase().includes(q))
+    return customerList
+      .filter((c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.accountNumber?.toLowerCase().includes(q) || c.customerId?.toLowerCase().includes(q))
       .slice(0, 8)
-  }, [search, customers.data])
+  }, [search, customerList])
 
   const step = !customer ? 1 : !plan ? 2 : 3
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
+      {isViewingAs && (
+        <div className="rounded-card border border-amber-500/40 bg-amber-500/10 p-4 text-sm font-medium text-amber-200">
+          ⚠️ View As Agent Mode (Read-Only): Payment collection is disabled while impersonating an agent.
+        </div>
+      )}
+
       <Steps step={step} />
 
       {/* Step 1 — find customer */}
@@ -56,7 +78,9 @@ export default function CollectPayment() {
             <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
             <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, phone or account number…" className="field pl-10" />
           </div>
-          {search && (
+          {loadingCustomers ? (
+            <div className="mt-3 skeleton h-12 w-full" />
+          ) : search && (
             <div className="mt-3 divide-y divide-navy-4/60 overflow-hidden rounded-card border border-navy-4">
               {matches.length ? matches.map((c) => (
                 <button key={c.id} type="button" onClick={() => setCustomer(c)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-navy-2">
@@ -83,6 +107,8 @@ export default function CollectPayment() {
           customer={customer}
           plan={plan}
           profile={profile}
+          isViewingAs={isViewingAs}
+          logDeniedWrite={logDeniedWrite}
           onBack={() => setPlan(null)}
           onDone={(paymentId) => navigate(`/payments/${paymentId}/receipt`)}
         />
@@ -109,28 +135,47 @@ function Steps({ step }) {
 }
 
 function PlanPicker({ customer, onBack, onSelect }) {
-  const plans = useCollection('plans', [where('customerId', '==', customer.id), where('status', '==', 'active')], `pay-plans-${customer.id}`)
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+    policiesAPI.listPolicies({ customerId: customer.id, status: 'active' })
+      .then(res => {
+        if (mounted) {
+          setPlans(res || [])
+          setLoading(false)
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load customer policies:', err)
+        if (mounted) setLoading(false)
+      })
+    return () => { mounted = false }
+  }, [customer.id])
+
   return (
     <div className="card p-5">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-ink-1">{customer.name}</h3>
-          <p className="font-mono text-xs text-gold">{customer.accountNumber}</p>
+          <p className="font-mono text-xs text-gold">{customer.accountNumber || customer.customerId}</p>
         </div>
         <button type="button" onClick={onBack} className="text-sm text-ink-2 hover:text-gold">← Change</button>
       </div>
-      {plans.loading ? (
+      {loading ? (
         <div className="skeleton h-24 w-full" />
-      ) : !plans.data.length ? (
+      ) : !plans.length ? (
         <EmptyState icon={<ICash size={22} />} title="No active plans" message="This customer has no active plans to collect against." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {plans.data.map((p) => {
+          {plans.map((p) => {
             const due = toDate(p.nextDueDate)
             const overdue = due && due < new Date()
             const daysLate = overdue ? daysBetween(new Date(), due) : 0
             
-            const isRDPlan = isRD(p.type)
+            const isRDPlan = isRD(p.type || p.planCode)
             const isFullyPaid = isRDPlan 
               ? (p.paidInstallments || 0) >= (p.totalInstallments || 1)
               : (p.paidInstallments || 0) >= 1
@@ -146,10 +191,10 @@ function PlanPicker({ customer, onBack, onSelect }) {
                 className={`card p-4 text-left transition-colors ${isFullyPaid ? 'opacity-60 cursor-not-allowed bg-navy-2/30' : 'hover:border-gold-1/50'}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-ink-1">{p.type}</span>
+                  <span className="font-semibold text-ink-1">{p.type || p.planCode}</span>
                   <StatusBadge status={isFullyPaid ? 'matured' : overdue ? 'overdue' : 'active'} />
                 </div>
-                <p className="mt-1 text-sm text-ink-2">{formatINR(p.monthlyAmount || p.fdAmount)} · {p.paidInstallments}/{p.totalInstallments}</p>
+                <p className="mt-1 text-sm text-ink-2">{formatINR(p.monthlyAmount || p.installmentAmount || p.fdAmount)} · {p.paidInstallments}/{p.totalInstallments}</p>
                 {isFullyPaid ? (
                   <p className="mt-2 text-xs font-medium text-ok">{fullyPaidMsg}</p>
                 ) : (
@@ -166,13 +211,13 @@ function PlanPicker({ customer, onBack, onSelect }) {
   )
 }
 
-function PaymentForm({ customer, plan, profile, onBack, onDone }) {
+function PaymentForm({ customer, plan, profile, isViewingAs, logDeniedWrite, onBack, onDone }) {
   const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { register, handleSubmit, watch, getValues, formState: { errors } } = useForm({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
-      amount: plan.monthlyAmount || plan.fdAmount || 0,
+      amount: plan.monthlyAmount || plan.installmentAmount || plan.fdAmount || 0,
       paymentMode: 'cash',
       paidDate: format(new Date(), 'yyyy-MM-dd'),
     },
@@ -180,14 +225,24 @@ function PaymentForm({ customer, plan, profile, onBack, onDone }) {
   const mode = watch('paymentMode')
 
   const save = async () => {
+    if (isViewingAs) {
+      toast.error('Payment creation is disabled in View As Agent mode')
+      if (logDeniedWrite) logDeniedWrite('recordPayment')
+      return
+    }
+
     setSubmitting(true)
     const tId = toast.loading('Recording payment…')
     try {
-      const { paymentId } = await recordPayment({
-        plan,
-        customer,
-        agent: { uid: profile?.uid, name: profile?.name },
-        form: getValues(),
+      const { paymentId } = await paymentsAPI.recordPayment({
+        policyId: plan.id,
+        amount: getValues('amount'),
+        paymentMode: getValues('paymentMode'),
+        transactionRef: getValues('transactionRef'),
+        chequeNumber: getValues('chequeNumber'),
+        bankName: getValues('bankName'),
+        notes: getValues('notes'),
+        paidDate: getValues('paidDate'),
       })
       toast.success('Payment recorded', { id: tId })
       onDone(paymentId)
@@ -203,8 +258,8 @@ function PaymentForm({ customer, plan, profile, onBack, onDone }) {
       <div className="card p-5">
         <h3 className="mb-4 font-semibold text-ink-1">Confirm Payment</h3>
         <dl className="space-y-2 text-sm">
-          <Row k="Customer" v={`${customer.name} (${customer.accountNumber})`} />
-          <Row k="Plan" v={`${plan.type} · ${plan.planAccountNumber}`} />
+          <Row k="Customer" v={`${customer.name} (${customer.accountNumber || customer.customerId})`} />
+          <Row k="Plan" v={`${plan.type || plan.planCode} · ${plan.planAccountNumber || plan.policyNumber}`} />
           <Row k="Installment" v={`${(plan.paidInstallments || 0) + 1} of ${plan.totalInstallments}`} />
           <Row k="Amount" v={formatINR(v.amount)} highlight />
           <Row k="Mode" v={v.paymentMode.toUpperCase()} />
@@ -214,7 +269,14 @@ function PaymentForm({ customer, plan, profile, onBack, onDone }) {
         </dl>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => setConfirming(false)} disabled={submitting} className="btn-ghost">Back</button>
-          <button type="button" onClick={save} disabled={submitting} className="btn-gold"><ICheck size={16} /> {submitting ? 'Saving…' : 'Confirm & Save'}</button>
+          <button 
+            type="button" 
+            onClick={save} 
+            disabled={submitting || isViewingAs} 
+            className="btn-gold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ICheck size={16} /> {submitting ? 'Saving…' : 'Confirm & Save'}
+          </button>
         </div>
       </div>
     )
@@ -228,7 +290,7 @@ function PaymentForm({ customer, plan, profile, onBack, onDone }) {
       </div>
 
       <div className="rounded-card border border-navy-4 bg-navy-2 p-3 text-sm">
-        <span className="text-ink-1">{customer.name}</span> · <span className="text-gold">{plan.type}</span> · Installment {(plan.paidInstallments || 0) + 1}/{plan.totalInstallments}
+        <span className="text-ink-1">{customer.name}</span> · <span className="text-gold">{plan.type || plan.planCode}</span> · Installment {(plan.paidInstallments || 0) + 1}/{plan.totalInstallments}
       </div>
 
       <div>
@@ -271,7 +333,13 @@ function PaymentForm({ customer, plan, profile, onBack, onDone }) {
       </div>
 
       <div className="flex justify-end">
-        <button type="submit" className="btn-gold">Review Payment →</button>
+        <button 
+          type="submit" 
+          disabled={isViewingAs} 
+          className="btn-gold disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Review Payment →
+        </button>
       </div>
     </form>
   )

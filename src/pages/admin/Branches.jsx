@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { useCollection } from '../../hooks/useFirestore'
+import { masterDataAPI, profilesAPI } from '../../lib/supabase'
 import { branchSchema } from '../../lib/schemas'
-import { createBranch, updateBranch } from '../../lib/admin'
 import EmptyState from '../../components/ui/EmptyState'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -13,19 +12,42 @@ import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IPlus, IBuilding } from '../../components/ui/icons'
 
 export default function Branches() {
-  const branches = useCollection('branches')
-  const members = useCollection('users')
+  const [branchesList, setBranchesList] = useState([])
+  const [membersList, setMembersList] = useState([])
+  const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
   const [updating, setUpdating] = useState(null)
 
-  const managerName = (mid) => members.data.find((m) => m.id === mid)?.name || '—'
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [bList, mList] = await Promise.all([
+        masterDataAPI.listBranches(),
+        profilesAPI.listProfiles(),
+      ])
+      setBranchesList(bList || [])
+      setMembersList(mList || [])
+    } catch (err) {
+      console.error('[Branches] Error loading data:', err)
+      toast.error('Could not load branches')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const managerName = (mid) => membersList.find((m) => m.id === mid)?.name || '—'
 
   const toggleBranchStatus = async (branch) => {
     setUpdating(branch.id)
     const nextStatus = branch.status === 'inactive' ? 'active' : 'inactive'
     try {
-      await updateBranch(branch.id, { status: nextStatus })
+      await masterDataAPI.updateBranch(branch.id, { status: nextStatus })
       toast.success(`Branch ${nextStatus === 'active' ? 'activated' : 'deactivated'} successfully`)
+      loadData()
     } catch {
       toast.error('Could not change branch status')
     } finally {
@@ -45,9 +67,9 @@ export default function Branches() {
         </button>
       </div>
 
-      {branches.loading ? (
+      {loading ? (
         <SkeletonTable rows={6} cols={6} />
-      ) : !branches.data.length ? (
+      ) : !branchesList.length ? (
         <EmptyState icon={<IBuilding size={24} />} title="No branches found" message="Add your first branch office." />
       ) : (
         <div className="table-wrap">
@@ -65,11 +87,11 @@ export default function Branches() {
                 </tr>
               </thead>
               <tbody>
-                {branches.data.map((b) => (
+                {branchesList.map((b) => (
                   <tr key={b.id}>
                     <td className="font-mono text-xs font-semibold text-ink-1">
                       <Link to={`/admin/branches/${b.id}`} className="hover:text-gold-1 hover:underline">
-                        {b.branchCode || '—'}
+                        {b.branchCode || b.branch_code || '—'}
                       </Link>
                     </td>
                     <td className="font-medium text-ink-1">
@@ -78,9 +100,9 @@ export default function Branches() {
                       </Link>
                       <div className="text-xs text-ink-2">{b.address}</div>
                     </td>
-                    <td className="text-ink-2 font-medium">{managerName(b.managerId)}</td>
+                    <td className="text-ink-2 font-medium">{managerName(b.managerId || b.manager_id)}</td>
                     <td className="text-xs text-ink-2">
-                      <div className="font-mono">{b.contactNumber || '—'}</div>
+                      <div className="font-mono">{b.contactNumber || b.contact_number || '—'}</div>
                       <div>{b.email || '—'}</div>
                     </td>
                     <td className="text-ink-2 text-xs">{b.city}, {b.state}</td>
@@ -117,7 +139,7 @@ export default function Branches() {
         </div>
       )}
 
-      {modal && <BranchModal modal={modal} members={members.data} existingBranches={branches.data} onClose={() => setModal(null)} />}
+      {modal && <BranchModal modal={modal} members={membersList} existingBranches={branchesList} onClose={() => { setModal(null); loadData() }} />}
     </div>
   )
 }
@@ -133,11 +155,11 @@ function BranchModal({ modal, members, existingBranches, onClose }) {
       address: b?.address || '', 
       city: b?.city || '', 
       state: b?.state || '', 
-      managerId: b?.managerId || '',
-      contactNumber: b?.contactNumber || '',
+      managerId: b?.managerId || b?.manager_id || '',
+      contactNumber: b?.contactNumber || b?.contact_number || '',
       email: b?.email || '',
       status: b?.status || 'active',
-      branchCode: b?.branchCode || '',
+      branchCode: b?.branchCode || b?.branch_code || '',
     },
   })
 
@@ -145,10 +167,10 @@ function BranchModal({ modal, members, existingBranches, onClose }) {
     setSaving(true)
     try {
       if (isEdit) { 
-        await updateBranch(b.id, form)
+        await masterDataAPI.updateBranch(b.id, form)
         toast.success('Branch updated') 
       } else { 
-        await createBranch(form, existingBranches)
+        await masterDataAPI.createBranch(form)
         toast.success('Branch created successfully') 
       }
       onClose()
@@ -165,7 +187,7 @@ function BranchModal({ modal, members, existingBranches, onClose }) {
         {isEdit && (
           <div>
             <label className="label">Branch Code</label>
-            <input className="field font-mono bg-navy-2 cursor-not-allowed" disabled value={b?.branchCode || '—'} />
+            <input className="field font-mono bg-navy-2 cursor-not-allowed" disabled value={b?.branchCode || b?.branch_code || '—'} />
           </div>
         )}
         <div><label className="label">Branch name *</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
@@ -186,3 +208,4 @@ function BranchModal({ modal, members, existingBranches, onClose }) {
     </ConfirmDialog>
   )
 }
+

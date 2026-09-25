@@ -52,7 +52,7 @@ export default function CustomerNew() {
         console.log("Step 5: Calling createCustomer")
         const { id, accountNumber } = await createCustomer(form, {
           uploads,
-          agent: { uid: profile?.uid, name: profile?.name, branchId: profile?.branchId },
+          agent: { uid: profile?.id || profile?.uid, id: profile?.id, name: profile?.name, branchId: profile?.branchId },
         })
         console.log("Step 6: Customer created successfully", id, accountNumber)
         toast.success(`Customer created · ${accountNumber}`, { id: tId })

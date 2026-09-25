@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { where, orderBy, limit } from 'firebase/firestore'
-import { useCollection } from '../../hooks/useFirestore'
+import { policiesAPI, profilesAPI } from '../../lib/supabase'
 import { fmtDate, formatINR } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -16,34 +15,45 @@ export default function Policies() {
   
   const [search, setSearch] = useState(searchParams.get('q') || '')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
-  const [limitCount, setLimitCount] = useState(PAGE_SIZE)
+  const [policiesList, setPoliciesList] = useState([])
+  const [usersList, setUsersList] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const constraints = useMemo(() => {
-    const arr = []
-    if (statusFilter !== 'all') {
-      arr.push(where('status', '==', statusFilter))
+  useEffect(() => {
+    let cancelled = false
+    async function loadData() {
+      setLoading(true)
+      try {
+        const filters = statusFilter !== 'all' ? { status: statusFilter } : {}
+        const [pData, uData] = await Promise.all([
+          policiesAPI.listPolicies(filters),
+          profilesAPI.listProfiles(),
+        ])
+        if (!cancelled) {
+          setPoliciesList(pData || [])
+          setUsersList(uData || [])
+        }
+      } catch (err) {
+        console.error('[Policies] Error fetching data:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
-    arr.push(orderBy('createdAt', 'desc'))
-    arr.push(limit(limitCount))
-    return arr
-  }, [statusFilter, limitCount])
-
-  const depKey = `${statusFilter}-${limitCount}`
-
-  const policies = useCollection('plans', constraints, depKey)
-  const users = useCollection('users')
+    loadData()
+    return () => { cancelled = true }
+  }, [statusFilter])
 
   const agentMap = useMemo(() => {
     const map = {}
-    users.data.forEach(u => {
+    usersList.forEach(u => {
       map[u.id] = u.name
     })
     return map
-  }, [users.data])
+  }, [usersList])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return policies.data.filter((p) => {
+    return policiesList.filter((p) => {
       if (!q) return true
       return (
         p.policyNumber?.toLowerCase().includes(q) ||
@@ -52,9 +62,7 @@ export default function Policies() {
         p.type?.toLowerCase().includes(q)
       )
     })
-  }, [policies.data, search])
-
-  const loading = policies.loading || users.loading
+  }, [policiesList, search])
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -72,14 +80,14 @@ export default function Policies() {
           <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
           <input
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setLimitCount(PAGE_SIZE) }}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search Policy No, customer name, agent, product…"
             className="field pl-10"
           />
         </div>
         <select 
           value={statusFilter} 
-          onChange={(e) => { setStatusFilter(e.target.value); setLimitCount(PAGE_SIZE) }} 
+          onChange={(e) => setStatusFilter(e.target.value)} 
           className="field w-auto text-xs font-semibold"
         >
           <option value="all">All Statuses</option>
@@ -131,12 +139,12 @@ export default function Policies() {
                         <td className="font-semibold text-ink-1">
                           {p.customerName}
                         </td>
-                        <td className="text-ink-2 font-medium">{p.agentName || '—'}</td>
-                        <td className="text-ink-2 font-semibold uppercase">{p.type || '—'}</td>
+                        <td className="text-ink-2 font-medium">{p.agentName || agentMap[p.agentId] || '—'}</td>
+                        <td className="text-ink-2 font-semibold uppercase">{p.type || p.planCode || '—'}</td>
                         <td className="text-ink-2 font-medium">{p.duration} {p.duration === 1 ? 'Year' : 'Years'}</td>
                         <td className="font-semibold text-ink-1">
                           {isRDPlan ? (
-                            <span>{formatINR(p.monthlyAmount)} <span className="text-[9px] text-ink-2 font-normal">/mo</span></span>
+                            <span>{formatINR(p.monthlyAmount || p.installmentAmount)} <span className="text-[9px] text-ink-2 font-normal">/mo</span></span>
                           ) : (
                             <span>{formatINR(p.fdAmount)} <span className="text-[9px] text-ink-2 font-normal">Total</span></span>
                           )}
@@ -152,20 +160,9 @@ export default function Policies() {
               </table>
             </div>
           </div>
-
-          {policies.data.length >= limitCount && (
-            <div className="flex items-center justify-center pt-2">
-              <button 
-                type="button" 
-                onClick={() => setLimitCount(prev => prev + PAGE_SIZE)} 
-                className="btn-gold px-6 py-2 text-xs font-semibold uppercase tracking-wider"
-              >
-                Load More Policies
-              </button>
-            </div>
-          )}
         </>
       )}
     </div>
   )
 }
+

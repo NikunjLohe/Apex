@@ -1,13 +1,11 @@
-import { doc, setDoc, collection, serverTimestamp, increment, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase'
 import { generatePlanAccountNumber } from './ids'
 import { computePlan } from './calc'
 import { isRD, isPension, getPensionPolicyYear, planYears } from '../data/compensation'
-import { updateDashboardSummary } from './summary'
+import { createPolicy } from './supabase/policies'
 
 /**
- * Create a plan for a customer. Computes maturity, schedule fields, and a plan
- * account number, then bumps the customer's plansCount.
+ * Create a plan for a customer using Supabase DAL. Computes maturity, schedule fields,
+ * and a plan account number.
  */
 export async function createPlan({ form, customer, agent, ranksConfig }) {
   const isPensionPlan = isPension(form.type, form.planType)
@@ -33,35 +31,26 @@ export async function createPlan({ form, customer, agent, ranksConfig }) {
     policyYear,
   })
 
-  const ref = doc(collection(db, 'plans'))
   const payload = {
+    planAccountNumber,
+    policyNumber: planAccountNumber,
     customerId: customer.id,
-    customerName: customer.name,
-    customerAccount: customer.accountNumber,
-    agentId: agent?.uid || null,
-    agentName: agent?.name || '',
-    branchId: agent?.branchId || customer.branchId || null,
-    type: form.type,
+    agentId: agent?.id || agent?.uid || null,
+    planCode: form.type,
     planType: derivedPlanType,
     policyYear,
-    duration: policyYear,
-    monthlyAmount: computed.monthlyAmount,
-    fdAmount: computed.fdAmount,
-    totalInstallments: computed.totalInstallments,
+    installmentAmount: computed.monthlyAmount || 0,
+    fdAmount: computed.fdAmount || 0,
+    totalInstallments: computed.totalInstallments || 1,
     paidInstallments: 0,
-    startDate: computed.startDate,
-    maturityDate: computed.maturityDate,
-    nextDueDate: computed.nextDueDate,
-    paymentDate: isRDPlan ? Number(form.paymentDate) || 1 : null,
-    status: 'active',
     totalPaid: 0,
-    maturityAmount: computed.maturityAmount,
-    ratePct: computed.ratePct,
-    planAccountNumber,
-    createdAt: serverTimestamp(),
+    status: 'active',
+    startDate: computed.startDate ? new Date(computed.startDate).toISOString() : new Date().toISOString(),
+    maturityDate: computed.maturityDate ? new Date(computed.maturityDate).toISOString() : null,
+    nextDueDate: computed.nextDueDate ? new Date(computed.nextDueDate).toISOString() : null,
   }
-  await setDoc(ref, payload)
-  await updateDoc(doc(db, 'customers', customer.id), { plansCount: increment(1) })
 
-  return { id: ref.id, planAccountNumber, ...computed }
+  const createdPolicy = await createPolicy(payload)
+
+  return { id: createdPolicy.id, planAccountNumber, ...computed }
 }

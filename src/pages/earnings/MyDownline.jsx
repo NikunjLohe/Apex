@@ -1,16 +1,13 @@
 import { useMemo, useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { getDoc, getDocs, doc, collection, query, where } from 'firebase/firestore'
-import { db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
-import { useCollection, useDoc } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import { useRanks } from '../../contexts/RanksContext'
+import { profilesAPI, policiesAPI, customersAPI, masterDataAPI } from '../../lib/supabase'
 import { formatINR, fmtDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
-import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { INetwork, IPlus, ITrophy, IDashboard, IUsers, IDownload } from '../../components/ui/icons'
 import GenealogyTree from '../../components/ui/GenealogyTree'
@@ -19,64 +16,51 @@ import { useSearchParams } from 'react-router-dom'
 import MemberModal from '../../components/MemberModal'
 
 export default function MyDownline() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { profile } = useAuth()
-  const uid = profile?.uid
+  const [searchParams] = useSearchParams()
+  const { profile, isViewingAs } = useAuth()
+  const uid = profile?.uid || profile?.id
   const { can } = usePermission()
   const { config: ranksConfig, getRank, nextRank } = useRanks()
-  const { data: settings } = useDoc('config/settings')
-  const { data: branches } = useCollection('branches')
 
-  const directChildren = useCollection(
-    'users',
-    uid ? [where('referredBy', '==', uid)] : [],
-    `downline-${uid}`
-  )
-
+  const [branches, setBranches] = useState([])
+  const [directTeam, setDirectTeam] = useState([])
   const [downline, setDownline] = useState([])
   const [downlineLoading, setDownlineLoading] = useState(false)
+  const [allUsers, setAllUsers] = useState([])
+
+  useEffect(() => {
+    let mounted = true
+    masterDataAPI.listBranches()
+      .then(res => { if (mounted) setBranches(res || []) })
+      .catch(err => console.error('Failed to load branches:', err))
+    return () => { mounted = false }
+  }, [])
 
   useEffect(() => {
     if (!uid) return
     let cancelled = false
     setDownlineLoading(true)
 
-    const fetchFullDownline = async () => {
-      const all = []
-      const visited = new Set()
-      const queue = [uid]
+    Promise.all([
+      profilesAPI.listProfiles({ sponsorId: uid }).catch(() => []),
+      profilesAPI.getDownline(uid).catch(() => []),
+      profilesAPI.listProfiles().catch(() => []),
+    ]).then(([directRes, downlineRes, allRes]) => {
+      if (cancelled) return
+      setDirectTeam(directRes || [])
+      setDownline((downlineRes || []).sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0)))
+      setAllUsers(allRes || [])
+      setDownlineLoading(false)
+    }).catch(err => {
+      console.error('Failed to load downline data:', err)
+      if (!cancelled) setDownlineLoading(false)
+    })
 
-      while (queue.length > 0) {
-        const parentId = queue.shift()
-        if (visited.has(parentId)) continue
-        visited.add(parentId)
-
-        try {
-          const snaps = await getDocs(query(collection(db, 'users'), where('referredBy', '==', parentId)))
-          snaps.docs.forEach(d => {
-            const child = { id: d.id, ...d.data() }
-            all.push(child)
-            queue.push(d.id)
-          })
-        } catch (err) {
-          console.error(err)
-        }
-      }
-
-      if (!cancelled) {
-        setDownline(all.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0)))
-        setDownlineLoading(false)
-      }
-    }
-
-    fetchFullDownline()
     return () => { cancelled = true }
   }, [uid])
 
   const [activeTab, setActiveTab] = useState('members')
   const [showRecruit, setShowRecruit] = useState(false)
-  const allUsers = useCollection('users')
-  const [promoRules, setPromoRules] = useState(null)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -88,23 +72,6 @@ export default function MyDownline() {
   // Export
   const [exporting, setExporting] = useState(false)
   const [exportOption, setExportOption] = useState('Entire Downline')
-
-
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, 'config', 'promotions'))
-        if (snap.exists() && snap.data().rules) {
-          setPromoRules(snap.data().rules)
-        }
-      } catch (err) {
-        console.warn('Promotion rules fetch skipped:', err)
-      }
-    })()
-  }, [])
-
-  const directTeam = directChildren.data || []
 
   const teamStats = useMemo(() => {
     const totalVolume = directTeam.reduce((sum, u) => sum + (u.businessVolume || 0), 0)
@@ -122,8 +89,8 @@ export default function MyDownline() {
 
     let nextPromoProgress = null
     const nextRankObj = nextRank(profile?.rank)
-    if (nextRankObj && promoRules) {
-      const rules = promoRules[nextRankObj.code] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
+    if (nextRankObj) {
+      const rules = { businessTarget: nextRankObj.promoTarget || 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
       
       const reqRankNum = ranksConfig?.RANKS?.find(r => r.code === rules.requiredPromotedRank)?.rank || 0
       const qualifiedDownlineCount = directTeam.filter(u => (Number(u.rank) || 0) >= reqRankNum).length
@@ -142,16 +109,15 @@ export default function MyDownline() {
     }
 
     return { totalVolume, rankDist, nextPromoProgress }
-  }, [downline, profile, getRank, nextRank, promoRules, ranksConfig, directTeam])
+  }, [downline, profile, getRank, nextRank, ranksConfig, directTeam])
 
   const sponsorName = (m) => {
-    if (!m.referredBy) return '—'
-    if (m.referredBy === uid) return 'You'
-    const found = downline.find((u) => u.id === m.referredBy)
+    const sId = m.sponsorId || m.referredBy
+    if (!sId) return '—'
+    if (sId === uid) return 'You'
+    const found = downline.find((u) => u.id === sId)
     return found?.name || '—'
   }
-
-
 
   // Filter Data
   const filteredDownline = useMemo(() => {
@@ -163,7 +129,7 @@ export default function MyDownline() {
       if (filterRank && String(u.rank) !== filterRank) return false
       if (filterStatus && u.status !== filterStatus) return false
       if (filterBranch && u.branchId !== filterBranch) return false
-      if (filterSponsor && u.referredBy !== filterSponsor) return false
+      if (filterSponsor && (u.sponsorId || u.referredBy) !== filterSponsor) return false
       return true
     })
   }, [downline, searchQuery, filterRank, filterStatus, filterBranch, filterSponsor])
@@ -179,7 +145,7 @@ export default function MyDownline() {
       if (exportOption === 'Entire Downline') {
         exportList = [...downline]
       } else if (exportOption === 'Direct Members Only') {
-        exportList = downline.filter(u => u.referredBy === uid)
+        exportList = downline.filter(u => (u.sponsorId || u.referredBy) === uid)
       } else if (exportOption === 'Current Rank Only') {
         const myRank = profile?.rank || 1
         exportList = downline.filter(u => u.rank === myRank)
@@ -190,86 +156,41 @@ export default function MyDownline() {
         return toast.error('No members match the selected export option')
       }
 
-      // Fetch Plans for Business Volume & Policy Count
-      // Since 'in' allows up to 30, we must chunk the ids
       const agentIds = exportList.map(a => a.id)
-      
-      const buildDownlineMap = () => {
-        const map = {}
-        const getDL = (agentId) => {
-          if (map[agentId]) return map[agentId]
-          let dl = new Set()
-          downline.filter(x => x.referredBy === agentId).forEach(child => {
-            dl.add(child.id)
-            const nested = getDL(child.id)
-            nested.forEach(n => dl.add(n))
-          })
-          map[agentId] = dl
-          return dl
-        }
-        agentIds.forEach(id => getDL(id))
-        return map
-      }
-      
-      const agentDownlines = buildDownlineMap()
 
-      // Fetch all plans for all members in exportList and their downlines
-      const allRequiredIds = new Set(agentIds)
-      agentIds.forEach(id => agentDownlines[id].forEach(childId => allRequiredIds.add(childId)))
-      
-      const allReqArray = Array.from(allRequiredIds)
+      // Fetch all policies for exported agents using policiesAPI
       const allPlans = []
-      
-      for (let i = 0; i < allReqArray.length; i += 30) {
-        const chunk = allReqArray.slice(i, i + 30)
-        const snap = await getDocs(query(collection(db, 'plans'), where('agentId', 'in', chunk)))
-        snap.forEach(d => allPlans.push({ ...d.data(), id: d.id }))
+      for (const aId of agentIds) {
+        const pList = await policiesAPI.listPolicies({ agentId: aId }).catch(() => [])
+        allPlans.push(...pList)
       }
-      
-      // Calculate direct and team business
+
       const directBusinessMap = {}
       const policyCountMap = {}
-      allRequiredIds.forEach(id => {
+      agentIds.forEach(id => {
         directBusinessMap[id] = 0
         policyCountMap[id] = 0
       })
-      
+
       allPlans.forEach(p => {
-        const amt = (p.planType || p.type || '').toLowerCase().startsWith('rd') ? (p.monthlyAmount * 12) : (p.fdAmount || 0)
+        const amt = (p.planType || p.type || p.planCode || '').toLowerCase().startsWith('rd') ? ((p.monthlyAmount || p.installmentAmount || 0) * 12) : (p.fdAmount || 0)
         if (directBusinessMap[p.agentId] !== undefined) {
           directBusinessMap[p.agentId] += amt
           policyCountMap[p.agentId] += 1
         }
       })
-      
-      // Calculate customer counts
-      let customerCounts = {}
-      for (let i = 0; i < agentIds.length; i += 30) {
-        const chunk = agentIds.slice(i, i + 30)
-        const snap = await getDocs(query(collection(db, 'customers'), where('enrolledBy', 'in', chunk)))
-        chunk.forEach(id => customerCounts[id] = 0)
-        snap.forEach(d => {
-          const c = d.data()
-          if(customerCounts[c.enrolledBy] !== undefined) customerCounts[c.enrolledBy]++
-        })
-      }
 
       const sheetData = exportList.map(a => {
         const myDirect = directBusinessMap[a.id] || 0
-        const myDLIds = agentDownlines[a.id] || new Set()
-        let myTeam = myDirect
-        myDLIds.forEach(childId => {
-          myTeam += (directBusinessMap[childId] || 0)
-        })
 
         // Hierarchy Level calc (1 = Direct, 2 = level 2 etc)
         let level = 1
-        let curr = a.referredBy
+        let curr = a.sponsorId || a.referredBy
         while(curr && curr !== uid) {
           level++
           const parent = downline.find(x => x.id === curr)
           if (!parent) break
-          curr = parent.referredBy
+          curr = parent.sponsorId || parent.referredBy
         }
 
         return {
@@ -279,8 +200,6 @@ export default function MyDownline() {
           'Sponsor': sponsorName(a),
           'Hierarchy Level': level,
           'Direct Business': myDirect,
-          'Team Business': myTeam,
-          'Customer Count': customerCounts[a.id] || 0,
           'Policy Count': policyCountMap[a.id] || 0,
           'Status': a.status
         }
@@ -308,7 +227,7 @@ export default function MyDownline() {
           <p className="text-xs text-ink-2">Manage your sponsored agents, monitor genealogy trees, and view team business summaries.</p>
         </div>
         
-        {can(CAP.RECRUIT) && profile?.rank > 1 && (
+        {can(CAP.RECRUIT) && profile?.rank > 1 && !isViewingAs && (
           <button
             type="button"
             onClick={() => setShowRecruit(true)}
@@ -437,7 +356,7 @@ export default function MyDownline() {
                               <td className="text-ink-2 font-semibold">{sponsorName(m)}</td>
                               <td className="text-ink-2">{branches?.find(b => b.id === m.branchId)?.name || '—'}</td>
                               <td className="text-ink-2 font-mono">{m.phone || '—'}</td>
-                              <td className="text-ink-2">{fmtDate(m.joinDate)}</td>
+                              <td className="text-ink-2">{fmtDate(m.createdAt || m.joinDate)}</td>
                               <td><StatusBadge status={m.status || 'active'} /></td>
                             </tr>
                           ))}
@@ -505,36 +424,21 @@ export default function MyDownline() {
                       <span className="text-ink-1">{formatINR(teamStats.nextPromoProgress.businessAchieved)} / {formatINR(teamStats.nextPromoProgress.businessTarget)}</span>
                     </div>
                     <div className="w-full bg-navy-2 rounded-full h-2 overflow-hidden border border-navy-4">
-                      <div className={`h-2 rounded-full transition-all duration-300 ${teamStats.nextPromoProgress.businessQualified ? 'bg-ok' : 'bg-gold'}`} style={{ width: `${Math.min(100, (teamStats.nextPromoProgress.businessAchieved / teamStats.nextPromoProgress.businessTarget) * 100)}%` }} />
+                      <div className={`h-2 rounded-full transition-all duration-300 ${teamStats.nextPromoProgress.businessQualified ? 'bg-ok' : 'bg-gold'}`} style={{ width: `${Math.min(100, (teamStats.nextPromoProgress.businessAchieved / (teamStats.nextPromoProgress.businessTarget || 1)) * 100)}%` }} />
                     </div>
                     <div className="flex justify-between text-[10px]">
-                      <span className="text-ink-2">Progress: {Math.round(Math.min(100, (teamStats.nextPromoProgress.businessAchieved / teamStats.nextPromoProgress.businessTarget) * 100))}%</span>
+                      <span className="text-ink-2">Progress: {Math.round(Math.min(100, (teamStats.nextPromoProgress.businessAchieved / (teamStats.nextPromoProgress.businessTarget || 1)) * 100))}%</span>
                       <span className={teamStats.nextPromoProgress.businessQualified ? 'text-ok font-bold' : 'text-gold font-bold'}>{teamStats.nextPromoProgress.businessQualified ? 'Achieved' : 'Pending'}</span>
                     </div>
                   </div>
-                  {teamStats.nextPromoProgress.requiredRankCode ? (
-                    <div className="space-y-1.5 pt-2 border-t border-navy-4/50">
-                      <div className="flex justify-between font-semibold">
-                        <span className="text-ink-2">2. Promoted Downline Members (Rank &ge; {teamStats.nextPromoProgress.requiredRankCode})</span>
-                        <span className="text-ink-1">{teamStats.nextPromoProgress.actualCount} / {teamStats.nextPromoProgress.requiredCount} Members</span>
-                      </div>
-                      <div className="w-full bg-navy-2 rounded-full h-2 overflow-hidden border border-navy-4">
-                        <div className={`h-2 rounded-full transition-all duration-300 ${teamStats.nextPromoProgress.downlineQualified ? 'bg-ok' : 'bg-gold'}`} style={{ width: `${Math.min(100, (teamStats.nextPromoProgress.actualCount / teamStats.nextPromoProgress.requiredCount) * 100)}%` }} />
-                      </div>
-                      <div className="flex justify-between text-[10px]">
-                        <span className="text-ink-2">Progress: {Math.round(Math.min(100, (teamStats.nextPromoProgress.actualCount / teamStats.nextPromoProgress.requiredCount) * 100))}%</span>
-                        <span className={teamStats.nextPromoProgress.downlineQualified ? 'text-ok font-bold' : 'text-gold font-bold'}>{teamStats.nextPromoProgress.downlineQualified ? 'Qualified' : 'Pending'}</span>
-                      </div>
-                    </div>
-                  ) : <div className="text-[10px] text-ink-2 italic pt-2 border-t border-navy-4/50">No downline team promotion conditions required.</div>}
                   <div className="pt-3 border-t border-navy-4 flex justify-between items-center">
                     <span className="text-ink-2 font-medium">Evaluation Summary:</span>
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border ${(teamStats.nextPromoProgress.businessQualified && teamStats.nextPromoProgress.downlineQualified) ? 'bg-ok/10 text-ok border-ok/25' : 'bg-gold-1/10 text-gold border-gold-1/25'}`}>
-                      {(teamStats.nextPromoProgress.businessQualified && teamStats.nextPromoProgress.downlineQualified) ? 'Eligible for Promotion Cycle' : 'Qualification Pending'}
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border ${teamStats.nextPromoProgress.businessQualified ? 'bg-ok/10 text-ok border-ok/25' : 'bg-gold-1/10 text-gold border-gold-1/25'}`}>
+                      {teamStats.nextPromoProgress.businessQualified ? 'Eligible for Promotion Cycle' : 'Qualification Pending'}
                     </span>
                   </div>
                 </div>
-              ) : <p className="text-xs text-ink-2 italic text-center py-6">You have reached the maximum system rank or promotion rules are not configured.</p>}
+              ) : <p className="text-xs text-ink-2 italic text-center py-6">You have reached the maximum system rank.</p>}
             </div>
           </div>
         </div>
@@ -544,8 +448,7 @@ export default function MyDownline() {
         <MemberModal
           modal={{ mode: 'new' }}
           branches={branches || []}
-          members={allUsers.data || []}
-          settings={settings}
+          members={allUsers || []}
           onClose={() => setShowRecruit(false)}
         />
       )}

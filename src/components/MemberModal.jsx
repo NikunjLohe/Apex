@@ -279,14 +279,21 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         onConfirm={() => {
           const loginUrl = window.location.origin
           const message = `Welcome to Apex!
-\nDear ${createdAgent.name},
-\nYour account has been created successfully.
-\nAgent Code:\n${createdAgent.sponsorCode}
-\nLogin Email:\n${createdAgent.email}
-\nPassword:\n${createdAgent.password}
-\nLogin URL:\n${loginUrl}
-\nPlease change your password after your first login.
-\nWelcome to the Apex Family.`
+
+Dear ${createdAgent.name},
+
+Your account has been created successfully.
+
+Agent ID:
+${createdAgent.sponsorCode}
+
+Password:
+${createdAgent.password}
+
+Login URL:
+${loginUrl}
+
+Welcome to the Apex Family.`
           const encoded = encodeURIComponent(message)
           const cleanPhone = createdAgent.phone.replace(/\D/g, '')
           const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
@@ -294,7 +301,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         }}
         onClose={() => {
           const loginUrl = window.location.origin
-          const credentialsText = `Agent Code: ${createdAgent.sponsorCode}\nLogin Email: ${createdAgent.email}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
+          const credentialsText = `Agent ID: ${createdAgent.sponsorCode}\nLogin Email: ${createdAgent.email}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
           navigator.clipboard.writeText(credentialsText).catch(err => {
             console.warn('Clipboard write failed:', err)
           })
@@ -304,14 +311,14 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         }}
       >
         <div className="space-y-4 text-xs leading-relaxed py-2">
-          <p className="text-ok font-bold">✓ Agent has been created and registered in Firebase Authentication database.</p>
+          <p className="text-ok font-bold">✓ Agent has been created and registered in Authentication database.</p>
           <div className="bg-navy-2 border border-navy-4 p-4 rounded-card space-y-2">
             <div>
               <span className="block text-[10px] text-ink-2 font-mono">AGENT NAME</span>
               <span className="text-ink-1 font-semibold">{createdAgent.name}</span>
             </div>
             <div>
-              <span className="block text-[10px] text-ink-2 font-mono">AGENT CODE (SPONSOR ID)</span>
+              <span className="block text-[10px] text-ink-2 font-mono">AGENT ID (LOGIN CODE)</span>
               <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
             </div>
             <div>
@@ -319,7 +326,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
               <span className="text-ink-1 font-bold font-mono text-sm">{createdAgent.email}</span>
             </div>
             <div>
-              <span className="block text-[10px] text-ink-2 font-mono">TEMPORARY PASSWORD</span>
+              <span className="block text-[10px] text-ink-2 font-mono">INITIAL PASSWORD</span>
               <span className="text-ink-1 font-bold font-mono select-all bg-navy-3 px-2 py-0.5 rounded border border-navy-4">{createdAgent.password}</span>
             </div>
           </div>

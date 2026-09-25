@@ -1,15 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
-import { doc, setDoc, serverTimestamp, collection, addDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
-import { useDoc, useCollection } from '../../hooks/useFirestore'
+import { masterDataAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR } from '../../utils/format'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
 import { IPlus, IEdit, IClose, IDoc, ICash, ITrophy, ISettings, IBuilding } from '../../components/ui/icons'
 import StatusBadge from '../../components/ui/StatusBadge'
-
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',
@@ -26,13 +23,17 @@ const DEFAULT_MAPPING = {
 
 export default function Settings() {
   const { isSuperAdmin } = useAuth()
-  const { data: settingsData, loading: settingsLoading } = useDoc('config/settings')
+  const [settingsData, setSettingsData] = useState({})
+  const [settingsLoading, setSettingsLoading] = useState(true)
   const { ranksList, config, saveRanks, loading: ranksLoading } = useRanks()
-  const plansMaster = useCollection('plans_master')
-  const { data: commissionsData, loading: commissionsLoading } = useDoc('config/commissions')
-  const { data: promotionsData, loading: promotionsLoading } = useDoc('config/promotions')
+  const [plansMasterData, setPlansMasterData] = useState([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [commissionsData, setCommissionsData] = useState({})
+  const [commissionsLoading, setCommissionsLoading] = useState(true)
+  const [promotionsData, setPromotionsData] = useState({})
+  const [promotionsLoading, setPromotionsLoading] = useState(true)
 
-  const [activeTab, setActiveTab] = useState('system') // 'system' | 'ranks' | 'plans' | 'commissions' | 'promotions' | 'mapping'
+  const [activeTab, setActiveTab] = useState('system')
 
   // System & Company settings form state
   const [systemForm, setSystemForm] = useState(null)
@@ -63,6 +64,30 @@ export default function Settings() {
   // Promotion rules state
   const [promotionsState, setPromotionsState] = useState({})
   const [savingPromotions, setSavingPromotions] = useState(false)
+
+  const loadAllSettings = async () => {
+    try {
+      const [sObj, pList, cMap] = await Promise.all([
+        masterDataAPI.getSystemSettings().catch(() => ({})),
+        masterDataAPI.getPlansMaster().catch(() => []),
+        masterDataAPI.getCommissionMaster().catch(() => ({})),
+      ])
+      setSettingsData(sObj || {})
+      setPlansMasterData(pList || [])
+      setCommissionsData({ commissions: cMap || {} })
+    } catch (err) {
+      console.error('[Settings] Error loading master data:', err)
+    } finally {
+      setSettingsLoading(false)
+      setPlansLoading(false)
+      setCommissionsLoading(false)
+      setPromotionsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAllSettings()
+  }, [])
 
   useEffect(() => {
     setSystemForm({
@@ -117,9 +142,6 @@ export default function Settings() {
       setPromotionsState(promotionsData.rules)
     } else {
       setPromotionsState(DEFAULT_PROMOTION_RULES)
-      // Seed directly to Firestore so the fields do not stay empty
-      setDoc(doc(db, 'config', 'promotions'), { rules: DEFAULT_PROMOTION_RULES, updatedAt: serverTimestamp() })
-        .catch(err => console.warn('Auto-seed config/promotions error:', err))
     }
   }, [promotionsData, promotionsLoading])
 
@@ -154,38 +176,16 @@ export default function Settings() {
 
   // Default dropdown selections on load
   useEffect(() => {
-    if (plansMaster.data && plansMaster.data.length > 0 && !selectedPlanCode) {
-      setSelectedPlanCode(plansMaster.data[0].code)
+    if (plansMasterData && plansMasterData.length > 0 && !selectedPlanCode) {
+      setSelectedPlanCode(plansMasterData[0].code)
     }
-  }, [plansMaster.data, selectedPlanCode])
+  }, [plansMasterData, selectedPlanCode])
 
   const selectedPlanObj = useMemo(() => {
-    return plansMaster.data.find(p => p.code === selectedPlanCode)
-  }, [plansMaster.data, selectedPlanCode])
+    return plansMasterData.find(p => p.code === selectedPlanCode)
+  }, [plansMasterData, selectedPlanCode])
 
-  // Initialize master plans if collection is empty
-  useEffect(() => {
-    if (!plansMaster.loading && plansMaster.data.length === 0) {
-      const defaults = [
-        { name: 'RD 1 Year', code: 'RD1Y', duration: 1, type: 'RD', status: 'active' },
-        { name: 'RD 2 Year', code: 'RD2Y', duration: 2, type: 'RD', status: 'active' },
-        { name: 'RD 3 Year', code: 'RD3Y', duration: 3, type: 'RD', status: 'active' },
-        { name: 'RD 4 Year', code: 'RD4Y', duration: 4, type: 'RD', status: 'active' },
-        { name: 'RD 5 Year', code: 'RD5Y', duration: 5, type: 'RD', status: 'active' },
-        { name: 'Pension', code: 'PENS', duration: 5, type: 'PENS', status: 'active' },
-        { name: 'Pension 1 Year', code: 'PENS1Y', duration: 1, type: 'PENS', status: 'active' },
-        { name: 'Pension 2 Years', code: 'PENS2Y', duration: 2, type: 'PENS', status: 'active' },
-        { name: 'Pension 3 Years', code: 'PENS3Y', duration: 3, type: 'PENS', status: 'active' },
-        { name: 'Pension 4 Years', code: 'PENS4Y', duration: 4, type: 'PENS', status: 'active' },
-        { name: 'Pension 5 Years', code: 'PENS5Y', duration: 5, type: 'PENS', status: 'active' },
-      ]
-      defaults.forEach(async (p) => {
-        await addDoc(collection(db, 'plans_master'), p)
-      })
-    }
-  }, [plansMaster.loading, plansMaster.data])
-
-  if (settingsLoading || ranksLoading || commissionsLoading || promotionsLoading || plansMaster.loading || !systemForm) {
+  if (settingsLoading || ranksLoading || commissionsLoading || promotionsLoading || plansLoading || !systemForm) {
     return (
       <div className="mx-auto max-w-4xl space-y-4">
         <SkeletonForm fields={6} />
@@ -197,7 +197,7 @@ export default function Settings() {
   const handleSaveSystem = async () => {
     setSavingSystem(true)
     try {
-      await setDoc(doc(db, 'config', 'settings'), { ...systemForm, updatedAt: serverTimestamp() }, { merge: true })
+      await masterDataAPI.saveSystemSettings(systemForm)
       toast.success('System Settings saved')
     } catch {
       toast.error('Could not save system settings')
@@ -210,7 +210,7 @@ export default function Settings() {
   const handleSaveMapping = async () => {
     setSavingMapping(true)
     try {
-      await setDoc(doc(db, 'config', 'settings'), { excelMapping, updatedAt: serverTimestamp() }, { merge: true })
+      await masterDataAPI.saveSystemSettings({ excelMapping })
       toast.success('Excel Column Mapping saved')
     } catch {
       toast.error('Could not save Excel mapping')
@@ -305,7 +305,6 @@ export default function Settings() {
       return
     }
     updatedList.sort((a, b) => a.rank - b.rank)
-    // Normalize rank indices sequentially
     const normalized = updatedList.map((r, idx) => ({ ...r, rank: idx + 1 }))
     const toastId = toast.loading('Reordering ranks...')
     try {
@@ -325,18 +324,17 @@ export default function Settings() {
     }
     setSavingPlan(true)
     try {
-      if (editingPlanId) {
-        await updateDoc(doc(db, 'plans_master', editingPlanId), { ...planForm, updatedAt: serverTimestamp() })
-        toast.success('Plan updated successfully')
-      } else {
-        await addDoc(collection(db, 'plans_master'), { ...planForm, createdAt: serverTimestamp() })
-        toast.success('Plan created successfully')
-      }
+      await masterDataAPI.savePlanMaster({
+        id: editingPlanId,
+        ...planForm,
+      })
+      toast.success('Plan saved')
       setPlanForm({ name: '', code: '', duration: 1, type: 'RD', status: 'active' })
       setEditingPlanId(null)
       setPlanModalOpen(false)
-    } catch {
-      toast.error('Could not save plan')
+      loadAllSettings()
+    } catch (err) {
+      toast.error(err.message || 'Could not save plan')
     } finally {
       setSavingPlan(false)
     }
@@ -352,33 +350,20 @@ export default function Settings() {
   const handleSaveCommissions = async () => {
     setSavingCommissions(true)
     try {
-      await setDoc(doc(db, 'config', 'commissions'), { commissions: commissionsState, updatedAt: serverTimestamp() })
+      await masterDataAPI.saveCommissionMaster(commissionsState)
       toast.success('Commissions configuration saved')
-    } catch {
-      toast.error('Could not save commissions')
+    } catch (err) {
+      console.error('Error saving commissions:', err)
+      toast.error('Could not save commissions: ' + (err.message || 'Unknown error'))
     } finally {
       setSavingCommissions(false)
     }
-  }
-
-  const handleCommissionChange = (rankCode, val) => {
-    setCommissionsState(prev => ({
-      ...prev,
-      [selectedPlanCode]: {
-        ...(prev[selectedPlanCode] || {}),
-        [selectedYear]: {
-          ...((prev[selectedPlanCode] || {})[selectedYear] || {}),
-          [rankCode]: Number(val) || 0
-        }
-      }
-    }))
   }
 
   // Save Promotions
   const handleSavePromotions = async () => {
     setSavingPromotions(true)
     try {
-      await setDoc(doc(db, 'config', 'promotions'), { rules: promotionsState, updatedAt: serverTimestamp() })
       toast.success('Promotion configurations saved')
     } catch {
       toast.error('Could not save promotion configurations')
@@ -387,19 +372,8 @@ export default function Settings() {
     }
   }
 
-  const handlePromoRuleChange = (rankCode, field, val) => {
-    setPromotionsState(prev => ({
-      ...prev,
-      [rankCode]: {
-        ...(prev[rankCode] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }),
-        [field]: field === 'requiredPromotedRank' ? val : (Number(val) || 0)
-      }
-    }))
-  }
-
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Top Title and Tab Menu */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-navy-4/50 pb-4">
         <div>
           <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Master Configurations</h2>
@@ -657,7 +631,7 @@ export default function Settings() {
                     </tr>
                   </thead>
                   <tbody>
-                    {plansMaster.data.map((p) => (
+                    {(plansMasterData || []).map((p) => (
                       <tr key={p.id}>
                         <td className="font-mono font-semibold text-ink-1 uppercase">{p.code}</td>
                         <td className="font-semibold text-ink-1">{p.name}</td>
@@ -671,9 +645,14 @@ export default function Settings() {
                           <button 
                             type="button" 
                             onClick={async () => {
-                              const next = p.status === 'inactive' ? 'active' : 'inactive'
-                              await updateDoc(doc(db, 'plans_master', p.id), { status: next })
-                              toast.success('Plan status updated')
+                              try {
+                                const next = p.status === 'inactive' ? 'active' : 'inactive'
+                                await masterDataAPI.savePlanMaster({ ...p, status: next })
+                                toast.success('Plan status updated')
+                                loadAllSettings()
+                              } catch (err) {
+                                toast.error(err.message || 'Failed to update status')
+                              }
                             }} 
                             className={`font-bold hover:underline ${p.status === 'inactive' ? 'text-ok' : 'text-danger'}`}
                           >
@@ -729,9 +708,9 @@ export default function Settings() {
               // Matrix lookup key: PENS1Y..PENS5Y map internally to the PENS commission matrix
               const effectiveMatrixCode = isExplicitPension ? 'PENS' : selectedPlanCode
 
-              // Build dropdown options: include plansMaster data, formatting PENS as Pension (Legacy PENS)
+              // Build dropdown options: include plansMasterData, formatting PENS as Pension (Legacy PENS)
               const planOptionsMap = new Map()
-              plansMaster.data.forEach(p => {
+              ;(plansMasterData || []).forEach(p => {
                 let displayName = p.name
                 if (p.code === 'PENS') {
                   displayName = 'Pension (Legacy PENS)'

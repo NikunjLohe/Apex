@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useCollection } from '../../hooks/useFirestore'
+import { customersAPI, profilesAPI, masterDataAPI } from '../../lib/supabase'
 import { fmtDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -11,33 +11,59 @@ const PAGE_SIZE = 15
 
 export default function Customers() {
   const navigate = useNavigate()
-  const customers = useCollection('customers')
-  const users = useCollection('users')
-  const branches = useCollection('branches')
+  const [customersList, setCustomersList] = useState([])
+  const [usersList, setUsersList] = useState([])
+  const [branchesList, setBranchesList] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [page, setPage] = useState(1)
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadData() {
+      setLoading(true)
+      try {
+        const [cData, uData, bData] = await Promise.all([
+          customersAPI.listCustomers(),
+          profilesAPI.listProfiles(),
+          masterDataAPI.listBranches(),
+        ])
+        if (!cancelled) {
+          setCustomersList(cData || [])
+          setUsersList(uData || [])
+          setBranchesList(bData || [])
+        }
+      } catch (err) {
+        console.error('[Customers] Error fetching data:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadData()
+    return () => { cancelled = true }
+  }, [])
+
   const agentMap = useMemo(() => {
     const map = {}
-    users.data.forEach(u => {
+    usersList.forEach(u => {
       map[u.id] = `${u.name} (${u.sponsorCode || '—'})`
     })
     return map
-  }, [users.data])
+  }, [usersList])
 
   const branchMap = useMemo(() => {
     const map = {}
-    branches.data.forEach(b => {
+    branchesList.forEach(b => {
       map[b.id] = b.name
     })
     return map
-  }, [branches.data])
+  }, [branchesList])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return customers.data
+    return customersList
       .filter((c) => {
         if (branchFilter !== 'all' && c.branchId !== branchFilter) return false
         if (!q) return true
@@ -54,16 +80,14 @@ export default function Customers() {
         );
       })
       .sort((a, b) => {
-        const timeA = a.createdAt ? (a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime()) : 0
-        const timeB = b.createdAt ? (b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime()) : 0
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return timeB - timeA
       })
-  }, [customers.data, search, branchFilter, agentMap, branchMap])
+  }, [customersList, search, branchFilter, agentMap, branchMap])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-
-  const loading = customers.loading || users.loading || branches.loading
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -92,7 +116,7 @@ export default function Customers() {
           className="field w-auto text-xs font-semibold"
         >
           <option value="all">All Branches</option>
-          {branches.data.map(b => (
+          {branchesList.map(b => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
@@ -180,3 +204,4 @@ export default function Customers() {
     </div>
   )
 }
+

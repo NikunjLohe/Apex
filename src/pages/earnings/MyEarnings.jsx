@@ -1,36 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
-import { where, getDocs, query, collection } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
-import { useCollection, useDoc } from '../../hooks/useFirestore'
+import { policiesAPI, commissionsAPI, payoutsAPI, paymentsAPI, customersAPI } from '../../lib/supabase'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate, toDate } from '../../utils/format'
+import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { ITrophy, ICash, IShield, IClock, IDoc, IUsers, ICheck, IPrint } from '../../components/ui/icons'
 import Logo from '../../components/ui/Logo'
-import { db } from '../../firebase'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+import * as xlsx from 'xlsx'
 
 export default function MyEarnings() {
   const { profile } = useAuth()
-  const uid = profile?.uid
+  const uid = profile?.uid || profile?.id
   const sponsorCode = profile?.sponsorCode || ''
 
   // Selected Month & Year for Monthly Agent Performance Summary
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1)
   const [perfYear, setPerfYear] = useState(new Date().getFullYear())
 
-  // Load Firestore collections dynamically - strictly scoped to authenticated agent's UID
-  const ownPlans = useCollection('plans', uid ? [where('agentId', '==', uid)] : null)
-  const commissions = useCollection('commission_ledger', uid ? [where('agentId', '==', uid)] : null)
-  const payouts = useCollection('payouts', uid ? [where('agentId', '==', uid)] : null)
-  const payments = useCollection('payments', uid ? [where('agentId', '==', uid)] : null)
-  const enrolledCustomers = useCollection('customers', uid ? [where('enrolledBy', '==', uid)] : null)
-  const { data: settings } = useDoc('config/settings')
+  // Data states
+  const [ownPlans, setOwnPlans] = useState([])
+  const [commissions, setCommissions] = useState([])
+  const [payouts, setPayouts] = useState([])
+  const [payments, setPayments] = useState([])
+  const [enrolledCustomers, setEnrolledCustomers] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const { getRank, nextRank, config } = useRanks()
 
@@ -41,14 +40,39 @@ export default function MyEarnings() {
   const [selectedComm, setSelectedComm] = useState(null)
   const [exportingExcel, setExportingExcel] = useState(false)
 
-  const loading = ownPlans.loading || commissions.loading || payouts.loading || payments.loading || enrolledCustomers.loading
+  useEffect(() => {
+    if (!uid) return
+    let mounted = true
+    setLoading(true)
+
+    Promise.all([
+      policiesAPI.listPolicies({ agentId: uid }).catch(() => []),
+      commissionsAPI.listCommissionLedger({ agentId: uid }).catch(() => []),
+      payoutsAPI.listPayouts({ agentId: uid }).catch(() => []),
+      paymentsAPI.listPayments({ agentId: uid }).catch(() => []),
+      customersAPI.listCustomers({ enrolledBy: uid }).catch(() => []),
+    ]).then(([polList, commList, payList, pmtList, custList]) => {
+      if (!mounted) return
+      setOwnPlans(polList || [])
+      setCommissions(commList || [])
+      setPayouts(payList || [])
+      setPayments(pmtList || [])
+      setEnrolledCustomers(custList || [])
+      setLoading(false)
+    }).catch(err => {
+      console.error('Failed to load earnings data:', err)
+      if (mounted) setLoading(false)
+    })
+
+    return () => { mounted = false }
+  }, [uid])
 
   // Calculations
   const stats = useMemo(() => {
     if (loading) return {}
 
-    const unpaidComms = commissions.data.filter(c => c.status === 'unpaid')
-    const paidComms = commissions.data.filter(c => c.status === 'paid')
+    const unpaidComms = commissions.filter(c => c.status === 'unpaid')
+    const paidComms = commissions.filter(c => c.status === 'paid')
 
     const pendingAmount = unpaidComms.reduce((sum, c) => sum + (c.amount || 0), 0)
     const paidAmount = paidComms.reduce((sum, c) => sum + (c.amount || 0), 0)
@@ -57,51 +81,50 @@ export default function MyEarnings() {
     const currMonth = new Date().getMonth() + 1
     const currYear = new Date().getFullYear()
 
-    const monthPlans = ownPlans.data.filter(p => {
-      const fallbackDate = p.startDate || p.date || p.createdAt
-      const start = fallbackDate?.seconds ? new Date(fallbackDate.seconds * 1000) : new Date(fallbackDate)
-      if (isNaN(start.getTime())) return false
+    const monthPlans = ownPlans.filter(p => {
+      const start = toDate(p.startDate || p.createdAt)
+      if (!start || isNaN(start.getTime())) return false
       return (start.getMonth() + 1 === currMonth) && (start.getFullYear() === currYear)
     })
 
     const monthlyBusinessVolume = monthPlans.reduce((sum, p) => {
-      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
-      return sum + (isRD ? (p.monthlyAmount * 12) : p.fdAmount)
+      const isRD = (p.planType || p.type || p.planCode || '').toLowerCase().startsWith('rd')
+      return sum + (isRD ? ((p.monthlyAmount || p.installmentAmount || 0) * 12) : (p.fdAmount || 0))
     }, 0)
 
     // Current Month Commissions Income
-    const currentMonthIncome = commissions.data
+    const currentMonthIncome = commissions
       .filter(c => c.month === currMonth && c.year === currYear)
       .reduce((sum, c) => sum + (c.amount || 0), 0)
 
     // Sort payouts by date descending
-    const sortedPayouts = [...payouts.data].sort((a, b) => {
-      const timeA = a.generatedDate?.seconds ? a.generatedDate.seconds * 1000 : 0
-      const timeB = b.generatedDate?.seconds ? b.generatedDate.seconds * 1000 : 0
+    const sortedPayouts = [...payouts].sort((a, b) => {
+      const timeA = toDate(a.generatedDate)?.getTime() || 0
+      const timeB = toDate(b.generatedDate)?.getTime() || 0
       return timeB - timeA
     })
 
     const lastPayout = sortedPayouts.find(p => p.status === 'paid')
 
     // Lifetime Business Volume
-    const lifetimeBusinessVolume = ownPlans.data.reduce((sum, p) => {
-      const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
-      return sum + (isRD ? (p.monthlyAmount || 0) * 12 : (p.fdAmount || 0))
+    const lifetimeBusinessVolume = ownPlans.reduce((sum, p) => {
+      const isRD = (p.planType || p.type || p.planCode || '').toLowerCase().startsWith('rd')
+      return sum + (isRD ? ((p.monthlyAmount || p.installmentAmount || 0) * 12) : (p.fdAmount || 0))
     }, 0)
 
     // Recent Policies sold
-    const recentPolicies = [...ownPlans.data]
+    const recentPolicies = [...ownPlans]
       .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
       .slice(0, 5)
 
     // Recent Enrolled Customers
-    const recentCustomers = [...enrolledCustomers.data]
+    const recentCustomers = [...enrolledCustomers]
       .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))
       .slice(0, 5)
 
     // 4 Summary cards calculations
-    const lifetimeCommission = commissions.data.reduce((sum, c) => sum + (c.amount || 0), 0)
-    const thisMonthCommission = commissions.data
+    const lifetimeCommission = commissions.reduce((sum, c) => sum + (c.amount || 0), 0)
+    const thisMonthCommission = commissions
       .filter(c => c.month === currMonth && c.year === currYear)
       .reduce((sum, c) => sum + (c.amount || 0), 0)
     const pendingCommission = pendingAmount
@@ -122,7 +145,7 @@ export default function MyEarnings() {
       pendingCommission,
       paidCommission,
     }
-  }, [commissions.data, payouts.data, ownPlans.data, enrolledCustomers.data, loading, profile?.rank, config, uid])
+  }, [commissions, payouts, ownPlans, enrolledCustomers, loading])
 
   // ── MONTHLY PERFORMANCE COMPUTATION ──────────────────────────────────────────
   const monthlyPerformance = useMemo(() => {
@@ -136,22 +159,19 @@ export default function MyEarnings() {
     }
 
     // 1. Policies created in selected month
-    const monthPlans = ownPlans.data.filter(p => {
-      const fallbackDate = p.startDate || p.date || p.createdAt
-      return matchMonthYear(fallbackDate)
-    })
+    const monthPlans = ownPlans.filter(p => matchMonthYear(p.startDate || p.createdAt))
 
     let rdCount = 0, fdCount = 0, pensionCount = 0
     let rdBusiness = 0, fdBusiness = 0, pensionBusiness = 0
 
     monthPlans.forEach(p => {
-      const typeStr = (p.planType || p.type || '').toUpperCase()
+      const typeStr = (p.planType || p.type || p.planCode || '').toUpperCase()
       if (typeStr.startsWith('RD')) {
         rdCount++
-        rdBusiness += Number(p.monthlyAmount || p.amount || 0)
+        rdBusiness += Number(p.monthlyAmount || p.installmentAmount || p.amount || 0)
       } else if (typeStr.startsWith('PENS')) {
         pensionCount++
-        pensionBusiness += Number(p.fdAmount || p.monthlyAmount || p.amount || 0)
+        pensionBusiness += Number(p.fdAmount || p.monthlyAmount || p.installmentAmount || p.amount || 0)
       } else {
         fdCount++
         fdBusiness += Number(p.fdAmount || p.amount || 0)
@@ -162,7 +182,7 @@ export default function MyEarnings() {
     const totalBusiness = rdBusiness + fdBusiness + pensionBusiness
 
     // 2. Commission Summary reading ALREADY-CALCULATED ledger docs (no recalculation)
-    const monthComms = commissions.data.filter(c => c.month === perfMonth && c.year === perfYear)
+    const monthComms = commissions.filter(c => c.month === perfMonth && c.year === perfYear)
 
     let directComm = 0, gapComm = 0, uplineComm = 0, grossComm = 0
 
@@ -184,14 +204,14 @@ export default function MyEarnings() {
     const netComm = grossComm - tds - adminCharge
 
     // 3. Activity Summary
-    const monthCustomers = enrolledCustomers.data.filter(c => matchMonthYear(c.createdAt))
-    const monthPayments = payments.data.filter(p => matchMonthYear(p.paidDate || p.createdAt))
+    const monthCustomers = enrolledCustomers.filter(c => matchMonthYear(c.createdAt))
+    const monthPayments = payments.filter(p => matchMonthYear(p.paidDate || p.createdAt))
 
     // 4. Policy Details for selected month
     const policyDetails = monthPlans.map(p => {
-      const isRD = (p.planType || p.type || '').toUpperCase().startsWith('RD')
-      const busAmt = isRD ? Number(p.monthlyAmount || 0) : Number(p.fdAmount || 0)
-      const payAmt = Number(p.totalPaid || p.monthlyAmount || p.fdAmount || 0)
+      const isRD = (p.planType || p.type || p.planCode || '').toUpperCase().startsWith('RD')
+      const busAmt = isRD ? Number(p.monthlyAmount || p.installmentAmount || 0) : Number(p.fdAmount || 0)
+      const payAmt = Number(p.totalPaid || p.monthlyAmount || p.installmentAmount || p.fdAmount || 0)
 
       // Find matched commission for this policy
       const matchedComms = monthComms.filter(c => c.policyNumber === p.policyNumber || c.policyId === p.id)
@@ -221,11 +241,11 @@ export default function MyEarnings() {
       paymentsCount: monthPayments.length,
       policyDetails
     }
-  }, [ownPlans.data, commissions.data, enrolledCustomers.data, payments.data, perfMonth, perfYear, loading])
+  }, [ownPlans, commissions, enrolledCustomers, payments, perfMonth, perfYear, loading])
 
   // ── EXPORT PAYOUT EXCEL FOR AGENT ──────────────────────────────────────────────
   const handleExportAgentPayoutExcel = () => {
-    if (!payouts.data || payouts.data.length === 0) {
+    if (!payouts || payouts.length === 0) {
       toast.error('No payout history available for export.')
       return
     }
@@ -237,7 +257,7 @@ export default function MyEarnings() {
       const bank = profile?.bankDetails || {}
       const hasBankDetails = Boolean(bank.bankName?.trim() && bank.accountNumber?.trim() && bank.ifscCode?.trim())
 
-      const exportRows = payouts.data.map((p, idx) => ({
+      const exportRows = payouts.map((p, idx) => ({
         'Sr. No.': idx + 1,
         'Agent Code': profile?.sponsorCode || profile?.agentCode || '—',
         'Agent Name': profile?.name || '—',
@@ -247,11 +267,11 @@ export default function MyEarnings() {
         'Account Number': bank.accountNumber?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
         'IFSC Code': bank.ifscCode?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
         'Bank Branch': bank.branch?.trim() || (hasBankDetails ? '—' : 'Bank Details Pending'),
-        'Gross Commission (₹)': p.grossCommission || 0,
-        'TDS 5% (₹)': p.tds || 0,
-        'Admin Charge 5% (₹)': p.adminCharge || 0,
+        'Gross Commission (₹)': getPayoutGross(p),
+        'TDS 5% (₹)': getPayoutTds(p),
+        'Admin Charge 5% (₹)': getPayoutAdminCharge(p),
         'Other Deductions (₹)': p.otherDeductions || 0,
-        'Net Payable (₹)': p.netPayable || 0,
+        'Net Payable (₹)': getPayoutNet(p),
         'Payout ID': p.id || '—',
         'Payout Period': `${p.month}/${p.year}`,
         'Status': p.status || 'generated'
@@ -286,8 +306,7 @@ export default function MyEarnings() {
     )
   }
 
-  const companyName = settings?.companyName || 'Apex Multisolutions'
-  const headOffice = settings?.headOffice || ''
+  const companyName = 'Apex Multisolutions'
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -376,9 +395,9 @@ export default function MyEarnings() {
           <span className="flex h-8 w-8 items-center justify-center rounded bg-navy-4 text-gold-1 border border-navy-4">
             <ITrophy size={18} />
           </span>
-          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Team Business Volume</p>
+          <p className="text-[10px] uppercase font-bold text-ink-2 tracking-wide">Lifetime Business Volume</p>
           <p className="text-lg font-bold text-ink-1 font-serif">
-            {formatINR(stats.teamBusiness)}
+            {formatINR(stats.lifetimeBusinessVolume)}
           </p>
         </div>
 
@@ -411,14 +430,14 @@ export default function MyEarnings() {
                 </thead>
                 <tbody>
                   {stats.recentPolicies.map(p => {
-                    const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
+                    const isRD = (p.planType || p.type || p.planCode || '').toLowerCase().startsWith('rd')
                     return (
                       <tr key={p.id}>
-                        <td className="font-mono text-gold font-semibold">{p.policyNumber}</td>
-                        <td className="font-semibold text-ink-1">{p.customerName}</td>
-                        <td className="uppercase font-semibold text-ink-2">{p.type}</td>
+                        <td className="font-mono text-gold font-semibold">{p.policyNumber || p.planAccountNumber}</td>
+                        <td className="font-semibold text-ink-1">{p.customerName || '—'}</td>
+                        <td className="uppercase font-semibold text-ink-2">{p.type || p.planCode}</td>
                         <td className="font-mono font-bold text-ink-1">
-                          {isRD ? `${formatINR(p.monthlyAmount)}/mo` : formatINR(p.fdAmount)}
+                          {isRD ? `${formatINR(p.monthlyAmount || p.installmentAmount)}/mo` : formatINR(p.fdAmount)}
                         </td>
                       </tr>
                     )
@@ -444,16 +463,14 @@ export default function MyEarnings() {
                     <th>Customer ID</th>
                     <th>Client Name</th>
                     <th>Phone</th>
-                    <th>Plans Count</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.recentCustomers.map(c => (
                     <tr key={c.id}>
-                      <td className="font-mono font-semibold text-gold">{c.customerId}</td>
+                      <td className="font-mono font-semibold text-gold">{c.accountNumber || c.customerId}</td>
                       <td className="font-semibold text-ink-1">{c.name}</td>
                       <td className="font-mono text-ink-2">{c.phone || '—'}</td>
-                      <td className="font-bold text-ink-1">{c.plansCount || 1}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -475,14 +492,14 @@ export default function MyEarnings() {
             </h3>
             <button
               onClick={handleExportAgentPayoutExcel}
-              disabled={exportingExcel || !stats.sortedPayouts.length}
+              disabled={exportingExcel || !stats.sortedPayouts?.length}
               className="btn-gold px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 disabled:opacity-50"
             >
               <IDoc size={12} />
               {exportingExcel ? 'Exporting...' : 'Export Payout Excel'}
             </button>
           </div>
-          {stats.sortedPayouts.length ? (
+          {stats.sortedPayouts?.length ? (
             <div className="space-y-3">
               {stats.sortedPayouts.map(p => (
                 <div 
@@ -501,8 +518,8 @@ export default function MyEarnings() {
                     <StatusBadge status={p.status} />
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-ink-2 mt-1">
-                    <span>Policies: {p.policiesCount}</span>
-                    <span className="font-bold text-ink-1 font-mono">{formatINR(p.netPayable || p.totalPayable)}</span>
+                    <span>Policies: {p.policiesCount || 0}</span>
+                    <span className="font-bold text-ink-1 font-mono">{formatINR(getPayoutNet(p))}</span>
                   </div>
                 </div>
               ))}
@@ -526,17 +543,17 @@ export default function MyEarnings() {
                 <div className="space-y-2">
                   <div>
                     <span className="text-[10px] text-ink-2 uppercase block">Gross Commission</span>
-                    <span className="text-sm font-bold text-ink-1">{formatINR(selectedPayout.grossCommission || selectedPayout.totalCommission)}</span>
+                    <span className="text-sm font-bold text-ink-1">{formatINR(getPayoutGross(selectedPayout))}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-ink-2 uppercase block">TDS (5%)</span>
-                    <span className="text-sm font-bold text-red-400">-{formatINR(selectedPayout.tds || 0)}</span>
+                    <span className="text-sm font-bold text-red-400">-{formatINR(getPayoutTds(selectedPayout))}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div>
                     <span className="text-[10px] text-ink-2 uppercase block">Admin Charge (5%)</span>
-                    <span className="text-sm font-bold text-red-400">-{formatINR(selectedPayout.adminCharge || 0)}</span>
+                    <span className="text-sm font-bold text-red-400">-{formatINR(getPayoutAdminCharge(selectedPayout))}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-ink-2 uppercase block">Other Deductions</span>
@@ -547,7 +564,7 @@ export default function MyEarnings() {
 
               <div className="flex justify-between items-center border-t border-navy-4 pt-3">
                 <span className="text-sm font-bold text-ink-1 font-serif">Total Net Payable</span>
-                <span className="text-lg font-bold text-gold font-serif">{formatINR(selectedPayout.netPayable || selectedPayout.totalPayable)}</span>
+                <span className="text-lg font-bold text-gold font-serif">{formatINR(getPayoutNet(selectedPayout))}</span>
               </div>
             </div>
           ) : (
@@ -772,7 +789,7 @@ export default function MyEarnings() {
           </div>
         </div>
 
-        {commissions.data.length ? (
+        {commissions.length ? (
           <div className="table-wrap">
             <table className="tbl text-xs">
               <thead>
@@ -788,12 +805,12 @@ export default function MyEarnings() {
                 </tr>
               </thead>
               <tbody>
-                {commissions.data.map(log => (
+                {commissions.map(log => (
                   <tr key={log.id}>
-                    <td className="font-mono text-ink-2">{log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
-                    <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || '—'}</td>
+                    <td className="font-mono text-ink-2">{log.calculationDate ? fmtDate(log.calculationDate) : log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
+                    <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || log.policyId || '—'}</td>
                     <td className="font-semibold text-ink-1">{log.customerName || '—'}</td>
-                    <td className="text-ink-2 font-semibold uppercase">{log.planCode || '—'}</td>
+                    <td className="text-ink-2 font-semibold uppercase">{log.planCode || log.planType || '—'}</td>
                     <td>
                       <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block text-center">
                         {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}
@@ -829,7 +846,7 @@ export default function MyEarnings() {
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 print:hidden">
               <div>
                 <h3 className="text-lg font-serif font-black text-gray-900">Commission Detail Statement</h3>
-                <p className="text-xs text-gray-500">Audit Trail: <span className="font-mono font-bold text-gray-700">{selectedComm.policyNumber}</span></p>
+                <p className="text-xs text-gray-500">Audit Trail: <span className="font-mono font-bold text-gray-700">{selectedComm.policyNumber || selectedComm.policyId}</span></p>
               </div>
               <button 
                 onClick={() => setSelectedComm(null)}
@@ -851,12 +868,11 @@ export default function MyEarnings() {
                     <div>
                       <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
                       <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
-                      {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
                     </div>
                   </div>
                   <div className="text-right">
                     <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Commission Statement</h2>
-                    <p className="text-xs text-gray-500 mt-1">Policy No: <span className="font-mono font-bold">{selectedComm.policyNumber}</span></p>
+                    <p className="text-xs text-gray-500 mt-1">Policy No: <span className="font-mono font-bold">{selectedComm.policyNumber || selectedComm.policyId}</span></p>
                     <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{selectedComm.month}/{selectedComm.year}</span></p>
                     <p className="text-xs text-gray-500 mt-0.5">Generated: {new Date().toLocaleDateString()}</p>
                   </div>
@@ -887,11 +903,11 @@ export default function MyEarnings() {
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-y-2 gap-x-4 text-xs">
                     <div>
                       <span className="text-gray-500 block">Policy Number</span>
-                      <span className="font-bold text-gray-800 font-mono">{selectedComm.policyNumber}</span>
+                      <span className="font-bold text-gray-800 font-mono">{selectedComm.policyNumber || selectedComm.policyId}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block">Customer</span>
-                      <span className="font-bold text-gray-800">{selectedComm.customerName}</span>
+                      <span className="font-bold text-gray-800">{selectedComm.customerName || '—'}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block">Business Volume</span>
@@ -918,7 +934,7 @@ export default function MyEarnings() {
                       <span className="font-bold text-gray-800 text-xs block mt-0.5">{rank.code} - {rank.name}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500 block uppercase">Configured %</span>
+                      <span className="text-gray-500 block uppercase font-mono">Configured %</span>
                       <span className="font-bold text-gray-800 text-xs block mt-0.5">{Number(selectedComm.percentage || 0).toFixed(2)}%</span>
                     </div>
                     <div>

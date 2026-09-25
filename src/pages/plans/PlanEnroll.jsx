@@ -1,16 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, useParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
-import { useDoc, useCollection } from '../../hooks/useFirestore'
+import { getCustomer } from '../../lib/customers'
+import { getPlansMaster } from '../../lib/supabase/masterData'
 import { planSchema } from '../../lib/schemas'
 import { createPlan } from '../../lib/plans'
 import { computePlan } from '../../lib/calc'
 import { useRanks } from '../../contexts/RanksContext'
-import { isRD } from '../../data/compensation'
 import { formatINR, fmtDate } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonForm } from '../../components/ui/LoadingSkeleton'
@@ -20,13 +20,50 @@ export default function PlanEnroll() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { config } = useRanks()
-  const { data: customer, loading } = useDoc(`customers/${id}`)
-  const plansMaster = useCollection('plans_master')
+
+  const [customer, setCustomer] = useState(null)
+  const [plansMasterData, setPlansMasterData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [plansMasterLoading, setPlansMasterLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    getCustomer(id)
+      .then((data) => {
+        if (!mounted) return
+        setCustomer(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[PlanEnroll] Failed to load customer:', err)
+        setCustomer(null)
+        setLoading(false)
+      })
+
+    setPlansMasterLoading(true)
+    getPlansMaster()
+      .then((data) => {
+        if (!mounted) return
+        setPlansMasterData(data || [])
+        setPlansMasterLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[PlanEnroll] Failed to load plans_master:', err)
+        setPlansMasterData([])
+        setPlansMasterLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [id])
+
   const activePlans = useMemo(() => {
-    return (plansMaster.data || []).filter(p => (p.status || 'active').toLowerCase() !== 'inactive')
-  }, [plansMaster.data])
+    return (plansMasterData || []).filter(p => (p.status || 'active').toLowerCase() !== 'inactive')
+  }, [plansMasterData])
 
   const defaultPlanCode = useMemo(() => {
     return activePlans[0]?.code || 'RD-3Y'
@@ -65,7 +102,7 @@ export default function PlanEnroll() {
     }
   }, [type, monthlyAmount, fdAmount, startDate, config])
 
-  if (loading || plansMaster.loading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={4} /></div>
+  if (loading || plansMasterLoading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={4} /></div>
   if (!customer) return <EmptyState title="Customer not found" />
 
   const onSubmit = async (form) => {

@@ -42,10 +42,10 @@ function SuperAdminDashboard() {
     topAgentsList:          summary?.topAgentsList         || [],
     branchPerformance:      summary?.branchPerformance     || [],
     growthData:             summary?.growthData            || [],
-    recentImports:          recentImports.data             || [],
-    recentPolicies:         recentPlans.data               || [],
-    recentFinancial:        recentPayouts.data             || [],
-  }), [summary, recentImports.data, recentPlans.data, recentPayouts.data])
+    recentImports:          recentImports?.data            || [],
+    recentPolicies:         recentPlans?.data              || [],
+    recentFinancial:        recentPayouts?.data            || [],
+  }), [summary, recentImports?.data, recentPlans?.data, recentPayouts?.data])
 
   if (loading) return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -606,7 +606,7 @@ function AgentDashboard() {
             <IClock size={13} /> Recent Activity Feed
           </h3>
         </div>
-        {recentActivity.length > 0 ? (
+        {(recentActivity || []).length > 0 ? (
           <div className="divide-y divide-navy-4">
             {recentActivity.map((act) => (
               <div key={act.id} className="py-3 flex items-center justify-between text-xs hover:bg-navy-2/20 px-2 rounded transition-all">

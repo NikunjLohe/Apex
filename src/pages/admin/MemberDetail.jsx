@@ -238,7 +238,7 @@ export default function MemberDetail() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {realProfile?.isSuperAdmin && m?.rank < 14 && m?.isSuperAdmin !== true && (
+            {realProfile?.isSuperAdmin && m?.isSuperAdmin !== true && (
               <button
                 onClick={() => setViewAsModalOpen(true)}
                 className="btn-gold py-2 px-4 text-xs font-bold uppercase rounded-md shadow-sm"

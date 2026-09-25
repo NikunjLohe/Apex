@@ -1,10 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { sendPasswordResetEmail } from 'firebase/auth'
-import { auth, db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
-import { useCollection, useDoc } from '../../hooks/useFirestore'
+import { profilesAPI, masterDataAPI, authAPI } from '../../lib/supabase'
 import { fmtDate } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -17,8 +14,10 @@ import toast from 'react-hot-toast'
 
 export default function Members() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const members = useCollection('users')
-  const branches = useCollection('branches')
+  const [membersList, setMembersList] = useState([])
+  const [branchesList, setBranchesList] = useState([])
+  const [loading, setLoading] = useState(true)
+
   const [search, setSearch] = useState(searchParams.get('q') || '')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
   const [filterProfile, setFilterProfile] = useState(searchParams.get('profile') || '')
@@ -28,10 +27,33 @@ export default function Members() {
   const [resetting, setResetting] = useState(false)
   const navigate = useNavigate()
   const { user: currentUser, profile: currentProfile, isSuperAdmin } = useAuth()
-  const { data: settings } = useDoc('config/settings')
+  const [settings, setSettings] = useState(null)
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [mList, bList, sObj] = await Promise.all([
+        profilesAPI.listProfiles(),
+        masterDataAPI.listBranches(),
+        masterDataAPI.getSystemSettings().catch(() => ({})),
+      ])
+      setMembersList(mList || [])
+      setBranchesList(bList || [])
+      setSettings(sObj || {})
+    } catch (err) {
+      console.error('[Members] Failed to load data:', err)
+      toast.error('Failed to load members')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
 
   const isProfileComplete = (m) => {
-    if (!m.dob || !m.address || !m.pan || !m.bankDetails?.bankName || !m.bankDetails?.accountNumber || !m.bankDetails?.ifscCode) {
+    if (!m.dob || !m.address || !m.panNumber || !m.bankDetails?.bankName || !m.bankDetails?.accountNumber || !m.bankDetails?.ifscCode) {
       return false
     }
     return true
@@ -39,7 +61,7 @@ export default function Members() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return members.data
+    return membersList
       .filter((m) => {
         if (filterStatus && m.status !== filterStatus) return false
         if (filterProfile) {
@@ -50,11 +72,11 @@ export default function Members() {
         return !q || m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.phone?.includes(q) || m.sponsorCode?.toLowerCase().includes(q)
       })
       .sort((a, b) => (b.rank || 0) - (a.rank || 0))
-  }, [members.data, search, filterStatus, filterProfile])
+  }, [membersList, search, filterStatus, filterProfile])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      const match = members.data.find(
+      const match = membersList.find(
         (m) => m.sponsorCode?.toLowerCase() === search.trim().toLowerCase()
       )
       if (match) {
@@ -70,20 +92,19 @@ export default function Members() {
     try {
       if (resetTarget.email && resetTarget.email.includes('@') && !resetTarget.email.endsWith('@apex.local')) {
         try {
-          await sendPasswordResetEmail(auth, resetTarget.email)
+          await authAPI.resetPassword(resetTarget.email)
         } catch (authErr) {
-          console.warn('[PasswordReset] sendPasswordResetEmail notice:', authErr)
+          console.warn('[PasswordReset] resetPassword notice:', authErr)
         }
       }
 
-      await updateDoc(doc(db, 'users', resetTarget.id), {
+      await profilesAPI.updateAllowedProfileFields(resetTarget.id, {
         mustChangePassword: true,
-        passwordResetAt: serverTimestamp(),
-        passwordResetBy: currentUser?.uid || 'admin'
       })
 
       toast.success(`Password reset initiated for ${resetTarget.name} (${resetTarget.sponsorCode || ''}). Force password change active.`, { id: toastId })
       setResetTarget(null)
+      loadData()
     } catch (err) {
       console.error('Error resetting password:', err)
       toast.error(`Failed to reset password: ${err.message}`, { id: toastId })
@@ -92,8 +113,8 @@ export default function Members() {
     }
   }
 
-  const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
-  const memberName = (uid) => members.data.find((m) => m.id === uid)?.name || '—'
+  const branchName = (bid) => branchesList.find((b) => b.id === bid)?.name || '—'
+  const memberName = (uid) => membersList.find((m) => m.id === uid)?.name || '—'
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -117,7 +138,7 @@ export default function Members() {
         <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm"><IPlus size={16} /> Add Member</button>
       </div>
 
-      {members.loading ? (
+      {loading ? (
         <SkeletonTable rows={8} cols={7} />
       ) : !filtered.length ? (
         <EmptyState icon={<IUsers size={24} />} title="No members" message="Add your first team member." />
@@ -194,7 +215,7 @@ export default function Members() {
       {changeEmailTarget && (
         <ChangeEmailModal
           targetUser={changeEmailTarget}
-          onClose={() => setChangeEmailTarget(null)}
+          onClose={() => { setChangeEmailTarget(null); loadData() }}
         />
       )}
 
@@ -238,7 +259,8 @@ export default function Members() {
         </div>
       )}
 
-      {modal && <MemberModal modal={modal} branches={branches.data} members={members.data} settings={settings} onClose={() => setModal(null)} />}
+      {modal && <MemberModal modal={modal} branches={branchesList} members={membersList} settings={settings} onClose={() => { setModal(null); loadData() }} />}
     </div>
   )
 }
+

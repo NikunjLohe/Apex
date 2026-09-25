@@ -293,7 +293,7 @@ export default function CustomerDetail() {
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
               <IDoc size={16} /> Linked Policies
             </h3>
-            {plans.data.length ? (
+            {plans.data?.length ? (
               <div className="table-wrap">
                 <table className="tbl text-xs">
                   <thead>

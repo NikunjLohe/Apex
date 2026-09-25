@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { formatINR, fmtDate } from '../../utils/format'
+import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
 import { useDoc } from '../../hooks/useFirestore'
 import { IPrint, IUsers, IDashboard, IPlus } from '../../components/ui/icons'
 import Logo from '../../components/ui/Logo'
@@ -497,25 +498,25 @@ export default function CommissionBill() {
           <div className="grid grid-cols-1 md:grid-cols-7 items-center gap-2">
             <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-center shadow-sm">
               <span className="text-[10px] uppercase font-bold text-blue-600 block">Gross Commission</span>
-              <span className="text-sm font-extrabold text-blue-900 block mt-1">{formatINR(bill.grossCommission || bill.totalAmount || 0)}</span>
+              <span className="text-sm font-extrabold text-blue-900 block mt-1">{formatINR(getPayoutGross(bill))}</span>
             </div>
             <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
             <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
             <div className="bg-red-50 border border-red-100 p-3 rounded-lg text-center shadow-sm">
               <span className="text-[10px] uppercase font-bold text-red-600 block">TDS (5%)</span>
-              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(bill.tds || 0)}</span>
+              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(getPayoutTds(bill))}</span>
             </div>
             <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
             <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
             <div className="bg-red-50 border border-red-100 p-3 rounded-lg text-center shadow-sm">
               <span className="text-[10px] uppercase font-bold text-red-600 block">Admin Charges (5%)</span>
-              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(bill.adminCharge || 0)}</span>
+              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(getPayoutAdminCharge(bill))}</span>
             </div>
             <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
             <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
             <div className="bg-green-50 border border-green-200 p-3 rounded-lg text-center shadow-sm ring-2 ring-green-500/20">
               <span className="text-[10px] uppercase font-bold text-green-600 block">Net Payable</span>
-              <span className="text-base font-black text-green-900 block mt-1">{formatINR(bill.netPayable || bill.totalAmount || 0)}</span>
+              <span className="text-base font-black text-green-900 block mt-1">{formatINR(getPayoutNet(bill))}</span>
             </div>
           </div>
         </div>

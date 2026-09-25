@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
+    "@supabase/supabase-js": "^2.117.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.12.2",
     "framer-motion": "^11.2.10",

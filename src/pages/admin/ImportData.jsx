@@ -1,23 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import * as xlsx from 'xlsx'
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  setDoc, 
-  addDoc, 
-  serverTimestamp, 
-  increment, 
-  where, 
-  query, 
-  writeBatch 
-} from 'firebase/firestore'
-import { db } from '../../firebase'
-import { updateDashboardSummary } from '../../lib/summary'
+import { supabase, masterDataAPI, customersAPI, policiesAPI, paymentsAPI, profilesAPI, auditAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
-import { isRD } from '../../data/compensation'
 import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -27,9 +12,6 @@ import { Link } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
 import { recordPayment } from '../../lib/payments'
 import { computePlan } from '../../lib/calc'
-
-const DEFAULT_MDA = []
-const DEFAULT_FD_PENSION = []
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',
@@ -69,14 +51,14 @@ export default function ImportData() {
   useEffect(() => {
     (async () => {
       try {
-        const commSnap = await getDoc(doc(db, 'config', 'commissions'))
-        const fetchedData = commSnap.exists() ? commSnap.data().commissions : null
+        const [cMap, sObj, pList, profiles] = await Promise.all([
+          masterDataAPI.getCommissionMaster().catch(() => ({})),
+          masterDataAPI.getSystemSettings().catch(() => ({})),
+          masterDataAPI.getPlansMaster().catch(() => []),
+          profilesAPI.listProfiles().catch(() => []),
+        ])
 
-        // Official APEX cumulative commission master (from APEX Performance & Reward Structure)
-        // These are CUMULATIVE percentages — the differential engine subtracts upline from downline
-        // to produce the correct per-rank differential payout shown in the business document.
         const OFFICIAL_COMMISSION_MASTER = {
-          // RD Plans — each number is the cumulative % for that rank
           RD1Y: { 1: { AO:4.00,AM:5.00,ADM:5.70,DM:6.25,SDM:6.65,CM:7.00,AGM:7.25,GM:7.45,ZM:7.65,ED:7.80,SED:7.95,MD:8.05,CMD:8.15,AVP:8.25,VP:8.35,SVP:8.45,MGD:8.55 } },
           RD2Y: {
             1: { AO:6.00,AM:7.25,ADM:8.05,DM:8.65,SDM:9.05,CM:9.40,AGM:9.65,GM:9.80,ZM:9.95,ED:10.10,SED:10.25,MD:10.35,CMD:10.45,AVP:10.55,VP:10.65,SVP:10.75,MGD:10.85 },
@@ -100,7 +82,6 @@ export default function ImportData() {
             4: { AO:1.00,AM:1.25,ADM:1.40,DM:1.50,SDM:1.60,CM:1.70,AGM:1.80,GM:1.90,ZM:2.00,ED:2.10,SED:2.20,MD:2.30,CMD:2.40,AVP:2.50,VP:2.60,SVP:2.70,MGD:2.80 },
             5: { AO:1.00,AM:1.25,ADM:1.40,DM:1.50,SDM:1.60,CM:1.70,AGM:1.80,GM:1.90,ZM:2.00,ED:2.10,SED:2.20,MD:2.30,CMD:2.40,AVP:2.50,VP:2.60,SVP:2.70,MGD:2.80 }
           },
-          // FD / Pension Plans (cumulative %)
           FD1Y:  { 1: { AO:1.50,AM:2.50,ADM:3.00,DM:3.50,SDM:3.75,CM:4.00,AGM:4.25,GM:4.50,ZM:4.75,ED:5.00,SED:5.25,MD:5.50,CMD:5.75,AVP:6.00,VP:6.25,SVP:6.50,MGD:7.00 } },
           FD2Y:  { 1: { AO:2.25,AM:3.75,ADM:4.50,DM:5.00,SDM:5.25,CM:5.50,AGM:5.75,GM:6.00,ZM:6.25,ED:6.50,SED:6.75,MD:7.00,CMD:7.25,AVP:7.50,VP:7.75,SVP:8.00,MGD:8.50 } },
           FD3Y:  { 1: { AO:2.50,AM:4.25,ADM:5.00,DM:5.50,SDM:5.75,CM:6.00,AGM:6.25,GM:6.50,ZM:6.75,ED:7.00,SED:7.25,MD:7.50,CMD:7.75,AVP:8.00,VP:8.25,SVP:8.50,MGD:9.00 } },
@@ -109,62 +90,38 @@ export default function ImportData() {
           PENS:  { 1: { AO:3.00,AM:5.00,ADM:5.75,DM:6.25,SDM:6.50,CM:6.75,AGM:7.00,GM:7.25,ZM:7.50,ED:7.75,SED:8.00,MD:8.25,CMD:8.50,AVP:8.75,VP:9.00,SVP:9.25,MGD:10.00 } },
         }
 
-        // Use Firestore config only if it has valid new-format keys (AM key check)
-        if (fetchedData && fetchedData.RD1Y && fetchedData.RD1Y[1] && fetchedData.RD1Y[1].AM !== undefined) {
-          setCommissionsConfig(fetchedData)
+        if (cMap && Object.keys(cMap).length > 0) {
+          setCommissionsConfig(cMap)
         } else {
           setCommissionsConfig(OFFICIAL_COMMISSION_MASTER)
         }
-      } catch (err) {
-        console.warn('Commissions config skipped:', err)
-        setCommissionsConfig({
-          RD1Y: { 1: { AO:4.00,AM:5.00,ADM:5.70,DM:6.25,SDM:6.65,CM:7.00,AGM:7.25,GM:7.45,ZM:7.65,ED:7.80,SED:7.95,MD:8.05,CMD:8.15,AVP:8.25,VP:8.35,SVP:8.45,MGD:8.55 } }
-        })
-      }
 
-      try {
-        const settingsSnap = await getDoc(doc(db, 'config', 'settings'))
-        if (settingsSnap.exists() && settingsSnap.data().excelMapping) {
-          setMapping(settingsSnap.data().excelMapping)
+        if (sObj?.excelMapping) {
+          setMapping(sObj.excelMapping)
         }
-      } catch (err) {
-        console.warn('Excel mapping config fetch skipped:', err)
-      }
 
-      try {
-        const usersSnap = await getDocs(collection(db, 'users'))
+        setPlansMaster(pList || [])
+
         const uMap = {}
         const idMap = {}
-        usersSnap.forEach(d => {
-          const u = d.data()
-          const userObj = { id: d.id, name: u.name, branchId: u.branchId, rank: u.rank, sponsorCode: u.sponsorCode, referredBy: u.referredBy }
-          if (u.sponsorCode) {
-            uMap[u.sponsorCode.trim().toLowerCase()] = userObj
+        ;(profiles || []).forEach(u => {
+          const userObj = {
+            id: u.id,
+            name: u.name,
+            branchId: u.branchId || u.branch_id,
+            rank: u.rank,
+            sponsorCode: u.sponsorCode || u.sponsor_code,
+            referredBy: u.referredBy || u.sponsor_id
           }
-          idMap[d.id] = userObj
+          if (userObj.sponsorCode) {
+            uMap[userObj.sponsorCode.trim().toLowerCase()] = userObj
+          }
+          idMap[u.id] = userObj
         })
         setAgentsMap(uMap)
         setUsersMap(idMap)
       } catch (err) {
-        console.warn('Agent mapping fetch failed:', err)
-      }
-
-      try {
-        const masterSnap = await getDocs(collection(db, 'plans_master'))
-        const mPlans = []
-        masterSnap.forEach(d => {
-          mPlans.push({ id: d.id, ...d.data() })
-        })
-        setPlansMaster(mPlans)
-      } catch (err) {
-        console.warn('Configured Plan list lookup failed:', err)
-        setPlansMaster([
-          { name: 'RD 1 Year', code: 'RD1Y', duration: 1, type: 'RD' },
-          { name: 'RD 2 Year', code: 'RD2Y', duration: 2, type: 'RD' },
-          { name: 'RD 3 Year', code: 'RD3Y', duration: 3, type: 'RD' },
-          { name: 'RD 4 Year', code: 'RD4Y', duration: 4, type: 'RD' },
-          { name: 'Pension', code: 'PENS', duration: 5, type: 'FD' },
-        ])
+        console.warn('[ImportData] Initial data load warning:', err)
       }
     })()
   }, [])
@@ -194,7 +151,7 @@ export default function ImportData() {
     }
   }
 
-  // Check duplicate policy numbers & customer IDs in database (using query batches of 30)
+  // Check duplicate policy numbers & customer IDs in Supabase database
   const queryExistingDuplicates = async (policyNumbers, customerIds) => {
     const existingPolicies = new Set()
     const existingCustomerIds = new Set()
@@ -202,25 +159,23 @@ export default function ImportData() {
     const uniquePolicies = [...new Set(policyNumbers)].filter(Boolean)
     const uniqueCusts = [...new Set(customerIds)].filter(Boolean)
 
-    // Chunk policy queries
-    for (let i = 0; i < uniquePolicies.length; i += 30) {
-      const chunk = uniquePolicies.slice(i, i + 30)
-      const q = query(collection(db, 'plans'), where('policyNumber', 'in', chunk))
-      const snap = await getDocs(q)
-      snap.forEach(d => {
-        const val = d.data().policyNumber
-        if (val) existingPolicies.add(String(val).trim().toLowerCase())
+    if (uniquePolicies.length > 0) {
+      const { data: pData } = await supabase
+        .from('policies')
+        .select('policy_number')
+        .in('policy_number', uniquePolicies)
+      ;(pData || []).forEach(p => {
+        if (p.policy_number) existingPolicies.add(String(p.policy_number).trim().toLowerCase())
       })
     }
 
-    // Chunk customer queries
-    for (let i = 0; i < uniqueCusts.length; i += 30) {
-      const chunk = uniqueCusts.slice(i, i + 30)
-      const q = query(collection(db, 'customers'), where('customerId', 'in', chunk))
-      const snap = await getDocs(q)
-      snap.forEach(d => {
-        const val = d.data().customerId
-        if (val) existingCustomerIds.add(String(val).trim().toLowerCase())
+    if (uniqueCusts.length > 0) {
+      const { data: cData } = await supabase
+        .from('customers')
+        .select('customer_id')
+        .in('customer_id', uniqueCusts)
+      ;(cData || []).forEach(c => {
+        if (c.customer_id) existingCustomerIds.add(String(c.customer_id).trim().toLowerCase())
       })
     }
 
@@ -469,8 +424,15 @@ export default function ImportData() {
     reader.readAsBinaryString(file)
   }
 
-  // Execute Import sequentially in Firestore writeBatch chunks of 50
+  // Execute Import sequentially using Supabase DAL
   const handleImport = async () => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Financial imports are disabled in View As Agent mode.')
+      return
+    }
+
     if (data.length === 0) return
     const validRows = data.filter(d => d.valid)
     if (validRows.length === 0) {
@@ -484,172 +446,82 @@ export default function ImportData() {
     let successCount = 0
     let failedCount = 0
     let totalImportedBusiness = 0
-    let totalImportedCommissions = 0
     const logs = []
 
-    const batchSize = 50
-    for (let i = 0; i < validRows.length; i += batchSize) {
-      const chunk = validRows.slice(i, i + batchSize)
-      const batch = writeBatch(db)
-      const createdPolicies = []
-
-      for (const row of chunk) {
-        try {
-          const agentRef = row.agent
-          
-          // 1. Create Customer
-          const custRef = doc(collection(db, 'customers'))
-          const customerDocId = custRef.id
-
-          batch.set(custRef, {
-            customerId: row.customerId,
-            name: row.customerName,
-            phone: row.mobile || '0000000000',
-            address: row.address || 'Imported Address',
-            branchId: agentRef.branchId || null,
-            enrolledBy: agentRef.id,
-            enrolledByName: agentRef.name,
-            plansCount: 1,
-            kycStatus: 'verified',
-            createdAt: serverTimestamp(),
-          })
-
-          // 2. Compute plan fields and Create Policy (Plan doc)
-          const policyRef = doc(collection(db, 'plans'))
-          const isRDPlan = row.planType === 'RD'
-          const calculatedAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
-
-          const computed = computePlan({
-            type: row.planCode,
-            monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
-            fdAmount: !isRDPlan ? row.totalAmount : 0,
-            startDate: row.startDate || new Date(),
-            ranksConfig,
-            policyYear: row.policyYear,
-          })
-
-          batch.set(policyRef, {
-            customerId: customerDocId,
-            customerName: row.customerName,
-            customerAccount: row.customerId,
-            policyNumber: row.policyNumber,
-            planAccountNumber: row.policyNumber,
-            agentId: agentRef.id,
-            agentName: agentRef.name,
-            branchId: agentRef.branchId || null,
-            type: row.planCode,
-            planType: row.planType,
-            policyYear: row.policyYear || computed.years,
-            duration: row.duration || computed.years,
-            monthlyAmount: computed.monthlyAmount,
-            fdAmount: computed.fdAmount,
-            totalInstallments: computed.totalInstallments,
-            paidInstallments: 0,
-            startDate: computed.startDate,
-            maturityDate: computed.maturityDate,
-            nextDueDate: computed.startDate,
-            status: 'active',
-            totalPaid: 0,
-            maturityAmount: computed.maturityAmount,
-            ratePct: computed.ratePct,
-            createdAt: serverTimestamp(),
-          })
-
-          // 3. Update Agent Profile business stats
-          const agentDocRef = doc(db, 'users', agentRef.id)
-          batch.update(agentDocRef, {
-            totalCustomers: increment(1),
-            activePolicies: increment(1),
-            businessVolume: increment(calculatedAmount),
-            recentImportDate: serverTimestamp(),
-          })
-
-          createdPolicies.push({
-            row,
-            policyId: policyRef.id,
-            customerId: customerDocId,
-            isRDPlan,
-            calculatedAmount,
-          })
-        } catch (err) {
-          console.error('Failed processing row for batch:', row, err)
-          failedCount++
-          logs.push({ row: row.rowNum, level: 'error', message: `Pre-processing error: ${err.message}` })
-        }
-      }
-
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i]
       try {
-        await batch.commit()
+        const agentRef = row.agent
+        const isRDPlan = row.planType === 'RD'
+        const calculatedAmount = isRDPlan ? row.monthlyAmount : row.totalAmount
 
-        // 4. Record Payment atomically for each created policy
-        await Promise.all(createdPolicies.map(async ({ row, policyId, customerId, isRDPlan, calculatedAmount }) => {
-          try {
-            const planRef = doc(db, 'plans', policyId)
-            const planSnap = await getDoc(planRef)
-            if (!planSnap.exists()) {
-              throw new Error('Plan not found after commit')
-            }
-            const p = planSnap.data()
-
-            await recordPayment({
-              plan: { id: policyId, ...p },
-              customer: { id: customerId, name: row.customerName, accountNumber: row.customerId },
-              agent: p.agentId ? { uid: p.agentId, name: p.agentName } : null,
-              form: {
-                amount: calculatedAmount,
-                paymentMode: 'bank_transfer',
-                transactionRef: 'INITIAL_IMPORT',
-                paidDate: row.startDate || new Date(),
-              }
-            })
-
-            totalImportedBusiness += calculatedAmount
-            successCount++
-          } catch (err) {
-            console.error('Failed to record payment for row:', row, err)
-            failedCount++
-            logs.push({ row: row.rowNum, level: 'error', message: `Initial payment recording failed: ${err.message}` })
-          }
-        }))
-      } catch (err) {
-        console.error('Batch commit failed:', err)
-        failedCount += chunk.length
-        chunk.forEach(r => {
-          logs.push({ row: r.rowNum, level: 'error', message: `Batch commit fail: ${err.message}` })
+        const computed = computePlan({
+          type: row.planCode,
+          monthlyAmount: isRDPlan ? row.monthlyAmount : 0,
+          fdAmount: !isRDPlan ? row.totalAmount : 0,
+          startDate: row.startDate || new Date(),
+          ranksConfig,
+          policyYear: row.policyYear,
         })
+
+        // 1. Create Customer
+        const customer = await customersAPI.createCustomer({
+          customerId: row.customerId,
+          name: row.customerName,
+          phone: row.mobile || '0000000000',
+          address: row.address || 'Imported Address',
+          branchId: agentRef.branchId || null,
+          enrolledBy: agentRef.id,
+        })
+
+        // 2. Create Policy
+        const policy = await policiesAPI.createPolicy({
+          policyNumber: row.policyNumber,
+          customerId: customer.id,
+          agentId: agentRef.id,
+          planCode: row.planCode,
+          planType: row.planType,
+          policyYear: row.policyYear || computed.years,
+          installmentAmount: computed.monthlyAmount,
+          fdAmount: computed.fdAmount,
+          totalInstallments: computed.totalInstallments,
+          startDate: (row.startDate || new Date()).toISOString(),
+          maturityDate: computed.maturityDate ? new Date(computed.maturityDate).toISOString() : null,
+          nextDueDate: (row.startDate || new Date()).toISOString(),
+        })
+
+        // 3. Record initial payment atomically (triggers server-side commission RPC)
+        await paymentsAPI.recordPayment({
+          policyId: policy.id,
+          amount: calculatedAmount,
+          paymentMode: 'bank_transfer',
+          transactionRef: 'INITIAL_IMPORT',
+          paidDate: (row.startDate || new Date()).toISOString(),
+        })
+
+        totalImportedBusiness += calculatedAmount
+        successCount++
+      } catch (err) {
+        console.error('Failed processing row:', row, err)
+        failedCount++
+        logs.push({ row: row.rowNum, level: 'error', message: err.message || 'Import failed' })
       }
 
-      setProgress(Math.round(((i + chunk.length) / validRows.length) * 100))
+      setProgress(Math.round(((i + 1) / validRows.length) * 100))
     }
 
-    // Write Import summary session log
+    // Write audit log
     try {
-      await addDoc(collection(db, 'imports'), {
+      await auditAPI.logAction('EXCEL_IMPORT', {
         fileName,
-        importDate: serverTimestamp(),
         totalRows: data.length,
         successRows: successCount,
         duplicateRows: duplicatesCount,
         failedRows: failedCount + (data.length - validRows.length),
-        logs: logs.slice(0, 100),
         status: successCount > 0 ? 'completed' : 'failed',
-        triggeredBy: profile?.name || 'Administrator',
       })
     } catch (e) {
-      console.error('Could not log import summary:', e)
-    }
-
-    try {
-      await updateDashboardSummary({
-        totalBusiness: totalImportedBusiness,
-        monthlyBusiness: totalImportedBusiness,
-        activePlans: successCount,
-        totalPolicies: successCount,
-        todayImportedPolicies: successCount,
-        todayImportedCustomers: successCount,
-      })
-    } catch (err) {
-      console.error('Failed to update dashboard summaries:', err)
+      console.error('Could not log import audit summary:', e)
     }
 
     setImportSummary({

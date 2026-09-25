@@ -41,3 +41,21 @@ functions/node_modules
 # Firebase service account key — NEVER commit
 serviceAccountKey.json
 .vercel
+
+# Scratch, testing scripts & local credentials
+scratch/
+*.json.local
+.admin_credentials.json
+senior_management_credentials.json
+tests/.auth/
+test-results/
+playwright-report/
+*.xlsx
+audit_results.json
+fd_audit.json
+fd_dry_run.json
+policy_year_audit.json
+rd_audit_results.json
+rd_dry_run*.json
+
+

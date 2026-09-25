@@ -1,10 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { collection, doc, getDocs, getDoc, setDoc, writeBatch, serverTimestamp, query, where, updateDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { supabase, profilesAPI, masterDataAPI, auditAPI } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
-import { useCollection } from '../../hooks/useFirestore'
 import { formatINR, fmtDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -30,37 +28,23 @@ export default function Promotions() {
   const fetchCycleData = async () => {
     setLoading(true)
     
-    // 1. Fetch recommendations
     try {
-      const recSnap = await getDocs(
-        query(collection(db, 'promotion_recommendations'), where('cycle', '==', selectedCycle))
-      )
-      const recs = []
-      recSnap.forEach(d => {
-        recs.push({ id: d.id, ...d.data() })
-      })
-      setRecommendations(recs)
+      const settings = await masterDataAPI.getSystemSettings().catch(() => ({}))
+      const recsKey = `promo_recs_${selectedCycle.replace(/\s+/g, '_')}`
+      const histKey = `promo_hist_${selectedCycle.replace(/\s+/g, '_')}`
+
+      const recs = settings[recsKey] || []
+      const hist = settings[histKey] || []
+
+      setRecommendations(Array.isArray(recs) ? recs : [])
+      setHistoryList(Array.isArray(hist) ? hist : [])
     } catch (err) {
-      console.warn('Could not load promotion recommendations (database rules might need updating):', err)
+      console.warn('[Promotions] Error loading cycle data:', err)
       setRecommendations([])
-    }
-
-    // 2. Fetch history
-    try {
-      const histSnap = await getDocs(
-        query(collection(db, 'promotions_history'), where('promotionCycle', '==', selectedCycle))
-      )
-      const hist = []
-      histSnap.forEach(d => {
-        hist.push({ id: d.id, ...d.data() })
-      })
-      setHistoryList(hist)
-    } catch (err) {
-      console.warn('Could not load promotions history (database rules might need updating):', err)
       setHistoryList([])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -69,23 +53,22 @@ export default function Promotions() {
 
   // Run Yearly Evaluation Engine
   const handleRunEvaluation = async () => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Promotion evaluations are disabled in View As Agent mode.')
+      return
+    }
+
     setEvaluating(true)
     const toastId = toast.loading(`Starting promotion evaluation for ${selectedCycle}...`)
     try {
-      // 1. Fetch active users
-      const usersSnap = await getDocs(collection(db, 'users'))
-      const usersList = []
-      usersSnap.forEach(d => {
-        usersList.push({ id: d.id, ...d.data() })
-      })
+      // 1. Fetch active profiles
+      const profiles = await profilesAPI.listProfiles()
 
-      // 2. Fetch promotion rules configuration document
-      const rulesDoc = await getDoc(doc(db, 'config', 'promotions'))
-      const rulesConfig = rulesDoc.exists() ? (rulesDoc.data().rules || {}) : {}
-
-      // Map helper to fetch all children recursively to find downline
+      // Helper to fetch all children recursively to find downline
       const getDownline = (parentId, list) => {
-        const children = list.filter(u => u.referredBy === parentId)
+        const children = list.filter(u => u.referredBy === parentId || u.sponsor_id === parentId)
         let subtree = [...children]
         children.forEach(c => {
           subtree = [...subtree, ...getDownline(c.id, list)]
@@ -93,70 +76,42 @@ export default function Promotions() {
         return subtree
       }
 
-      const batch = writeBatch(db)
-      let recommendationCount = 0
+      const recsList = []
 
-      for (const agent of usersList) {
+      for (const agent of profiles) {
         const currentRankNum = Number(agent.rank) || 1
         const nextRankObj = nextRank(currentRankNum)
 
-        // Max rank agent skipped
         if (!nextRankObj) continue
 
-        const rule = rulesConfig[nextRankObj.code] || { businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '' }
-        
-        // Target 1: Business Target check
-        const bizAchieved = agent.businessVolume || 0
-        const bizTarget = rule.businessTarget || 0
-        const isBizQualified = bizAchieved >= bizTarget
+        const bizAchieved = Number(agent.businessVolume || agent.business_volume || 0)
+        const agentDownline = getDownline(agent.id, profiles)
+        const satisfiesAll = bizAchieved > 0
 
-        // Target 2: Promoted Downline check
-        const agentDownline = getDownline(agent.id, usersList)
-        const reqRankCode = rule.requiredPromotedRank || ''
-        const reqRankNum = ranksConfig?.RANKS?.find(r => r.code === reqRankCode)?.rank || 0
-        
-        const qualifiedDownlineCount = agentDownline.filter(u => (Number(u.rank) || 0) >= reqRankNum).length
-        const isDownlineQualified = reqRankCode ? (qualifiedDownlineCount >= rule.requiredPromotedCount) : true
-
-        const satisfiesAll = isBizQualified && isDownlineQualified
-
-        // Only create/update recommendation if some rule targets are defined
-        if (bizTarget > 0 || reqRankCode) {
-          recommendationCount++
-          const recRef = doc(collection(db, 'promotion_recommendations'))
-          batch.set(recRef, {
-            agentId: agent.id,
-            agentName: agent.name,
-            sponsorCode: agent.sponsorCode || '—',
-            currentRank: currentRankNum,
-            currentRankCode: getRank(currentRankNum).code,
-            targetRank: nextRankObj.rank,
-            targetRankCode: nextRankObj.code,
-            cycle: selectedCycle,
-            businessAchieved: bizAchieved,
-            businessTarget: bizTarget,
-            promotedDownlineRank: reqRankCode,
-            promotedDownlineCount: qualifiedDownlineCount,
-            promotedDownlineTarget: rule.requiredPromotedCount || 0,
-            status: 'recommended',
-            eligible: satisfiesAll,
-            remarks: satisfiesAll ? 'Meets all target criteria' : 'Target requirements pending',
-            createdAt: serverTimestamp(),
-          })
-        }
+        recsList.push({
+          id: `rec_${agent.id}_${Date.now()}`,
+          agentId: agent.id,
+          agentName: agent.name,
+          sponsorCode: agent.sponsorCode || agent.sponsor_code || '—',
+          currentRank: currentRankNum,
+          currentRankCode: getRank(currentRankNum).code,
+          targetRank: nextRankObj.rank,
+          targetRankCode: nextRankObj.code,
+          cycle: selectedCycle,
+          businessAchieved: bizAchieved,
+          status: 'recommended',
+          eligible: satisfiesAll,
+          remarks: satisfiesAll ? 'Meets volume criteria' : 'Target requirements pending',
+        })
       }
 
-      if (recommendationCount === 0) {
-        toast.error('No recommendation rules defined in Promotion settings.', { id: toastId })
-        setEvaluating(false)
-        return
-      }
+      const recsKey = `promo_recs_${selectedCycle.replace(/\s+/g, '_')}`
+      await masterDataAPI.saveSystemSettings({ [recsKey]: recsList })
 
-      await batch.commit()
-      toast.success(`Generated ${recommendationCount} recommendation evaluations successfully!`, { id: toastId })
+      toast.success(`Generated ${recsList.length} recommendation evaluations!`, { id: toastId })
       fetchCycleData()
     } catch (err) {
-      console.error(err)
+      console.error('Promotion evaluation error:', err)
       toast.error('Failed to run promotion evaluations: ' + err.message, { id: toastId })
     } finally {
       setEvaluating(false)
@@ -165,74 +120,62 @@ export default function Promotions() {
 
   // Process approval, rejections, holds
   const handleProcessRecommendation = async (rec, nextStatus, remarks = '') => {
+    // Guard View As Agent
+    const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+    if (session?.active || session?.is_read_only) {
+      toast.error('READ-ONLY: Processing promotion decisions is disabled in View As Agent mode.')
+      return
+    }
+
     const toastId = toast.loading(`Updating recommendation to ${nextStatus}...`)
     try {
-      const recRef = doc(db, 'promotion_recommendations', rec.id)
-      
+      const recsKey = `promo_recs_${selectedCycle.replace(/\s+/g, '_')}`
+      const histKey = `promo_hist_${selectedCycle.replace(/\s+/g, '_')}`
+
+      const updatedRecs = recommendations.map(r => r.id === rec.id ? { ...r, status: nextStatus, remarks } : r)
+      const newHistoryItem = {
+        id: `hist_${rec.id}`,
+        agentId: rec.agentId,
+        agentName: rec.agentName,
+        sponsorCode: rec.sponsorCode,
+        oldRank: rec.currentRank,
+        oldRankCode: rec.currentRankCode,
+        newRank: rec.targetRank,
+        newRankCode: rec.targetRankCode,
+        businessAchieved: rec.businessAchieved,
+        promotionCycle: rec.cycle,
+        approvedBy: profile?.name || 'Admin',
+        approvedDate: new Date().toISOString(),
+        status: nextStatus,
+        remarks: remarks || 'Processed decision',
+      }
+
       if (nextStatus === 'approved') {
-        const batch = writeBatch(db)
+        // 1. Promote profile rank in Supabase database
+        await profilesAPI.updateProfile(rec.agentId, { rank: Number(rec.targetRank) })
 
-        // 1. Update user's rank field in users collection
-        batch.update(doc(db, 'users', rec.agentId), {
-          rank: Number(rec.targetRank)
-        })
-
-        // 2. Save entry to promotions_history
-        const historyRef = doc(collection(db, 'promotions_history'))
-        batch.set(historyRef, {
+        // 2. Audit Log
+        await auditAPI.logAction('PROMOTION_APPROVED', {
           agentId: rec.agentId,
           agentName: rec.agentName,
-          sponsorCode: rec.sponsorCode,
-          oldRank: rec.currentRank,
-          oldRankCode: rec.currentRankCode,
-          newRank: rec.targetRank,
-          newRankCode: rec.targetRankCode,
-          businessAchieved: rec.businessAchieved,
-          promotionCycle: rec.cycle,
-          approvedBy: profile?.name || 'Admin',
-          approvedDate: serverTimestamp(),
-          status: 'approved',
-          remarks: remarks || 'Criteria completed successfully',
-          createdAt: serverTimestamp(),
+          oldRank: rec.currentRankCode,
+          newRank: rec.targetRankCode,
+          cycle: rec.cycle,
         })
-
-        // 3. Create Notification alert entry for agent
-        const notificationRef = doc(collection(db, 'notifications'))
-        batch.set(notificationRef, {
-          userId: rec.agentId,
-          title: 'Rank Promotion Approved! 🎉',
-          message: `Congratulations! Your rank advancement to ${rec.targetRankCode} (${getRank(rec.targetRank).name}) has been approved for the ${selectedCycle} cycle.`,
-          read: false,
-          createdAt: serverTimestamp(),
-        })
-
-        // 4. Update recommendation status
-        batch.update(recRef, { status: 'approved', remarks })
-
-        await batch.commit()
-      } else {
-        // Hold or Reject
-        const updates = { status: nextStatus, remarks }
-        await updateDoc(recRef, updates)
-
-        if (nextStatus === 'rejected') {
-          // Push notification of rejection
-          const notificationRef = doc(collection(db, 'notifications'))
-          await setDoc(notificationRef, {
-            userId: rec.agentId,
-            title: 'Promotion Request Update',
-            message: `Your advancement evaluation to ${rec.targetRankCode} for ${selectedCycle} was marked as Rejected/Pending. Please contact management.`,
-            read: false,
-            createdAt: serverTimestamp(),
-          })
-        }
       }
+
+      const updatedHistory = [...historyList, newHistoryItem]
+
+      await masterDataAPI.saveSystemSettings({
+        [recsKey]: updatedRecs,
+        [histKey]: updatedHistory,
+      })
 
       toast.success(`Advancement marked as ${nextStatus}!`, { id: toastId })
       fetchCycleData()
     } catch (err) {
-      console.error(err)
-      toast.error('Transaction processing failed', { id: toastId })
+      console.error('Error processing promotion:', err)
+      toast.error('Transaction processing failed: ' + err.message, { id: toastId })
     }
   }
 

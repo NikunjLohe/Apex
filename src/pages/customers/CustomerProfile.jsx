@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { where } from 'firebase/firestore'
-import { useDoc, useCollection } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import { useAuth } from '../../contexts/AuthContext'
-import { setKycStatus, updateCustomer } from '../../lib/customers'
+import { getCustomer, setKycStatus, updateCustomer } from '../../lib/customers'
+import { listPolicies } from '../../lib/supabase/policies'
+import { listPayments } from '../../lib/supabase/payments'
 import { formatINR, fmtDate, fmtDateTime, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -19,25 +19,78 @@ export default function CustomerProfile() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { can } = usePermission()
-  const { data: customer, loading } = useDoc(`customers/${id}`)
-  const plans = useCollection('plans', [where('customerId', '==', id)], `cust-plans-${id}`)
-  const payments = useCollection('payments', [where('customerId', '==', id)], `cust-pay-${id}`)
+  const { profile, isSuperAdmin, isViewingAs } = useAuth()
+
+  const [customer, setCustomer] = useState(null)
+  const [plans, setPlans] = useState([])
+  const [payments, setPayments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [paymentsLoading, setPaymentsLoading] = useState(true)
+
   const [tab, setTab] = useState('Overview')
   const [kycAction, setKycAction] = useState(null) // 'verified' | 'rejected'
   const [editOpen, setEditOpen] = useState(false)
 
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    getCustomer(id)
+      .then((data) => {
+        if (!mounted) return
+        setCustomer(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[CustomerProfile] Error loading customer:', err)
+        setCustomer(null)
+        setLoading(false)
+      })
+
+    setPlansLoading(true)
+    listPolicies({ customerId: id })
+      .then((data) => {
+        if (!mounted) return
+        setPlans(data || [])
+        setPlansLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[CustomerProfile] Error loading plans:', err)
+        setPlans([])
+        setPlansLoading(false)
+      })
+
+    setPaymentsLoading(true)
+    listPayments({ customerId: id })
+      .then((data) => {
+        if (!mounted) return
+        setPayments(data || [])
+        setPaymentsLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[CustomerProfile] Error loading payments:', err)
+        setPayments([])
+        setPaymentsLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [id])
+
   const sortedPayments = useMemo(
-    () => [...payments.data].sort((a, b) => (toDate(b.paidDate) || 0) - (toDate(a.paidDate) || 0)),
-    [payments.data]
+    () => [...payments].sort((a, b) => (toDate(b.paidDate) || 0) - (toDate(a.paidDate) || 0)),
+    [payments]
   )
 
-  const { profile, isSuperAdmin, isViewingAs } = useAuth()
   const isAgent = !isSuperAdmin && (profile?.rank || 0) < 10
 
   if (loading) return <div className="mx-auto max-w-4xl"><SkeletonForm fields={5} /></div>
   if (!customer) return <EmptyState title="Customer not found" message="This customer may have been removed." />
   
-  if (isAgent && customer.enrolledBy !== profile?.uid) {
+  if (isAgent && customer.enrolledBy !== (profile?.id || profile?.uid)) {
     return <EmptyState title="Access Denied" message="You are not authorized to view this customer's details." />
   }
 
@@ -102,8 +155,8 @@ export default function CustomerProfile() {
       </div>
 
       {tab === 'Overview' && <Overview customer={customer} />}
-      {tab === 'Plans' && <PlansTab plans={plans} customerId={id} navigate={navigate} />}
-      {tab === 'Payment History' && <PaymentsTab payments={sortedPayments} loading={payments.loading} navigate={navigate} />}
+      {tab === 'Plans' && <PlansTab plans={plans} loading={plansLoading} customerId={id} navigate={navigate} isViewingAs={isViewingAs} />}
+      {tab === 'Payment History' && <PaymentsTab payments={sortedPayments} loading={paymentsLoading} navigate={navigate} />}
       {tab === 'Documents' && <DocumentsTab customer={customer} />}
 
       <ConfirmDialog
@@ -168,13 +221,13 @@ function Info({ title, rows }) {
   )
 }
 
-function PlansTab({ plans, customerId, navigate }) {
-  if (plans.loading) return <SkeletonForm fields={3} />
-  if (!plans.data.length)
+function PlansTab({ plans, loading, customerId, navigate, isViewingAs }) {
+  if (loading) return <SkeletonForm fields={3} />
+  if (!plans || !plans.length)
     return <EmptyState icon={<IPlus size={24} />} title="No plans yet" message="Enroll this customer in an RD or FD plan." action={!isViewingAs && <Link to={`/customers/${customerId}/enroll`} className="btn-gold mt-1">Enroll in Plan</Link>} />
   return (
     <div className="space-y-3">
-      {plans.data.map((p) => {
+      {plans.map((p) => {
         const pct = p.totalInstallments ? Math.round((p.paidInstallments / p.totalInstallments) * 100) : 0
         return (
           <div key={p.id} className="card p-4">

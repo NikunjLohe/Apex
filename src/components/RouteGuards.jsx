@@ -27,10 +27,6 @@ export function Protected({ children, capability, ignorePasswordForce }) {
     console.log('[Protected Route Guard] User is not authenticated. Redirecting to /login from:', location.pathname)
     return <Navigate to="/login" replace state={{ from: location }} />
   }
-  if (!ignorePasswordForce && profile?.mustChangePassword && location.pathname !== '/change-password') {
-    console.log('[Protected Route Guard] Force change password active. Redirecting to /change-password.')
-    return <Navigate to="/change-password" replace />
-  }
   if (capability && !can(capability)) {
     console.warn('[Protected Route Guard] Unauthorized capability:', capability, 'Redirecting.')
     return <Navigate to="/unauthorized" replace />

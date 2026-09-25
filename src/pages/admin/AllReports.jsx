@@ -5,6 +5,7 @@ import { db } from '../../firebase'
 import { useCollection } from '../../hooks/useFirestore'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate } from '../../utils/format'
+import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
 import StatusBadge from '../../components/ui/StatusBadge'
 import RankBadge from '../../components/ui/RankBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -41,13 +42,13 @@ export default function AllReports() {
 
   const branchName = (branchId) => {
     if (!branchId) return '—'
-    return allBranches.data.find(b => b.id === branchId)?.name || '—'
+    return (allBranches.data || []).find(b => b.id === branchId)?.name || '—'
   }
 
   // 1. Filtered Agents list
   const agentsData = useMemo(() => {
     if (loading) return []
-    return allUsers.data.filter(u => {
+    return (allUsers.data || []).filter(u => {
       if (filterBranch && u.branchId !== filterBranch) return false
       if (filterRank && String(u.rank) !== String(filterRank)) return false
       if (filterStatus && u.status !== filterStatus) return false
@@ -201,10 +202,10 @@ export default function AllReports() {
         'Sponsor Code': p.sponsorCode,
         'PAN Number': p.panNumber || '—',
         'Payout Period': `${p.month}/${p.year}`,
-        'Gross Commission': p.grossCommission || 0,
-        'TDS (5%)': p.tds || 0,
-        'Admin Charge (5%)': p.adminCharge || 0,
-        'Net Payable': p.netPayable || 0,
+        'Gross Commission': getPayoutGross(p),
+        'TDS (5%)': getPayoutTds(p),
+        'Admin Charge (5%)': getPayoutAdminCharge(p),
+        'Net Payable': getPayoutNet(p),
         'Payout Status': p.status,
       }))
     } else if (activeTab === 'promotions') {

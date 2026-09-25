@@ -158,7 +158,7 @@ export default function MonthlyBusiness() {
   const planMaps = useMemo(() => {
     const byId = {}
     const byAcc = {}
-    plansCollection.data.forEach((p) => {
+    ;(plansCollection.data || []).forEach((p) => {
       byId[p.id] = p
       if (p.policyNumber) byAcc[p.policyNumber] = p
       if (p.planAccountNumber) byAcc[p.planAccountNumber] = p
@@ -171,7 +171,7 @@ export default function MonthlyBusiness() {
     const set = new Set()
     set.add(currentMonthStr)
 
-    paymentsCollection.data.forEach((p) => {
+    ;(paymentsCollection.data || []).forEach((p) => {
       const d = toDate(p.paidDate)
       if (d) {
         const m = format(d, 'yyyy-MM')

@@ -1,8 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { useDoc } from '../../hooks/useFirestore'
-import { rankCode } from '../../data/ranks'
+import { paymentsAPI, policiesAPI, customersAPI, profilesAPI } from '../../lib/supabase'
 import { formatINR, fmtDate } from '../../utils/format'
 import { elementToPdf } from '../../lib/pdf'
 import { shareWhatsApp, receiptMessage } from '../../lib/whatsapp'
@@ -17,19 +16,56 @@ export default function Receipt() {
   const receiptRef = useRef(null)
   const [busy, setBusy] = useState(false)
 
-  const { data: payment, loading } = useDoc(`payments/${id}`)
-  const { data: plan } = useDoc(payment ? `plans/${payment.planId}` : null)
-  const { data: customer } = useDoc(payment ? `customers/${payment.customerId}` : null)
+  const [payment, setPayment] = useState(null)
+  const [plan, setPlan] = useState(null)
+  const [customer, setCustomer] = useState(null)
+  const [agent, setAgent] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    paymentsAPI.getPayment(id)
+      .then(async (pay) => {
+        if (!mounted) return
+        if (!pay) {
+          setLoading(false)
+          return
+        }
+        setPayment(pay)
+
+        // Load plan and customer in parallel
+        const [pData, cData, aData] = await Promise.all([
+          pay.policyId ? policiesAPI.getPolicy(pay.policyId).catch(() => null) : null,
+          pay.customerId ? customersAPI.getCustomer(pay.customerId).catch(() => null) : null,
+          pay.agentId ? profilesAPI.getProfile(pay.agentId).catch(() => null) : null,
+        ])
+
+        if (mounted) {
+          if (pData) setPlan(pData)
+          if (cData) setCustomer(cData)
+          if (aData) setAgent(aData)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load receipt data:', err)
+        if (mounted) setLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [id])
 
   if (loading) return <div className="mx-auto max-w-md"><SkeletonForm fields={6} /></div>
   if (!payment) return <EmptyState title="Receipt not found" />
 
-  const remaining = plan ? Math.max(0, (plan.maturityAmount || (plan.monthlyAmount || 0) * (plan.totalInstallments || 0)) - (plan.totalPaid || 0)) : 0
+  const remaining = plan ? Math.max(0, (plan.maturityAmount || (plan.monthlyAmount || plan.installmentAmount || 0) * (plan.totalInstallments || 0)) - (plan.totalPaid || 0)) : 0
 
   const download = async () => {
     setBusy(true)
     try {
-      await elementToPdf(receiptRef.current, `${payment.receiptNumber}.pdf`)
+      await elementToPdf(receiptRef.current, `${payment.receiptNumber || 'Receipt'}.pdf`)
       toast.success('Receipt downloaded')
     } catch {
       toast.error('Could not generate PDF')
@@ -43,7 +79,7 @@ export default function Receipt() {
       receiptMessage({
         name: customer?.name || 'Customer',
         amount: payment.amount,
-        planAccount: plan?.planAccountNumber || payment.planAccountNumber,
+        planAccount: plan?.planAccountNumber || plan?.policyNumber || payment.planAccountNumber,
         receiptNumber: payment.receiptNumber,
         branch: plan?.branchId,
       }),
@@ -66,19 +102,19 @@ export default function Receipt() {
         <div className="space-y-3 p-5">
           <Block rows={[
             ['Customer', customer?.name || '—'],
-            ['Account No', customer?.accountNumber || '—'],
-            ['Plan', plan?.type || '—'],
-            ['Plan Account', plan?.planAccountNumber || payment.planAccountNumber || '—'],
+            ['Account No', customer?.accountNumber || customer?.customerId || '—'],
+            ['Plan', plan?.type || plan?.planCode || '—'],
+            ['Plan Account', plan?.planAccountNumber || plan?.policyNumber || payment.planAccountNumber || '—'],
           ]} />
           <Divider />
           <Block rows={[
             ['Installment', `${payment.installmentNumber} of ${plan?.totalInstallments ?? '—'}`],
             ['Amount Paid', formatINR(payment.amount)],
-            ['Payment Mode', String(payment.paymentMode).toUpperCase()],
+            ['Payment Mode', String(payment.paymentMode || 'cash').toUpperCase()],
             ...(payment.transactionRef ? [['Txn ID', payment.transactionRef]] : []),
             ...(payment.chequeNumber ? [['Cheque', `${payment.chequeNumber} · ${payment.bankName}`]] : []),
             ['Date', fmtDate(payment.paidDate)],
-            ['Agent', `${payment.agentName || '—'}`],
+            ['Agent', `${payment.agentName || agent?.name || '—'}`],
           ]} highlightKey="Amount Paid" />
           <Divider />
           <Block rows={[

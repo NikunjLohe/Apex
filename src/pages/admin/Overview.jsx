@@ -1,45 +1,73 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { startOfMonth, startOfDay } from 'date-fns'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
-import { useCollection } from '../../hooks/useFirestore'
+import { customersAPI, policiesAPI, paymentsAPI, profilesAPI, masterDataAPI } from '../../lib/supabase'
 import { formatINR, formatCompactINR, fmtDateTime, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats } from '../../components/ui/LoadingSkeleton'
 import { IUsers, ICalendar, ICash, IAlert } from '../../components/ui/icons'
 
 export default function Overview() {
-  const customers = useCollection('customers')
-  const plans = useCollection('plans')
-  const payments = useCollection('payments')
-  const members = useCollection('users')
-  const branches = useCollection('branches')
+  const [customersList, setCustomersList] = useState([])
+  const [policiesList, setPoliciesList] = useState([])
+  const [paymentsList, setPaymentsList] = useState([])
+  const [profilesList, setProfilesList] = useState([])
+  const [branchesList, setBranchesList] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const loading = customers.loading || plans.loading || payments.loading
+  useEffect(() => {
+    let cancelled = false
+    async function fetchOverviewData() {
+      setLoading(true)
+      try {
+        const [cData, pData, pmData, prData, bData] = await Promise.all([
+          customersAPI.listCustomers(),
+          policiesAPI.listPolicies(),
+          paymentsAPI.listPayments(),
+          profilesAPI.listProfiles(),
+          masterDataAPI.listBranches(),
+        ])
+        if (!cancelled) {
+          setCustomersList(cData || [])
+          setPoliciesList(pData || [])
+          setPaymentsList(pmData || [])
+          setProfilesList(prData || [])
+          setBranchesList(bData || [])
+        }
+      } catch (err) {
+        console.error('[Overview] Error loading overview metrics:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    fetchOverviewData()
+    return () => { cancelled = true }
+  }, [])
 
   const data = useMemo(() => {
     const today0 = startOfDay(new Date())
     const month0 = startOfMonth(new Date())
     const monthEnd = new Date(month0.getFullYear(), month0.getMonth() + 1, 0, 23, 59, 59)
 
-    const todayCollection = payments.data.filter((p) => toDate(p.paidDate) >= today0).reduce((s, p) => s + (p.amount || 0), 0)
-    const monthCollection = payments.data.filter((p) => toDate(p.paidDate) >= month0).reduce((s, p) => s + (p.amount || 0), 0)
-    const activePlans = plans.data.filter((p) => p.status === 'active')
+    const todayCollection = paymentsList.filter((p) => toDate(p.paidDate) >= today0).reduce((s, p) => s + (p.amount || 0), 0)
+    const monthCollection = paymentsList.filter((p) => toDate(p.paidDate) >= month0).reduce((s, p) => s + (p.amount || 0), 0)
+    const activePlans = policiesList.filter((p) => p.status === 'active')
     const defaulters = activePlans.filter((p) => { const d = toDate(p.nextDueDate); return d && d < today0 })
-    const maturingThisMonth = plans.data.filter((p) => { const m = toDate(p.maturityDate); return m && m >= month0 && m <= monthEnd })
+    const maturingThisMonth = policiesList.filter((p) => { const m = toDate(p.maturityDate); return m && m >= month0 && m <= monthEnd })
 
     // Branch-wise collection (this month)
     const branchMap = {}
-    payments.data.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
+    paymentsList.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
       branchMap[p.branchId || 'unknown'] = (branchMap[p.branchId || 'unknown'] || 0) + (p.amount || 0)
     })
     const branchChart = Object.entries(branchMap).map(([bid, amount]) => ({
-      name: branches.data.find((b) => b.id === bid)?.name || 'Unassigned',
+      name: branchesList.find((b) => b.id === bid)?.name || 'Unassigned',
       amount: Math.round(amount),
     }))
 
     // Agent leaderboard (this month)
     const agentMap = {}
-    payments.data.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
+    paymentsList.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
       const k = p.agentId || 'unknown'
       if (!agentMap[k]) agentMap[k] = { name: p.agentName || 'Unknown', amount: 0, count: 0 }
       agentMap[k].amount += p.amount || 0
@@ -47,18 +75,18 @@ export default function Overview() {
     })
     const leaderboard = Object.values(agentMap).sort((a, b) => b.amount - a.amount).slice(0, 10)
 
-    const recent = [...payments.data].sort((a, b) => (toDate(b.paidDate) || 0) - (toDate(a.paidDate) || 0)).slice(0, 20)
+    const recent = [...paymentsList].sort((a, b) => (toDate(b.paidDate) || 0) - (toDate(a.paidDate) || 0)).slice(0, 20)
 
     return {
-      totalCustomers: customers.data.length,
+      totalCustomers: customersList.length,
       activePlans: activePlans.length,
       todayCollection, monthCollection,
       defaulters: defaulters.length,
       maturingThisMonth: maturingThisMonth.length,
-      members: members.data.length,
+      members: profilesList.length,
       branchChart, leaderboard, recent,
     }
-  }, [customers.data, plans.data, payments.data, members.data, branches.data])
+  }, [customersList, policiesList, paymentsList, profilesList, branchesList])
 
   if (loading) return <div className="mx-auto max-w-6xl space-y-5"><SkeletonStats count={6} /></div>
 
@@ -154,3 +182,4 @@ function TT({ active, payload, label }) {
 function Empty() {
   return <div className="flex h-48 items-center justify-center text-sm text-ink-2">No data yet.</div>
 }
+

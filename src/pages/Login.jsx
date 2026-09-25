@@ -4,8 +4,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '../firebase'
+import { supabase } from '../lib/supabase/client'
+import { getProfile } from '../lib/supabase/profiles'
 import Logo from '../components/ui/Logo'
 
 const friendly = (code) =>
@@ -52,34 +52,39 @@ export default function Login() {
       let loginEmail = email.trim()
 
       if (!loginEmail.includes('@')) {
-        const q = query(collection(db, 'users'), where('sponsorCode', '==', loginEmail.toUpperCase()))
-        const snapshot = await getDocs(q)
-        if (snapshot.empty) {
+        // Query profile by sponsor_code in Supabase
+        const { data: profData, error: profErr } = await supabase
+          .from('profiles')
+          .select('email')
+          .ilike('sponsor_code', loginEmail.toUpperCase())
+          .maybeSingle()
+
+        if (profErr || !profData?.email) {
           throw { code: 'auth/user-not-found', customMessage: 'Invalid Agent Code. Please check your Agent Code or contact your administrator.' }
         }
-        loginEmail = snapshot.docs[0].data().email
+        loginEmail = profData.email
       }
 
-      const cred = await loginWithEmail(loginEmail, password, remember)
-      
-      // Perform security check to make sure redirect destination is allowed
+      await loginWithEmail(loginEmail, password)
+
+      // Fetch user profile to verify route authorization
       let allowed = true
       const targetPath = location.state?.from?.pathname
       if (targetPath) {
-        const userDoc = await getDoc(doc(db, 'users', cred.user.uid))
-        const userData = userDoc.exists() ? userDoc.data() : null
-        const r = Number(userData?.rank) || 0
-        const isSuper = Boolean(userData?.isSuperAdmin)
-        
-        const match = ROUTE_CAPS.find(([p]) => targetPath.startsWith(p))
-        if (match) {
-          const cap = match[1]
-          if (cap === 'superAdmin') {
-            allowed = isSuper
-          } else if (cap === 'admin') {
-            allowed = isSuper || (r >= 14 && r <= 18)
-          } else if (cap === 'agentOnly') {
-            allowed = !isSuper && r >= 1
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        if (currentUser) {
+          const userProf = await getProfile(currentUser.id).catch(() => null)
+          const r = Number(userProf?.rank) || 0
+          const isSuper = Boolean(userProf?.isSuperAdmin)
+          
+          const match = ROUTE_CAPS.find(([p]) => targetPath.startsWith(p))
+          if (match) {
+            const cap = match[1]
+            if (cap === 'superAdmin' || cap === 'admin') {
+              allowed = isSuper
+            } else if (cap === 'agentOnly') {
+              allowed = !isSuper && r >= 1
+            }
           }
         }
       }

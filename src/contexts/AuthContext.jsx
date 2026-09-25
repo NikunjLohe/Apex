@@ -1,48 +1,72 @@
 // ============================================================================
-// AuthContext — session, profile stream, role/permission state, auth actions.
+// AuthContext — Supabase session, profile stream, role/permission state, auth actions.
 // ============================================================================
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence,
-} from 'firebase/auth'
-import { doc, onSnapshot, setDoc, deleteDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore'
-import { auth, db, isFirebaseConfigured } from '../firebase'
+import { supabase } from '../lib/supabase/client'
+import { getProfile } from '../lib/supabase/profiles'
+import { getAdminSession, startViewAsAgent as dalStartViewAs, exitViewAsAgent as dalExitViewAs } from '../lib/supabase/adminSessions'
+import { logAuditEvent } from '../lib/supabase/audit'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null) // firebase auth user
-  const [realProfile, setRealProfile] = useState(null) // /users/{uid} doc
-  const [adminSession, setAdminSession] = useState(null) // /admin_sessions/{uid} doc
-  const [targetProfile, setTargetProfile] = useState(null) // /users/{viewingAs} doc
+  const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null) // supabase auth user
+  const [realProfile, setRealProfile] = useState(null) // public.profiles row
+  const [adminSession, setAdminSession] = useState(null) // public.admin_sessions row
+  const [targetProfile, setTargetProfile] = useState(null) // public.profiles row for viewingAs
   
   const [authLoading, setAuthLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const [targetLoading, setTargetLoading] = useState(false)
 
-  // 1. Listen to Firebase Auth
+  // 1. Listen to Supabase Auth State Changes
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      console.warn('[AuthContext] Firebase is not configured.')
+    let mounted = true
+
+    // Fetch initial session
+    supabase.auth.getSession().then(({ data: { session: initSession } }) => {
+      if (!mounted) return
+      setSession(initSession)
+      setUser(initSession?.user || null)
       setAuthLoading(false)
-      return undefined
-    }
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u)
-      if (u) setProfileLoading(true)
-      else setProfileLoading(false)
+    }).catch(err => {
+      console.error('[AuthContext] Initial getSession error:', err)
+      if (mounted) setAuthLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mounted) return
+      setSession(newSession)
+      setUser(newSession?.user || null)
       setAuthLoading(false)
     })
+
+    return () => {
+      mounted = false
+      subscription?.unsubscribe()
+    }
   }, [])
 
-  // 2. Listen to Real Profile and Admin Session
+  // Helper to fetch user profile and admin session
+  const fetchUserProfile = useCallback(async (userId) => {
+    try {
+      setProfileLoading(true)
+      const prof = await getProfile(userId)
+      setRealProfile(prof)
+
+      const sess = await getAdminSession(userId).catch(() => null)
+      setAdminSession(sess)
+    } catch (err) {
+      console.error('[AuthContext] Profile load failed:', err)
+      setRealProfile(null)
+      setAdminSession(null)
+    } finally {
+      setProfileLoading(false)
+    }
+  }, [])
+
+  // 2. Fetch Real Profile and Admin Session on User Change
   useEffect(() => {
     if (!user) {
       setRealProfile(null)
@@ -50,84 +74,82 @@ export function AuthProvider({ children }) {
       setProfileLoading(false)
       return undefined
     }
-    setProfileLoading(true)
-    
-    const unsubProfile = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if (snap.exists()) {
-        setRealProfile({ uid: snap.id, ...snap.data() })
-        setProfileLoading(false)
-      } else {
-        setRealProfile(null)
-        setProfileLoading(false)
-        signOut(auth).catch(console.error)
-      }
-    }, (error) => {
-      console.error('[AuthContext] Profile load failed:', error)
-      setRealProfile(null)
-      setProfileLoading(false)
-      signOut(auth).catch(console.error)
-    })
 
-    const unsubSession = onSnapshot(doc(db, 'admin_sessions', user.uid), (snap) => {
-      if (snap.exists()) {
-        setAdminSession({ id: snap.id, ...snap.data() })
-      } else {
-        setAdminSession(null)
-      }
-    }, (error) => {
-      console.error('[AuthContext] Admin session load failed:', error)
-      setAdminSession(null)
-    })
+    fetchUserProfile(user.id)
+
+    // Set up realtime subscription for profile changes
+    const profileSub = supabase
+      .channel(`public:profiles:${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user.id}`
+      }, () => {
+        fetchUserProfile(user.id)
+      })
+      .subscribe()
+
+    // Set up realtime subscription for admin_sessions changes
+    const sessionSub = supabase
+      .channel(`public:admin_sessions:${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'admin_sessions',
+        filter: `admin_id=eq.${user.id}`
+      }, () => {
+        fetchUserProfile(user.id)
+      })
+      .subscribe()
 
     return () => {
-      unsubProfile()
-      unsubSession()
+      supabase.removeChannel(profileSub)
+      supabase.removeChannel(sessionSub)
     }
-  }, [user])
+  }, [user, fetchUserProfile])
 
-  // 3. Listen to Target Profile if impersonating
+  // 3. Fetch Target Profile if impersonating (View As Agent)
   useEffect(() => {
-    const viewingAsUid = adminSession?.viewingAs
-    if (!viewingAsUid || adminSession?.isReadOnly !== true) {
+    const viewingAsId = adminSession?.viewing_as_id || adminSession?.viewingAs
+    if (!viewingAsId || adminSession?.is_read_only === false) {
       setTargetProfile(null)
       setTargetLoading(false)
       return undefined
     }
     
     setTargetLoading(true)
-    const unsubTarget = onSnapshot(doc(db, 'users', viewingAsUid), (snap) => {
-      if (snap.exists()) {
-        setTargetProfile({ uid: snap.id, ...snap.data() })
-      } else {
-        setTargetProfile(null)
-      }
+    getProfile(viewingAsId).then(p => {
+      setTargetProfile(p)
       setTargetLoading(false)
-    }, (error) => {
-      console.error('[AuthContext] Target profile load failed:', error)
+    }).catch(err => {
+      console.error('[AuthContext] Target profile load failed:', err)
       setTargetProfile(null)
       setTargetLoading(false)
     })
-
-    return () => unsubTarget()
   }, [adminSession])
 
-  const loginWithEmail = useCallback(async (email, password, remember = true) => {
-    await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence)
-    return signInWithEmailAndPassword(auth, email, password)
+  const loginWithEmail = useCallback(async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (error) throw error
+    return data
   }, [])
 
-  const setupRecaptcha = useCallback((containerId) => {
-    if (window.__recaptcha) return window.__recaptcha
-    const v = new RecaptchaVerifier(auth, containerId, { size: 'invisible' })
-    window.__recaptcha = v
-    return v
+  const logout = useCallback(async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) console.error('[AuthContext] SignOut error:', error)
+    setUser(null)
+    setSession(null)
+    setRealProfile(null)
+    setAdminSession(null)
+    setTargetProfile(null)
   }, [])
-
-  const sendOtp = useCallback((phoneE164, verifier) => signInWithPhoneNumber(auth, phoneE164, verifier), [])
-  const logout = useCallback(() => signOut(auth), [])
 
   // --- View As Agent Implementations ---
-  const isViewingAs = Boolean(adminSession?.isReadOnly && adminSession?.viewingAs && targetProfile)
+  const isViewingAs = Boolean(adminSession?.is_read_only && (adminSession?.viewing_as_id || adminSession?.viewingAs) && targetProfile)
   const profile = isViewingAs ? { ...targetProfile, mustChangePassword: false } : realProfile
   
   // For permission calculations, use the effective profile
@@ -136,28 +158,24 @@ export function AuthProvider({ children }) {
 
   const startViewingAs = useCallback(async (targetAgent) => {
     if (!realProfile?.isSuperAdmin || !user) throw new Error('Only Super Admin can initiate View As Agent')
+    const targetId = targetAgent.id || targetAgent.uid
     const sessionId = `imp_${Date.now()}_${Math.random().toString(36).substring(2,9)}`
     
-    // 1. Create session (Firestore Rules validate target)
-    await setDoc(doc(db, 'admin_sessions', user.uid), {
-      viewingAs: targetAgent.id || targetAgent.uid,
-      isReadOnly: true,
-      timestamp: serverTimestamp(),
-      sessionId
-    })
+    await dalStartViewAs(user.id, targetId, sessionId)
+    const updatedSess = await getAdminSession(user.id).catch(() => null)
+    setAdminSession(updatedSess)
 
-    // 2. Write Audit Log
+    // Write Audit Log
     try {
-      await addDoc(collection(db, 'audit_logs'), {
+      await logAuditEvent({
         type: 'VIEW_AS_AGENT_START',
-        adminUid: user.uid,
-        adminName: realProfile.name || user.email,
-        targetAgentUid: targetAgent.id || targetAgent.uid,
+        performedBy: user.id,
+        performedByEmail: user.email,
+        targetUid: targetId,
         targetAgentCode: targetAgent.sponsorCode || targetAgent.agentCode || 'UNKNOWN',
         targetAgentName: targetAgent.name || 'Unknown',
         viewSessionId: sessionId,
         viewMode: 'READ_ONLY',
-        timestamp: serverTimestamp()
       })
     } catch (err) {
       console.warn('Failed to write audit log for start:', err)
@@ -166,67 +184,64 @@ export function AuthProvider({ children }) {
 
   const stopViewingAs = useCallback(async () => {
     if (!user || !adminSession) return
-    const sessionId = adminSession.sessionId || 'unknown'
-    const targetUid = adminSession.viewingAs
+    const sessionId = adminSession.session_id || adminSession.sessionId || 'unknown'
+    const targetUid = adminSession.viewing_as_id || adminSession.viewingAs
 
-    // Write audit log BEFORE deleting session, otherwise rules might block the audit log?
-    // Actually the audit log rule allows create if type is VIEW_AS_AGENT_EXIT and adminUid matches.
     try {
-      await addDoc(collection(db, 'audit_logs'), {
+      await logAuditEvent({
         type: 'VIEW_AS_AGENT_EXIT',
-        adminUid: user.uid,
-        adminName: realProfile?.name || user.email,
-        targetAgentUid: targetUid,
+        performedBy: user.id,
+        performedByEmail: user.email,
+        targetUid,
         targetAgentCode: targetProfile?.sponsorCode || 'UNKNOWN',
         targetAgentName: targetProfile?.name || 'Unknown',
         viewSessionId: sessionId,
         viewMode: 'READ_ONLY',
-        timestamp: serverTimestamp()
       })
     } catch (err) {
       console.warn('Failed to write audit log for exit:', err)
     }
 
-    // Delete session to restore powers
-    await deleteDoc(doc(db, 'admin_sessions', user.uid))
-  }, [user, adminSession, realProfile, targetProfile])
+    await dalExitViewAs(user.id)
+    setAdminSession(null)
+    setTargetProfile(null)
+  }, [user, adminSession, targetProfile])
 
   const logDeniedWrite = useCallback(async (action) => {
     if (!user || !isViewingAs || !adminSession) return
     try {
-      await addDoc(collection(db, 'audit_logs'), {
+      await logAuditEvent({
         type: 'VIEW_AS_AGENT_DENIED_WRITE',
-        adminUid: user.uid,
-        adminName: realProfile?.name || user.email,
-        targetAgentUid: adminSession.viewingAs,
+        performedBy: user.id,
+        performedByEmail: user.email,
+        targetUid: adminSession.viewing_as_id || adminSession.viewingAs,
         targetAgentCode: targetProfile?.sponsorCode || 'UNKNOWN',
         targetAgentName: targetProfile?.name || 'Unknown',
-        viewSessionId: adminSession.sessionId || 'unknown',
+        viewSessionId: adminSession.session_id || adminSession.sessionId || 'unknown',
         viewMode: 'READ_ONLY',
-        attemptedAction: action,
-        timestamp: serverTimestamp()
+        reason: `Attempted action: ${action}`,
       })
     } catch (err) {
-      // Must not mask error or throw
       console.warn('Failed to log denied write:', err)
     }
-  }, [user, isViewingAs, adminSession, realProfile, targetProfile])
+  }, [user, isViewingAs, adminSession, targetProfile])
 
   const value = useMemo(
     () => ({
+      session,
       user,
       profile, // effective profile
       realProfile, // true profile
       rank,
       isSuperAdmin,
       branchId: profile?.branchId || null,
-      isAuthenticated: Boolean(user),
+      isAuthenticated: Boolean(user && session),
       authLoading,
       profileLoading: profileLoading || targetLoading,
-      isConfigured: isFirebaseConfigured,
+      isConfigured: true,
       loginWithEmail,
-      setupRecaptcha,
-      sendOtp,
+      setupRecaptcha: () => null,
+      sendOtp: () => { throw new Error('OTP is not supported in Supabase mode') },
       logout,
       // View As Agent
       isViewingAs,
@@ -234,7 +249,7 @@ export function AuthProvider({ children }) {
       stopViewingAs,
       logDeniedWrite
     }),
-    [user, profile, realProfile, rank, isSuperAdmin, authLoading, profileLoading, targetLoading, loginWithEmail, setupRecaptcha, sendOtp, logout, isViewingAs, startViewingAs, stopViewingAs, logDeniedWrite]
+    [session, user, profile, realProfile, rank, isSuperAdmin, authLoading, profileLoading, targetLoading, loginWithEmail, logout, isViewingAs, startViewingAs, stopViewingAs, logDeniedWrite]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -247,3 +262,4 @@ export function useAuth() {
 }
 
 export default AuthContext
+

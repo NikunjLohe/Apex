@@ -1,16 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { where, orderBy, limit } from 'firebase/firestore'
-import { useCollection } from '../../hooks/useFirestore'
 import { usePermission, CAP } from '../../hooks/usePermission'
 import { useAuth } from '../../contexts/AuthContext'
+import { listCustomers } from '../../lib/supabase/customers'
 import { fmtDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { ISearch, IPlus, IUsers, IChevron } from '../../components/ui/icons'
-
-const PAGE_SIZE = 25
+import { ISearch, IPlus, IUsers } from '../../components/ui/icons'
 
 export default function CustomerList() {
   const navigate = useNavigate()
@@ -19,33 +16,43 @@ export default function CustomerList() {
   
   const [search, setSearch] = useState('')
   const [kyc, setKyc] = useState('all')
-  const [limitCount, setLimitCount] = useState(PAGE_SIZE)
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   // Agents (rank < 10) only see customers they enrolled; managers+ see all.
   const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
 
-  const constraints = useMemo(() => {
-    const list = []
-    if (scopeOwn) {
-      list.push(where('enrolledBy', '==', profile?.uid))
-    }
-    if (kyc !== 'all') {
-      list.push(where('kycStatus', '==', kyc))
-    }
-    list.push(orderBy('createdAt', 'desc'))
-    list.push(limit(limitCount))
-    return list
-  }, [scopeOwn, profile?.uid, kyc, limitCount])
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+    setError(null)
 
-  const depKey = useMemo(() => {
-    return `${scopeOwn ? profile?.uid : 'all'}-${kyc}-${limitCount}`
-  }, [scopeOwn, profile?.uid, kyc, limitCount])
+    const filters = {}
+    if (scopeOwn && profile?.id) {
+      filters.enrolledBy = profile.id
+    }
 
-  const { data, loading, error } = useCollection('customers', constraints, depKey)
+    listCustomers(filters)
+      .then((customers) => {
+        if (!mounted) return
+        setData(customers)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[CustomerList] Failed to load customers:', err)
+        setError(err)
+        setLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [scopeOwn, profile?.id])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return data.filter((c) => {
+      if (kyc !== 'all' && (c.kycStatus || 'pending') !== kyc) return false
       if (!q) return true
       return (
         c.name?.toLowerCase().includes(q) ||
@@ -53,7 +60,7 @@ export default function CustomerList() {
         c.accountNumber?.toLowerCase().includes(q)
       )
     })
-  }, [data, search])
+  }, [data, search, kyc])
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -124,18 +131,6 @@ export default function CustomerList() {
               </table>
             </div>
           </div>
-
-          {data.length >= limitCount && (
-            <div className="flex items-center justify-center pt-2">
-              <button 
-                type="button" 
-                onClick={() => setLimitCount(prev => prev + PAGE_SIZE)} 
-                className="btn-gold px-6 py-2 text-xs font-semibold uppercase tracking-wider"
-              >
-                Load More Customers
-              </button>
-            </div>
-          )}
         </>
       )}
     </div>

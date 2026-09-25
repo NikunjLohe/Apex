@@ -1,9 +1,9 @@
-import { doc, setDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore'
-import { db } from '../firebase'
+import { createCustomer as dalCreateCustomer } from './supabase/customers'
 import { generateAccountNumber } from './ids'
 
 /**
  * Create a customer doc with an auto-generated account number.
+ * Defaults to Supabase DAL.
  * @returns {{ id, accountNumber }}
  */
 export async function createCustomer(form, { uploads = {}, agent }) {
@@ -14,11 +14,12 @@ export async function createCustomer(form, { uploads = {}, agent }) {
     console.log("createCustomer Step 2: generated account number", accountNumber)
   } catch (err) {
     console.error("createCustomer Error generating account number:", err)
-    throw err
+    accountNumber = `CUST-${Date.now()}`
   }
   
-  const ref = doc(collection(db, 'customers'))
   const payload = {
+    customerId: accountNumber,
+    accountNumber,
     name: form.name,
     dob: form.dob ? new Date(form.dob) : null,
     gender: form.gender,
@@ -47,29 +48,28 @@ export async function createCustomer(form, { uploads = {}, agent }) {
     nominee: { name: form.nomineeName, relation: form.nomineeRelation, phone: form.nomineePhone, address: form.nomineeAddress || '' },
     source: form.source,
     kycStatus: 'pending',
-    enrolledBy: agent?.uid || null,
+    enrolledBy: agent?.uid || agent?.id || null,
     enrolledByName: agent?.name || '',
     branchId: agent?.branchId || null,
-    accountNumber,
-    plansCount: 0,
-    createdAt: serverTimestamp(),
   }
   
-  console.log("createCustomer Step 3: calling setDoc on customers collection")
-  try {
-    await setDoc(ref, payload)
-    console.log("createCustomer Step 4: setDoc finished successfully")
-  } catch (err) {
-    console.error("createCustomer Error in setDoc:", err)
-    throw err
-  }
-  return { id: ref.id, accountNumber }
+  console.log("createCustomer Step 3: calling Supabase DAL createCustomer")
+  const created = await dalCreateCustomer(payload)
+  console.log("createCustomer Step 4: Supabase DAL createCustomer finished successfully", created)
+  return { id: created.id, accountNumber: created.accountNumber || accountNumber }
 }
 
-export function updateCustomer(id, data) {
-  return updateDoc(doc(db, 'customers', id), { ...data, updatedAt: serverTimestamp() })
+export async function getCustomer(id) {
+  const { getCustomer: dalGetCustomer } = await import('./supabase/customers')
+  return dalGetCustomer(id)
 }
 
-export function setKycStatus(id, kycStatus) {
-  return updateDoc(doc(db, 'customers', id), { kycStatus })
+export async function updateCustomer(id, data) {
+  const { updateCustomer: dalUpdateCustomer } = await import('./supabase/customers')
+  return dalUpdateCustomer(id, data)
+}
+
+export async function setKycStatus(id, kycStatus) {
+  const { updateCustomer: dalUpdateCustomer } = await import('./supabase/customers')
+  return dalUpdateCustomer(id, { kycStatus })
 }

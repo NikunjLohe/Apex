@@ -20,7 +20,9 @@ const {
   buildDynamicTables,
 } = require('./compensation')
 
-admin.initializeApp()
+if (!admin.apps.length) {
+  admin.initializeApp()
+}
 const db = admin.firestore()
 
 const REGION = 'asia-south1' // Mumbai

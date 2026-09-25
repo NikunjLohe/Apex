@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { profilesAPI } from '../../lib/supabase'
 import { formatINR } from '../../utils/format'
 import RankBadge from './RankBadge'
 import StatusBadge from './StatusBadge'
@@ -8,50 +7,26 @@ import EmptyState from './EmptyState'
 import { ISearch, IChevronDown, IChevron } from './icons'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firestore helpers
+// Supabase DAL helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Fetch a single user document */
+/** Fetch a single user profile */
 async function fetchUser(uid) {
-  const snap = await getDoc(doc(db, 'users', uid))
-  if (!snap.exists()) return null
-  return { id: snap.id, ...snap.data() }
+  return profilesAPI.getProfile(uid)
 }
 
 /** Fetch direct children of a given parent uid */
 async function fetchChildren(parentUid) {
-  const q = query(collection(db, 'users'), where('referredBy', '==', parentUid))
-  const snaps = await getDocs(q)
-  return snaps.docs.map(d => ({ id: d.id, ...d.data() }))
+  return profilesAPI.listProfiles({ sponsorId: parentUid })
 }
 
-/** Search users by name fragment (client-side filtered from a limited query) */
+/** Search users by name fragment or sponsorCode */
 async function searchUsers(term) {
-  // Firestore has no native full-text search. We load a small amount matching
-  // the start of the name or sponsorCode. For a deep org, recommend Algolia/Typesense
-  // as future improvement. Here we query where name >= term and name <= term + '\uf8ff'
-  // which covers prefix searches on the indexed 'name' field.
-  const upper = term[0].toUpperCase() + term.slice(1)
-  const lower = term[0].toLowerCase() + term.slice(1)
-
-  const [snapsUpper, snapsCode] = await Promise.all([
-    getDocs(query(
-      collection(db, 'users'),
-      where('name', '>=', upper),
-      where('name', '<=', upper + '\uf8ff')
-    )),
-    getDocs(query(
-      collection(db, 'users'),
-      where('sponsorCode', '>=', term.toUpperCase()),
-      where('sponsorCode', '<=', term.toUpperCase() + '\uf8ff')
-    )),
-  ])
-
-  const results = new Map()
-  ;[...snapsUpper.docs, ...snapsCode.docs].forEach(d => {
-    if (!results.has(d.id)) results.set(d.id, { id: d.id, ...d.data() })
-  })
-  return [...results.values()].slice(0, 10)
+  const all = await profilesAPI.listProfiles()
+  const q = term.toLowerCase()
+  return (all || [])
+    .filter(u => u.name?.toLowerCase().includes(q) || u.sponsorCode?.toLowerCase().includes(q))
+    .slice(0, 10)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +112,7 @@ export default function GenealogyTree({ rootId = null }) {
         setPan({ x: (cw - tw * centeredZoom) / 2, y: 20 })
       }, 120)
     })()
-  }, [rootId])
+  }, [rootId, mergeNodes])
 
   // ── Expand a node: load its children on demand ──
   const expandNode = useCallback(async (nodeId, e) => {
@@ -157,7 +132,7 @@ export default function GenealogyTree({ rootId = null }) {
       return
     }
 
-    // Fetch children from Firestore
+    // Fetch children from Supabase DAL
     setLoadingNodes(prev => new Set([...prev, nodeId]))
     try {
       const children = await fetchChildren(nodeId)
@@ -178,7 +153,7 @@ export default function GenealogyTree({ rootId = null }) {
     }
   }, [nodeCache, expandedNodes, mergeNodes])
 
-  // ── Search: debounced Firestore query ──
+  // ── Search: debounced query ──
   useEffect(() => {
     const term = searchQuery.trim()
     if (!term || term.length < 2) {
@@ -210,14 +185,15 @@ export default function GenealogyTree({ rootId = null }) {
     setSearchOpen(false)
     setSearchResults([])
 
-    // Build ancestor chain: walk referredBy up to the tree root
+    // Build ancestor chain: walk sponsorId up to the tree root
     const chain = [targetNode]
     let current = targetNode
 
-    while (current.referredBy && current.referredBy !== treeRootId) {
-      let parent = nodeCache[current.referredBy]
+    while ((current.sponsorId || current.referredBy) && (current.sponsorId || current.referredBy) !== treeRootId) {
+      const parentId = current.sponsorId || current.referredBy
+      let parent = nodeCache[parentId]
       if (!parent) {
-        parent = await fetchUser(current.referredBy)
+        parent = await fetchUser(parentId)
         if (!parent) break
       }
       chain.unshift(parent)
@@ -230,7 +206,6 @@ export default function GenealogyTree({ rootId = null }) {
 
     for (let i = 0; i < chain.length; i++) {
       const n = chain[i]
-      const nextNode = chain[i + 1]
 
       if (!newCache[n.id]) newCache[n.id] = { ...n, childrenLoaded: false }
 
@@ -287,23 +262,9 @@ export default function GenealogyTree({ rootId = null }) {
   }
   const handleMouseUp = () => setIsDragging(false)
 
-  // ── Wheel: Ctrl+scroll = zoom, plain scroll = vertical pan ──
-  const handleWheel = useCallback((e) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault()
-      const delta = e.deltaY > 0 ? -0.1 : 0.1
-      setZoom(z => Math.min(2, Math.max(0.2, parseFloat((z + delta).toFixed(1)))))
-    } else {
-      // allow natural vertical scroll – do NOT prevent default
-      setPan(p => ({ ...p, y: p.y - e.deltaY * 0.8 }))
-    }
-  }, [])
-
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    // passive:false only needed when we call preventDefault (Ctrl+wheel path),
-    // but we need non-passive to be able to prevent it conditionally.
     const handler = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()

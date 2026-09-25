@@ -3,7 +3,7 @@
   "description": "Cloud Functions for APEX PRMS",
   "type": "commonjs",
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "logs": "firebase functions:log"
   },
   "dependencies": {
+    "apex-branch-ops": "file:..",
     "firebase-admin": "^12.1.0",
     "firebase-functions": "^5.0.1"
   },

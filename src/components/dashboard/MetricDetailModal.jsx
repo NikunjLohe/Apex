@@ -5,6 +5,7 @@ import { startOfMonth, format, addYears } from 'date-fns'
 import { useCollection } from '../../hooks/useFirestore'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate, fmtDateTime, toDate } from '../../utils/format'
+import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
 import { IClose, ISearch, IChevron } from '../ui/icons'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
@@ -150,10 +151,10 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           agent: p.agentName || '—',
           date: p.paidDate || p.generatedDate,
           payoutId: p.id,
-          grossCommission: p.grossCommission || 0,
-          tds: p.tds || 0,
-          adminCharge: p.adminCharge || 0,
-          netPaid: p.netPayable || 0,
+          grossCommission: getPayoutGross(p),
+          tds: getPayoutTds(p),
+          adminCharge: getPayoutAdminCharge(p),
+          netPaid: getPayoutNet(p),
           status: p.status || 'paid',
         }))
       }

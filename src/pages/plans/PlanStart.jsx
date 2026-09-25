@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useCollection } from '../../hooks/useFirestore'
+import { listCustomers } from '../../lib/supabase/customers'
 import { useAuth } from '../../contexts/AuthContext'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -13,18 +13,44 @@ import { ISearch, IPlus, IUsers } from '../../components/ui/icons'
 export default function PlanStart() {
   const navigate = useNavigate()
   const { profile, isSuperAdmin } = useAuth()
-  const customers = useCollection('customers')
+  const [customersData, setCustomersData] = useState([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
   const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
 
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    const filters = {}
+    if (scopeOwn && profile?.id) {
+      filters.enrolledBy = profile.id
+    }
+
+    listCustomers(filters)
+      .then((data) => {
+        if (!mounted) return
+        setCustomersData(data || [])
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!mounted) return
+        console.error('[PlanStart] Error loading customers:', err)
+        setCustomersData([])
+        setLoading(false)
+      })
+
+    return () => { mounted = false }
+  }, [scopeOwn, profile?.id])
+
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return customers.data
-      .filter((c) => (scopeOwn ? c.enrolledBy === profile?.uid : true))
+    return customersData
+      .filter((c) => (scopeOwn ? c.enrolledBy === (profile?.id || profile?.uid) : true))
       .filter((c) => !q || c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.accountNumber?.toLowerCase().includes(q))
       .slice(0, 12)
-  }, [customers.data, search, scopeOwn, profile?.uid])
+  }, [customersData, search, scopeOwn, profile?.id, profile?.uid])
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -39,7 +65,7 @@ export default function PlanStart() {
         </div>
       </div>
 
-      {customers.loading ? (
+      {loading ? (
         <div className="skeleton h-40 w-full rounded-card" />
       ) : !matches.length ? (
         <EmptyState

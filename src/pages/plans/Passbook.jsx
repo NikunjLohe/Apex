@@ -1,9 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { addMonths } from 'date-fns'
 import toast from 'react-hot-toast'
-import { where } from 'firebase/firestore'
-import { useDoc, useCollection } from '../../hooks/useFirestore'
+import { policiesAPI, customersAPI, paymentsAPI } from '../../lib/supabase'
 import { formatINR, fmtDate, toDate } from '../../utils/format'
 import { isRD } from '../../data/compensation'
 import { elementToPdf } from '../../lib/pdf'
@@ -18,46 +17,77 @@ export default function Passbook() {
   const sheetRef = useRef(null)
   const [busy, setBusy] = useState(false)
 
-  const { data: plan, loading } = useDoc(`plans/${planId}`)
-  const { data: customer } = useDoc(`customers/${id}`)
-  const payments = useCollection('payments', [where('planId', '==', planId)], `pb-${planId}`)
+  const [plan, setPlan] = useState(null)
+  const [customer, setCustomer] = useState(null)
+  const [payments, setPayments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setLoading(true)
+
+    Promise.all([
+      policiesAPI.getPolicy(planId).catch(() => null),
+      customersAPI.getCustomer(id).catch(() => null),
+      paymentsAPI.listPayments({ policyId: planId }).catch(() => []),
+    ]).then(([pData, cData, payList]) => {
+      if (!mounted) return
+      if (pData) setPlan(pData)
+      if (cData) setCustomer(cData)
+      setPayments(payList || [])
+      setLoading(false)
+    }).catch(err => {
+      console.error('Failed to load passbook data:', err)
+      if (mounted) setLoading(false)
+    })
+
+    return () => { mounted = false }
+  }, [id, planId])
 
   const rows = useMemo(() => {
     if (!plan) return []
     const byInst = {}
-    payments.data.forEach((p) => { byInst[p.installmentNumber] = p })
+    payments.forEach((p) => { byInst[p.installmentNumber] = p })
     const start = toDate(plan.startDate || plan.date || plan.createdAt) || new Date()
     const today = new Date()
-    const total = isRD(plan.type) ? plan.totalInstallments : 1
+    const planTypeCode = plan.type || plan.planCode
+    const total = isRD(planTypeCode) ? (plan.totalInstallments || 1) : 1
     const out = []
     for (let i = 1; i <= total; i += 1) {
       const due = addMonths(start, i - 1)
       const paid = byInst[i]
       let status = 'upcoming'
-      if (paid) status = paid.isLate ? 'late' : 'paid'
-      else if (due < today) status = 'overdue'
+      if (paid) {
+        const paidDueDate = paid.dueDate ? toDate(paid.dueDate) : due
+        const paidDateObj = paid.paidDate ? toDate(paid.paidDate) : null
+        const isLate = paid.isLate || (paidDateObj && paidDueDate && paidDateObj > paidDueDate)
+        status = isLate ? 'late' : 'paid'
+      } else if (due < today) {
+        status = 'overdue'
+      }
       out.push({
         no: i,
         dueDate: due,
         paidDate: paid ? toDate(paid.paidDate) : null,
-        amount: paid?.amount ?? (isRD(plan.type) ? plan.monthlyAmount : plan.fdAmount),
+        amount: paid?.amount ?? (isRD(planTypeCode) ? (plan.monthlyAmount || plan.installmentAmount) : plan.fdAmount),
         mode: paid?.paymentMode || null,
         status,
         paymentId: paid?.id || null,
       })
     }
     return out
-  }, [plan, payments.data])
+  }, [plan, payments])
 
   if (loading) return <div className="mx-auto max-w-3xl"><SkeletonForm fields={5} /></div>
   if (!plan) return <EmptyState title="Plan not found" />
 
-  const pct = plan.totalInstallments ? Math.round((plan.paidInstallments / plan.totalInstallments) * 100) : 0
+  const pct = plan.totalInstallments ? Math.round(((plan.paidInstallments || 0) / plan.totalInstallments) * 100) : 0
+  const planTypeCode = plan.type || plan.planCode
 
   const download = async () => {
     setBusy(true)
     try {
-      await elementToPdf(sheetRef.current, `Passbook-${plan.planAccountNumber}.pdf`)
+      await elementToPdf(sheetRef.current, `Passbook-${plan.planAccountNumber || plan.policyNumber}.pdf`)
       toast.success('Passbook downloaded')
     } catch {
       toast.error('Could not generate PDF')
@@ -80,15 +110,15 @@ export default function Passbook() {
               <ProgressRing pct={pct} />
               <div>
                 <Logo size={30} />
-                <p className="mt-2 font-semibold text-ink-1">{customer?.name}</p>
-                <p className="font-mono text-xs text-gold">{plan.planAccountNumber}</p>
+                <p className="mt-2 font-semibold text-ink-1">{customer?.name || 'Customer'}</p>
+                <p className="font-mono text-xs text-gold">{plan.planAccountNumber || plan.policyNumber}</p>
               </div>
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-              <Row k="Plan" v={plan.type} />
+              <Row k="Plan" v={planTypeCode} />
               <Row k="Status" v={plan.status} />
-              <Row k="Installment" v={isRD(plan.type) ? `${plan.monthlyAmount ? formatINR(plan.monthlyAmount) : '—'}/mo` : formatINR(plan.fdAmount)} />
-              <Row k="Paid" v={`${plan.paidInstallments}/${plan.totalInstallments}`} />
+              <Row k="Installment" v={isRD(planTypeCode) ? `${(plan.monthlyAmount || plan.installmentAmount) ? formatINR(plan.monthlyAmount || plan.installmentAmount) : '—'}/mo` : formatINR(plan.fdAmount)} />
+              <Row k="Paid" v={`${plan.paidInstallments || 0}/${plan.totalInstallments || 1}`} />
               <Row k="Total Paid" v={formatINR(plan.totalPaid || 0)} />
               <Row k="Maturity" v={formatINR(plan.maturityAmount || 0)} />
               <Row k="Start" v={fmtDate(plan.startDate || plan.date || plan.createdAt)} />
