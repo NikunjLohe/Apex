@@ -22,6 +22,7 @@ export default function MemberDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const agentDoc = useDoc(id ? `users/${id}` : null)
+  const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
   const { user: currentUser, startViewingAs, realProfile } = useAuth()
   const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
@@ -182,6 +183,7 @@ export default function MemberDetail() {
     setViewAsModalOpen(false)
   }
 
+  const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
   const sponsorName = useCallback((uid) => {
     if (!uid) return '—'
     if (sponsorMap[uid]) return sponsorMap[uid]
@@ -192,7 +194,7 @@ export default function MemberDetail() {
     return '…'
   }, [sponsorMap])
 
-  if (agentDoc.loading) {
+  if (agentDoc.loading || branches.loading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="card h-28 animate-pulse bg-navy-2" />

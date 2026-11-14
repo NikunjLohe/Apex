@@ -23,6 +23,7 @@ export default function PolicyDetail() {
 
   const policyDoc = useDoc(id ? `plans/${id}` : null)
   const users = useCollection('users')
+  const branches = useCollection('branches')
   
   const p = policyDoc.data
   const policyNumber = p?.policyNumber || ''
@@ -250,6 +251,12 @@ export default function PolicyDetail() {
     return addYears(start, p.duration)
   }, [p?.startDate, p?.duration])
 
+  // Get branch name
+  const branchName = useMemo(() => {
+    if (!p?.branchId || !branches.data) return '—'
+    return branches.data.find(b => b.id === p.branchId)?.name || '—'
+  }, [p?.branchId, branches.data])
+
   // Calculate total business value of this policy
   const businessValue = useMemo(() => {
     if (!p) return 0
@@ -379,7 +386,7 @@ export default function PolicyDetail() {
   const highestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[paidRanks.length - 1] : null, [paidRanks])
   const lowestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[0] : null, [paidRanks])
 
-  const loading = policyDoc.loading || users.loading || ledgerDoc.loading
+  const loading = policyDoc.loading || users.loading || branches.loading || ledgerDoc.loading
 
   if (loading) {
     return (

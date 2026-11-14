@@ -22,6 +22,7 @@ export default function CustomerDetail() {
   const customerDoc = useDoc(id ? `customers/${id}` : null)
   const plans = useCollection('plans', id ? [where('customerId', '==', id)] : null)
   const users = useCollection('users')
+  const branches = useCollection('branches')
 
   const c = customerDoc.data
 
@@ -49,6 +50,12 @@ export default function CustomerDetail() {
     if (!c?.enrolledBy || !users.data) return null
     return users.data.find(u => u.id === c.enrolledBy)
   }, [c?.enrolledBy, users.data])
+
+  // Get branch details
+  const branchName = useMemo(() => {
+    if (!c?.branchId || !branches.data) return '—'
+    return branches.data.find(b => b.id === c.branchId)?.name || '—'
+  }, [c?.branchId, branches.data])
 
   // Compute live diff preview
   const diffs = useMemo(() => {
@@ -159,7 +166,7 @@ export default function CustomerDetail() {
     }
   }
 
-  const loading = customerDoc.loading || plans.loading || users.loading
+  const loading = customerDoc.loading || plans.loading || users.loading || branches.loading
 
   if (loading) {
     return (

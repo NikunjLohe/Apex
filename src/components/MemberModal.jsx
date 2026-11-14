@@ -122,6 +122,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
     return [...ownPayments].sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate)).slice(0, 5)
   }, [ownPayments])
 
+  const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
   const selectedSponsor = useMemo(() => {

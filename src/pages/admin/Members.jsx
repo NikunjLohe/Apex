@@ -15,6 +15,7 @@ import toast from 'react-hot-toast'
 export default function Members() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [membersList, setMembersList] = useState([])
+  const [branchesList, setBranchesList] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState(searchParams.get('q') || '')
@@ -31,11 +32,13 @@ export default function Members() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [mList, sObj] = await Promise.all([
+      const [mList, bList, sObj] = await Promise.all([
         profilesAPI.listProfiles(),
+        masterDataAPI.listBranches(),
         masterDataAPI.getSystemSettings().catch(() => ({})),
       ])
       setMembersList(mList || [])
+      setBranchesList(bList || [])
       setSettings(sObj || {})
     } catch (err) {
       console.error('[Members] Failed to load data:', err)
@@ -110,6 +113,7 @@ export default function Members() {
     }
   }
 
+  const branchName = (bid) => branchesList.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => membersList.find((m) => m.id === uid)?.name || '—'
 
   const handleWhatsApp = (m) => {
@@ -277,7 +281,7 @@ Please log in to manage your performance, customer onboarding, and commissions.`
         </div>
       )}
 
-      {modal && <MemberModal modal={modal} members={membersList} settings={settings} onClose={() => { setModal(null); loadData() }} />}
+      {modal && <MemberModal modal={modal} branches={branchesList} members={membersList} settings={settings} onClose={() => { setModal(null); loadData() }} />}
     </div>
   )
 }
