@@ -72,6 +72,14 @@ export default function Policies() {
           <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Active Policies Ledger</h2>
           <p className="text-xs text-ink-2">Total active customer saving accounts and certificates approved by bank reports.</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Link to="/admin/import?tab=manual" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5">
+            + Onboard New Business
+          </Link>
+          <Link to="/admin/import?tab=excel" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3.5 flex items-center gap-1.5">
+            Excel Import
+          </Link>
+        </div>
       </div>
 
       {/* Filters bar */}

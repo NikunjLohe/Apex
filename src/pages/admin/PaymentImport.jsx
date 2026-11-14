@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { read, utils } from 'xlsx'
 import toast from 'react-hot-toast'
 import { supabase, paymentsAPI, policiesAPI, auditAPI } from '../../lib/supabase'
@@ -145,14 +146,21 @@ export default function PaymentImport() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
+      <div className="flex flex-wrap justify-between items-center gap-4 border-b border-navy-4/50 pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Payment Import Engine</h1>
-          <p className="mt-1 text-sm text-ink-2">Bulk import ongoing installment payments via Excel.</p>
+          <p className="mt-1 text-sm text-ink-2">Bulk import ongoing installment payments via Excel or record manually.</p>
         </div>
-        <div className="text-right text-xs text-ink-2 space-y-1">
-          <p>Expected Columns:</p>
-          <p className="font-mono text-gold-1 bg-navy-4/30 px-2 py-0.5 rounded">Policy Number, Amount Paid, Payment Date, Transaction Ref</p>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/payments/collect"
+            className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"
+          >
+            + Manual Payment Collection
+          </Link>
+          <div className="text-right text-xs text-ink-2 hidden sm:block">
+            <p className="font-mono text-gold-1 bg-navy-4/30 px-2 py-0.5 rounded text-[11px]">Policy Number, Amount Paid, Payment Date, Transaction Ref</p>
+          </div>
         </div>
       </div>
 

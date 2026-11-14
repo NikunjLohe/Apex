@@ -8,15 +8,31 @@ import { supabase } from '../lib/supabase/client'
 import { getProfile } from '../lib/supabase/profiles'
 import Logo from '../components/ui/Logo'
 
-const friendly = (code) =>
-  ({
-    'auth/invalid-credential': 'Incorrect email or password.',
-    'auth/invalid-email': 'That email looks invalid.',
-    'auth/user-not-found': 'No account found.',
-    'auth/wrong-password': 'Incorrect password.',
-    'auth/too-many-requests': 'Too many attempts. Try again later.',
-    'auth/network-request-failed': 'Network error. Check your connection.',
-  })[code] || `Login failed (${code || 'unknown error'})`
+const friendly = (e) => {
+  if (!e) return 'Login failed. Please try again.'
+  const code = typeof e === 'string' ? e : e.code
+  const message = e.message || ''
+
+  if (
+    code === 'auth/invalid-credential' ||
+    code === 'invalid_credentials' ||
+    message.toLowerCase().includes('invalid login credentials')
+  ) {
+    return 'Incorrect email or password.'
+  }
+  if (code === 'auth/invalid-email') return 'That email looks invalid.'
+  if (code === 'auth/user-not-found') return 'No account found.'
+  if (code === 'auth/wrong-password') return 'Incorrect password.'
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Try again later.'
+  if (
+    code === 'auth/network-request-failed' ||
+    message.toLowerCase().includes('fetch failed') ||
+    message.toLowerCase().includes('network')
+  ) {
+    return 'Network error. Unable to reach server.'
+  }
+  return e.customMessage || e.message || `Login failed (${code || 'unknown error'})`
+}
 
 const ROUTE_CAPS = [
   ['/admin/overview', 'superAdmin'],
@@ -93,7 +109,7 @@ export default function Login() {
       navigate(allowed ? (targetPath || '/dashboard') : '/dashboard', { replace: true })
     } catch (e) {
       console.error('[Apex Multisolutions login error]', e)
-      toast.error(e.customMessage || friendly(e.code), { id: toastId })
+      toast.error(friendly(e), { id: toastId })
     } finally {
       setIsSubmitting(false)
     }

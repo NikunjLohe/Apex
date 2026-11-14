@@ -270,68 +270,121 @@ export default function MemberModal({ modal, branches, members, settings, onClos
 
   // Credentials success modal popup
   if (createdAgent) {
+    const loginUrl = window.location.origin
+    const cleanPhone = (createdAgent.phone || '').replace(/\D/g, '')
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
+    const whatsappMessage = `*Welcome to Apex Multisolutions!*
+
+Dear *${createdAgent.name}*,
+
+Your agent account has been created successfully. Here are your official login credentials:
+
+━━━━━━━━━━━━━━━━━━━
+👤 *Agent ID (Login Code):* ${createdAgent.sponsorCode}
+📧 *Login Email:* ${createdAgent.email}
+🔑 *Password:* ${createdAgent.password}
+🌐 *Portal URL:* ${loginUrl}
+━━━━━━━━━━━━━━━━━━━
+
+Please log in to your performance portal using your Agent ID or Email with the temporary password provided above.
+
+_Welcome to the Apex Family!_`
+    const encoded = encodeURIComponent(whatsappMessage)
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encoded}`
+
+    const handleCopy = () => {
+      const credentialsText = `Apex Multisolutions Agent Credentials:\nAgent Name: ${createdAgent.name}\nAgent ID: ${createdAgent.sponsorCode}\nLogin Email: ${createdAgent.email}\nPassword: ${createdAgent.password}\nPortal URL: ${loginUrl}`
+      navigator.clipboard.writeText(credentialsText).catch(err => {
+        console.warn('Clipboard write failed:', err)
+      })
+      toast.success('Credentials copied to clipboard!')
+    }
+
+    const handleWhatsApp = () => {
+      window.open(whatsappUrl, '_blank')
+    }
+
+    const handleFinish = () => {
+      setCreatedAgent(null)
+      onClose()
+    }
+
     return (
-      <ConfirmDialog
-        open
-        title="Agent Onboarded Successfully"
-        confirmLabel="Send WhatsApp Welcome"
-        cancelLabel="Copy Credentials"
-        onConfirm={() => {
-          const loginUrl = window.location.origin
-          const message = `Welcome to Apex!
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-1/80 backdrop-blur-sm animate-fade-in">
+        <div className="card relative z-10 w-full max-w-md p-6 border border-navy-4 space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-navy-4/50 pb-3">
+            <h3 className="text-lg font-bold text-ink-1 flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-bold">✓</span>
+              Agent Onboarded Successfully
+            </h3>
+            <button type="button" onClick={handleFinish} className="text-ink-2 hover:text-ink-1">
+              ✕
+            </button>
+          </div>
 
-Dear ${createdAgent.name},
+          <p className="text-xs text-ink-2 leading-relaxed">
+            New agent account created and registered in the authentication system. Share login credentials directly with the agent:
+          </p>
 
-Your account has been created successfully.
-
-Agent ID:
-${createdAgent.sponsorCode}
-
-Password:
-${createdAgent.password}
-
-Login URL:
-${loginUrl}
-
-Welcome to the Apex Family.`
-          const encoded = encodeURIComponent(message)
-          const cleanPhone = createdAgent.phone.replace(/\D/g, '')
-          const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
-          window.open(`https://wa.me/${formattedPhone}?text=${encoded}`, '_blank')
-        }}
-        onClose={() => {
-          const loginUrl = window.location.origin
-          const credentialsText = `Agent ID: ${createdAgent.sponsorCode}\nLogin Email: ${createdAgent.email}\nPassword: ${createdAgent.password}\nLogin URL: ${loginUrl}`
-          navigator.clipboard.writeText(credentialsText).catch(err => {
-            console.warn('Clipboard write failed:', err)
-          })
-          toast.success('Credentials copied to clipboard')
-          setCreatedAgent(null)
-          onClose()
-        }}
-      >
-        <div className="space-y-4 text-xs leading-relaxed py-2">
-          <p className="text-ok font-bold">✓ Agent has been created and registered in Authentication database.</p>
-          <div className="bg-navy-2 border border-navy-4 p-4 rounded-card space-y-2">
+          <div className="bg-navy-2 border border-navy-4 p-4 rounded-card space-y-2.5 text-xs">
             <div>
-              <span className="block text-[10px] text-ink-2 font-mono">AGENT NAME</span>
-              <span className="text-ink-1 font-semibold">{createdAgent.name}</span>
+              <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Agent Name</span>
+              <span className="text-ink-1 font-semibold text-sm">{createdAgent.name}</span>
             </div>
-            <div>
-              <span className="block text-[10px] text-ink-2 font-mono">AGENT ID (LOGIN CODE)</span>
-              <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-navy-4/40">
+              <div>
+                <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Agent ID (Login Code)</span>
+                <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">WhatsApp Phone</span>
+                <span className="text-ink-1 font-mono">{createdAgent.phone || '—'}</span>
+              </div>
             </div>
-            <div>
-              <span className="block text-[10px] text-ink-2 font-mono">LOGIN EMAIL</span>
-              <span className="text-ink-1 font-bold font-mono text-sm">{createdAgent.email}</span>
+            <div className="pt-1 border-t border-navy-4/40">
+              <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Login Email</span>
+              <span className="text-ink-1 font-bold font-mono">{createdAgent.email}</span>
             </div>
-            <div>
-              <span className="block text-[10px] text-ink-2 font-mono">INITIAL PASSWORD</span>
-              <span className="text-ink-1 font-bold font-mono select-all bg-navy-3 px-2 py-0.5 rounded border border-navy-4">{createdAgent.password}</span>
+            <div className="pt-1 border-t border-navy-4/40">
+              <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Initial Password</span>
+              <span className="text-amber-400 font-bold font-mono text-sm select-all bg-navy-3 px-2 py-0.5 rounded border border-navy-4 inline-block mt-0.5">
+                {createdAgent.password}
+              </span>
+            </div>
+          </div>
+
+          {/* Primary Action: Direct WhatsApp Dispatch */}
+          <div className="space-y-2 pt-1">
+            <button
+              type="button"
+              onClick={handleWhatsApp}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-card bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-sm shadow-md transition-all active:scale-[0.99] cursor-pointer"
+            >
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+              </svg>
+              <span>Send Credentials on WhatsApp</span>
+            </button>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="btn-ghost flex-1 py-2 text-xs font-semibold uppercase tracking-wider border border-navy-4"
+              >
+                📋 Copy Credentials
+              </button>
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="btn-primary flex-1 py-2 text-xs font-semibold uppercase tracking-wider"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
-      </ConfirmDialog>
+      </div>
     )
   }
 

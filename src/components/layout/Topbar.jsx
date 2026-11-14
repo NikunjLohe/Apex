@@ -23,7 +23,7 @@ export default function Topbar({ title, onMenu }) {
   const notifications = useCollection('notifications', uid ? [where('userId', '==', uid)] : null)
 
   // Local database catalogs for search
-  const isAgent = !isSuperAdmin && (profile?.rank || 0) < 10
+  const isAgent = !isSuperAdmin
   const allUsers = useCollection(!isAgent ? 'users' : null)
   const allCustomers = useCollection(!isAgent ? 'customers' : null)
   const allPlans = useCollection(!isAgent ? 'plans' : null)

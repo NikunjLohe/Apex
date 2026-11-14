@@ -10,7 +10,7 @@ import { IAlert, IWhatsapp } from '../../components/ui/icons'
 export default function Defaulters() {
   const { profile, isSuperAdmin } = useAuth()
   const agentUid = profile?.uid || profile?.id
-  const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+  const scopeOwn = !isSuperAdmin
 
   const [plansData, setPlansData] = useState([])
   const [loading, setLoading] = useState(true)

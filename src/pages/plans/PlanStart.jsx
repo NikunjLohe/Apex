@@ -17,7 +17,7 @@ export default function PlanStart() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
-  const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+  const scopeOwn = !isSuperAdmin
 
   useEffect(() => {
     let mounted = true

@@ -238,6 +238,30 @@ export default function MemberDetail() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {m?.phone && (
+              <button
+                type="button"
+                onClick={() => {
+                  const cleanPhone = (m.phone || '').replace(/\D/g, '')
+                  const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
+                  const loginUrl = window.location.origin
+                  const msg = `*Apex Multisolutions — Agent Portal Access*
+
+Dear *${m.name}*,
+
+Here are your official portal details:
+━━━━━━━━━━━━━━━━━━━
+👤 *Agent ID (Login Code):* ${m.sponsorCode || '—'}
+📧 *Login Email:* ${m.email}
+🌐 *Portal URL:* ${loginUrl}
+━━━━━━━━━━━━━━━━━━━`
+                  window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+                }}
+                className="py-2 px-3.5 text-xs font-bold uppercase rounded-md bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-sm flex items-center gap-1.5 transition-all"
+              >
+                WhatsApp
+              </button>
+            )}
             {realProfile?.isSuperAdmin && m?.isSuperAdmin !== true && (
               <button
                 onClick={() => setViewAsModalOpen(true)}

@@ -11,7 +11,7 @@ import { IReport } from '../../components/ui/icons'
 export default function Collections() {
   const { profile, isSuperAdmin } = useAuth()
   const agentUid = profile?.uid || profile?.id
-  const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+  const scopeOwn = !isSuperAdmin
 
   const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))

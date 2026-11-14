@@ -11,7 +11,7 @@ import { ICalendar } from '../../components/ui/icons'
 export default function Maturities() {
   const { profile, isSuperAdmin } = useAuth()
   const agentUid = profile?.uid || profile?.id
-  const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+  const scopeOwn = !isSuperAdmin
 
   const [window, setWindow] = useState(30)
   const [plansData, setPlansData] = useState([])

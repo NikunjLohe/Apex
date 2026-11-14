@@ -85,7 +85,7 @@ export default function CustomerProfile() {
     [payments]
   )
 
-  const isAgent = !isSuperAdmin && (profile?.rank || 0) < 10
+  const isAgent = !isSuperAdmin
 
   if (loading) return <div className="mx-auto max-w-4xl"><SkeletonForm fields={5} /></div>
   if (!customer) return <EmptyState title="Customer not found" message="This customer may have been removed." />

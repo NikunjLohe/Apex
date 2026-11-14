@@ -8,10 +8,11 @@ import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IPlus, IClock, IAlert, ICheck, IClose } from '../../components/ui/icons'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { formatINR } from '../../utils/format'
 import { recordPayment } from '../../lib/payments'
 import { computePlan } from '../../lib/calc'
+import ManualOnboarding from '../../components/ManualOnboarding'
 
 const DEFAULT_MAPPING = {
   customerId: 'Customer ID',
@@ -27,6 +28,8 @@ const DEFAULT_MAPPING = {
 }
 
 export default function ImportData() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'manual' ? 'manual' : 'excel')
   const { profile } = useAuth()
   const { getRank, config: ranksConfig, ranksList } = useRanks()
   const [commissionsConfig, setCommissionsConfig] = useState(null)
@@ -544,16 +547,48 @@ export default function ImportData() {
       {/* Title */}
       <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
         <div>
-          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Import Center</h2>
-          <p className="text-xs text-ink-2">Upload and import the bank approved daily Excel data transactions.</p>
+          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">New Business Onboarding</h2>
+          <p className="text-xs text-ink-2">Onboard new customer policies manually or bulk import via bank Excel sheet.</p>
         </div>
         <Link to="/admin/import/history" className="btn-gold py-2 text-xs uppercase tracking-wider font-bold flex items-center gap-1.5">
           <IClock size={16} /> Import History Logs
         </Link>
       </div>
 
-      {/* Drag and Drop Zone */}
-      {!importing && !importSummary && (
+      {/* Mode Switcher Tabs */}
+      <div className="flex border-b border-navy-4/50 gap-6">
+        <button
+          type="button"
+          onClick={() => { setActiveTab('excel'); setSearchParams({ tab: 'excel' }) }}
+          className={`pb-3 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+            activeTab === 'excel'
+              ? 'border-gold-1 text-gold-1 font-bold'
+              : 'border-transparent text-ink-2 hover:text-ink-1'
+          }`}
+        >
+          <IDoc size={17} />
+          <span>Excel Bulk Import</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setActiveTab('manual'); setSearchParams({ tab: 'manual' }) }}
+          className={`pb-3 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+            activeTab === 'manual'
+              ? 'border-gold-1 text-gold-1 font-bold'
+              : 'border-transparent text-ink-2 hover:text-ink-1'
+          }`}
+        >
+          <IPlus size={17} />
+          <span>Manual Business Onboarding</span>
+        </button>
+      </div>
+
+      {activeTab === 'manual' ? (
+        <ManualOnboarding />
+      ) : (
+        <>
+          {/* Drag and Drop Zone */}
+          {!importing && !importSummary && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <div 
@@ -773,6 +808,8 @@ export default function ImportData() {
             </table>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

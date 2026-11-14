@@ -116,6 +116,29 @@ export default function Members() {
   const branchName = (bid) => branchesList.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => membersList.find((m) => m.id === uid)?.name || '—'
 
+  const handleWhatsApp = (m) => {
+    const cleanPhone = (m.phone || '').replace(/\D/g, '')
+    if (!cleanPhone) {
+      toast.error('Agent does not have a registered phone number')
+      return
+    }
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
+    const loginUrl = window.location.origin
+    const msg = `*Apex Multisolutions — Agent Portal Access*
+
+Dear *${m.name}*,
+
+Here are your official portal details:
+━━━━━━━━━━━━━━━━━━━
+👤 *Agent ID (Login Code):* ${m.sponsorCode || '—'}
+📧 *Login Email:* ${m.email}
+🌐 *Portal URL:* ${loginUrl}
+━━━━━━━━━━━━━━━━━━━
+
+Please log in to manage your performance, customer onboarding, and commissions.`
+    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -196,6 +219,7 @@ export default function Members() {
                       )}
                     </td>
                     <td className="text-right space-x-2">
+                      <button type="button" onClick={() => handleWhatsApp(m)} className="text-xs font-semibold text-emerald-400 hover:underline">WhatsApp</button>
                       <Link to={`/admin/members/${m.id}`} className="text-xs font-semibold text-gold hover:underline">View Profile</Link>
                       {isSuperAdmin && (
                         <button type="button" onClick={() => setChangeEmailTarget(m)} className="text-xs font-semibold text-sky-400 hover:underline">Change Email</button>

@@ -20,8 +20,8 @@ export default function CustomerList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Agents (rank < 10) only see customers they enrolled; managers+ see all.
-  const scopeOwn = !isSuperAdmin && (profile?.rank || 0) < 10
+  // All field agents strictly only see customers they enrolled; only Super Admins see all.
+  const scopeOwn = !isSuperAdmin
 
   useEffect(() => {
     let mounted = true
