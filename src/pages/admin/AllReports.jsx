@@ -21,7 +21,6 @@ export default function AllReports() {
 
   // Load Firestore Collections
   const allUsers = useCollection('users')
-  const allBranches = useCollection('branches')
   const allPlans = useCollection('plans')
   const allCommissions = useCollection('commission_ledger')
   const allPayouts = useCollection('payouts')
@@ -31,25 +30,18 @@ export default function AllReports() {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'agents')
 
   // Global Filters State
-  const [filterBranch, setFilterBranch] = useState(searchParams.get('branch') || '')
   const [filterRank, setFilterRank] = useState(searchParams.get('rank') || '')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
   const [filterPlan, setFilterPlan] = useState(searchParams.get('plan') || '')
   const [dateFrom, setDateFrom] = useState(searchParams.get('from') || '')
   const [dateTo, setDateTo] = useState(searchParams.get('to') || '')
 
-  const loading = allUsers.loading || allBranches.loading || allPlans.loading || allCommissions.loading || allPayouts.loading || allPromotions.loading
-
-  const branchName = (branchId) => {
-    if (!branchId) return '—'
-    return (allBranches.data || []).find(b => b.id === branchId)?.name || '—'
-  }
+  const loading = allUsers.loading || allPlans.loading || allCommissions.loading || allPayouts.loading || allPromotions.loading
 
   // 1. Filtered Agents list
   const agentsData = useMemo(() => {
     if (loading) return []
     return (allUsers.data || []).filter(u => {
-      if (filterBranch && u.branchId !== filterBranch) return false
       if (filterRank && String(u.rank) !== String(filterRank)) return false
       if (filterStatus && u.status !== filterStatus) return false
       
@@ -60,13 +52,12 @@ export default function AllReports() {
       }
       return true
     })
-  }, [allUsers.data, filterBranch, filterRank, filterStatus, dateFrom, dateTo, loading])
+  }, [allUsers.data, filterRank, filterStatus, dateFrom, dateTo, loading])
 
   // 2. Filtered Policies list
   const policiesData = useMemo(() => {
     if (loading) return []
     return allPlans.data.filter(p => {
-      if (filterBranch && p.branchId !== filterBranch) return false
       if (filterPlan && p.type !== filterPlan) return false
       if (filterStatus && p.status !== filterStatus) return false
       
@@ -77,7 +68,7 @@ export default function AllReports() {
       }
       return true
     })
-  }, [allPlans.data, filterBranch, filterPlan, filterStatus, dateFrom, dateTo, loading])
+  }, [allPlans.data, filterPlan, filterStatus, dateFrom, dateTo, loading])
 
   // 3. Filtered Commissions list
   const commissionsData = useMemo(() => {
@@ -118,11 +109,6 @@ export default function AllReports() {
   const businessStats = useMemo(() => {
     if (loading) return {}
     
-    // Branch aggregations
-    const branchSales = {}
-    allBranches.data.forEach(b => {
-      branchSales[b.id] = { name: b.name, total: 0 }
-    })
     // Rank aggregations
     const rankSales = {}
     ranksConfig?.RANKS?.forEach(r => {
@@ -134,10 +120,6 @@ export default function AllReports() {
     allPlans.data.forEach(p => {
       const isRD = (p.planType || p.type || '').toLowerCase().startsWith('rd')
       const amount = isRD ? (p.monthlyAmount * 12) : (p.fdAmount || 0)
-
-      if (p.branchId && branchSales[p.branchId]) {
-        branchSales[p.branchId].total += amount
-      }
       
       const agent = allUsers.data.find(u => u.id === p.agentId)
       if (agent) {
@@ -153,11 +135,10 @@ export default function AllReports() {
     })
 
     return {
-      branches: Object.values(branchSales).sort((a, b) => b.total - a.total),
       ranks: Object.values(rankSales).sort((a, b) => b.total - a.total),
       agents: Object.values(agentSales).sort((a, b) => b.total - a.total).slice(0, 10),
     }
-  }, [allPlans.data, allBranches.data, allUsers.data, ranksConfig, loading])
+  }, [allPlans.data, allUsers.data, ranksConfig, loading])
 
   // Export to Excel trigger
   const handleExportExcel = () => {
@@ -168,7 +149,6 @@ export default function AllReports() {
       sheetData = agentsData.map(a => ({
         'Agent Name': a.name,
         'Agent ID': a.sponsorCode || '—',
-        'Branch Office': branchName(a.branchId),
         'Rank Code': getRank(a.rank).code,
         'Personal Business': a.businessVolume || 0,
         'Status': a.status,
@@ -242,17 +222,15 @@ export default function AllReports() {
     let y = 35
     if (activeTab === 'agents') {
       doc.text('Name / Code', 14, y)
-      doc.text('Branch', 70, y)
-      doc.text('Rank', 120, y)
-      doc.text('Business Volume', 160, y)
+      doc.text('Rank', 90, y)
+      doc.text('Business Volume', 150, y)
       doc.line(14, y + 2, 195, y + 2)
       y += 8
       agentsData.forEach(a => {
         if (y > 280) { doc.addPage(); y = 20 }
         doc.text(`${a.name} (${a.sponsorCode || '—'})`, 14, y)
-        doc.text(branchName(a.branchId), 70, y)
-        doc.text(getRank(a.rank).code, 120, y)
-        doc.text(formatINR(a.businessVolume || 0), 160, y)
+        doc.text(getRank(a.rank).code, 90, y)
+        doc.text(formatINR(a.businessVolume || 0), 150, y)
         y += 7
       })
     } else if (activeTab === 'policies') {
@@ -292,14 +270,7 @@ export default function AllReports() {
       </div>
 
       {/* Filter panel */}
-      <div className="card p-5 bg-navy-3 border border-navy-4 grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div>
-          <label className="label">Branch Office</label>
-          <select className="field text-xs" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
-            <option value="">— All Branches —</option>
-            {allBranches.data.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
+      <div className="card p-5 bg-navy-3 border border-navy-4 grid grid-cols-2 md:grid-cols-5 gap-4">
         <div>
           <label className="label">Rank Tier</label>
           <select className="field text-xs" value={filterRank} onChange={e => setFilterRank(e.target.value)}>
@@ -372,7 +343,6 @@ export default function AllReports() {
                   <thead>
                     <tr>
                       <th>Agent Name</th>
-                      <th>Branch Office</th>
                       <th>Rank Tier</th>
                       <th>Status</th>
                       <th>Personal BV</th>
@@ -385,7 +355,6 @@ export default function AllReports() {
                           <span className="font-semibold text-ink-1 block">{a.name}</span>
                           <span className="text-[10px] text-ink-2 font-mono">{a.sponsorCode}</span>
                         </td>
-                        <td>{branchName(a.branchId)}</td>
                         <td><RankBadge rank={a.rank} size="sm" showName /></td>
                         <td><StatusBadge status={a.status} /></td>
                         <td className="font-mono text-gold font-bold">{formatINR(a.businessVolume || 0)}</td>
@@ -399,20 +368,7 @@ export default function AllReports() {
 
           {/* 2. BUSINESS TAB */}
           {activeTab === 'business' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Branch Volume */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">Branch Rankings</h4>
-                <div className="space-y-2.5">
-                  {businessStats.branches.map(b => (
-                    <div key={b.name} className="flex justify-between items-center text-xs">
-                      <span className="font-semibold text-ink-1">{b.name}</span>
-                      <span className="font-mono font-bold text-gold">{formatINR(b.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Rank Tier Volume */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50">Rank Volume Distributions</h4>

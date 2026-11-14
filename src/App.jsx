@@ -28,8 +28,6 @@ const CmdAwards = lazy(() => import('./pages/earnings/CmdAwards'))
 const MyProfile = lazy(() => import('./pages/MyProfile'))
 const Members = lazy(() => import('./pages/admin/Members'))
 const MemberDetail = lazy(() => import('./pages/admin/MemberDetail'))
-const Branches = lazy(() => import('./pages/admin/Branches'))
-const BranchDetail = lazy(() => import('./pages/admin/BranchDetail'))
 const Overview = lazy(() => import('./pages/admin/Overview'))
 const Settings = lazy(() => import('./pages/admin/Settings'))
 const ImportData = lazy(() => import('./pages/admin/ImportData'))
@@ -193,8 +191,6 @@ export default function App() {
               {/* Admin */}
               <Route path="/admin/members" element={<Protected capability={CAP.ADMIN}><Members /></Protected>} />
               <Route path="/admin/members/:id" element={<Protected capability={CAP.ADMIN}><MemberDetail /></Protected>} />
-              <Route path="/admin/branches" element={<Protected capability={CAP.ADMIN}><Branches /></Protected>} />
-              <Route path="/admin/branches/:id" element={<Protected capability={CAP.ADMIN}><BranchDetail /></Protected>} />
               <Route path="/admin/import" element={<Protected capability={CAP.ADMIN}><ImportData /></Protected>} />
               <Route path="/admin/payment-import" element={<Protected capability={CAP.ADMIN}><PaymentImport /></Protected>} />
               <Route path="/admin/import/history" element={<Protected capability={CAP.ADMIN}><ImportHistory /></Protected>} />

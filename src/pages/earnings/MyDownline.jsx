@@ -22,19 +22,10 @@ export default function MyDownline() {
   const { can } = usePermission()
   const { config: ranksConfig, getRank, nextRank } = useRanks()
 
-  const [branches, setBranches] = useState([])
   const [directTeam, setDirectTeam] = useState([])
   const [downline, setDownline] = useState([])
   const [downlineLoading, setDownlineLoading] = useState(false)
   const [allUsers, setAllUsers] = useState([])
-
-  useEffect(() => {
-    let mounted = true
-    masterDataAPI.listBranches()
-      .then(res => { if (mounted) setBranches(res || []) })
-      .catch(err => console.error('Failed to load branches:', err))
-    return () => { mounted = false }
-  }, [])
 
   useEffect(() => {
     if (!uid) return
@@ -66,7 +57,6 @@ export default function MyDownline() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterRank, setFilterRank] = useState('')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
-  const [filterBranch, setFilterBranch] = useState('')
   const [filterSponsor, setFilterSponsor] = useState('')
   
   // Export
@@ -128,11 +118,10 @@ export default function MyDownline() {
       }
       if (filterRank && String(u.rank) !== filterRank) return false
       if (filterStatus && u.status !== filterStatus) return false
-      if (filterBranch && u.branchId !== filterBranch) return false
       if (filterSponsor && (u.sponsorId || u.referredBy) !== filterSponsor) return false
       return true
     })
-  }, [downline, searchQuery, filterRank, filterStatus, filterBranch, filterSponsor])
+  }, [downline, searchQuery, filterRank, filterStatus, filterSponsor])
 
   const ranksInDownline = [...new Set(filteredDownline.map(u => u.rank))].sort((a, b) => b - a)
 
@@ -288,13 +277,6 @@ export default function MyDownline() {
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
-              <div className="w-32">
-                <label className="label">Branch</label>
-                <select className="field text-xs" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
-                  <option value="">All Branches</option>
-                  {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
               <div className="w-40">
                 <label className="label">Export Options</label>
                 <select className="field text-xs" value={exportOption} onChange={e => setExportOption(e.target.value)}>
@@ -340,7 +322,6 @@ export default function MyDownline() {
                           <tr>
                             <th>Agent Name</th>
                             <th>Upline Sponsor</th>
-                            <th>Branch</th>
                             <th>Phone Number</th>
                             <th>Joined Date</th>
                             <th>Status</th>
@@ -354,7 +335,6 @@ export default function MyDownline() {
                                 <span className="text-[10px] text-ink-2 font-mono">{m.sponsorCode || '—'}</span>
                               </td>
                               <td className="text-ink-2 font-semibold">{sponsorName(m)}</td>
-                              <td className="text-ink-2">{branches?.find(b => b.id === m.branchId)?.name || '—'}</td>
                               <td className="text-ink-2 font-mono">{m.phone || '—'}</td>
                               <td className="text-ink-2">{fmtDate(m.createdAt || m.joinDate)}</td>
                               <td><StatusBadge status={m.status || 'active'} /></td>
@@ -447,7 +427,6 @@ export default function MyDownline() {
       {showRecruit && (
         <MemberModal
           modal={{ mode: 'new' }}
-          branches={branches || []}
           members={allUsers || []}
           onClose={() => setShowRecruit(false)}
         />

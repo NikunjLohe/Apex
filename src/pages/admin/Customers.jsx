@@ -13,11 +13,9 @@ export default function Customers() {
   const navigate = useNavigate()
   const [customersList, setCustomersList] = useState([])
   const [usersList, setUsersList] = useState([])
-  const [branchesList, setBranchesList] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
-  const [branchFilter, setBranchFilter] = useState('all')
   const [page, setPage] = useState(1)
 
   useEffect(() => {
@@ -25,15 +23,13 @@ export default function Customers() {
     async function loadData() {
       setLoading(true)
       try {
-        const [cData, uData, bData] = await Promise.all([
+        const [cData, uData] = await Promise.all([
           customersAPI.listCustomers(),
           profilesAPI.listProfiles(),
-          masterDataAPI.listBranches(),
         ])
         if (!cancelled) {
           setCustomersList(cData || [])
           setUsersList(uData || [])
-          setBranchesList(bData || [])
         }
       } catch (err) {
         console.error('[Customers] Error fetching data:', err)
@@ -53,38 +49,27 @@ export default function Customers() {
     return map
   }, [usersList])
 
-  const branchMap = useMemo(() => {
-    const map = {}
-    branchesList.forEach(b => {
-      map[b.id] = b.name
-    })
-    return map
-  }, [branchesList])
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return customersList
       .filter((c) => {
-        if (branchFilter !== 'all' && c.branchId !== branchFilter) return false
         if (!q) return true
         
         const agentName = agentMap[c.enrolledBy]?.toLowerCase() || ''
-        const branchName = branchMap[c.branchId]?.toLowerCase() || ''
         
         return (
           c.name?.toLowerCase().includes(q) ||
           c.phone?.includes(q) ||
           c.customerId?.toLowerCase().includes(q) ||
-          agentName.includes(q) ||
-          branchName.includes(q)
-        );
+          agentName.includes(q)
+        )
       })
       .sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return timeB - timeA
       })
-  }, [customersList, search, branchFilter, agentMap, branchMap])
+  }, [customersList, search, agentMap])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -106,20 +91,10 @@ export default function Customers() {
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search CIF ID, name, phone, branch, agent…"
+            placeholder="Search CIF ID, name, phone, agent…"
             className="field pl-10"
           />
         </div>
-        <select 
-          value={branchFilter} 
-          onChange={(e) => { setBranchFilter(e.target.value); setPage(1) }} 
-          className="field w-auto text-xs font-semibold"
-        >
-          <option value="all">All Branches</option>
-          {branchesList.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
       </div>
 
       {/* Table */}
@@ -143,7 +118,6 @@ export default function Customers() {
                     <th>Customer Name</th>
                     <th>Mobile</th>
                     <th>Assigned Agent</th>
-                    <th>Branch</th>
                     <th className="text-center">Policies</th>
                     <th>Import Date</th>
                   </tr>
@@ -163,7 +137,6 @@ export default function Customers() {
                       </td>
                       <td className="text-ink-2 font-mono">{c.phone || '—'}</td>
                       <td className="text-ink-2 font-medium">{agentMap[c.enrolledBy] || '—'}</td>
-                      <td className="text-ink-2 font-medium">{branchMap[c.branchId] || '—'}</td>
                       <td className="text-center">
                         <span className="font-bold text-ink-1 bg-navy-2 px-2 py-0.5 rounded border border-navy-4 font-mono">
                           {c.plansCount || 0}

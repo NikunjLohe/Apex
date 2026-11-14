@@ -21,7 +21,6 @@ export default function CommissionBill() {
   
   const [agentProfile, setAgentProfile] = useState(null)
   const [sponsorProfile, setSponsorProfile] = useState(null)
-  const [branchDetails, setBranchDetails] = useState(null)
   const [usersMap, setUsersMap] = useState({})
   const [policyCommissionsMap, setPolicyCommissionsMap] = useState({})
   const [expandedPolicies, setExpandedPolicies] = useState(new Set())
@@ -61,13 +60,6 @@ export default function CommissionBill() {
             const sponsorSnap = await getDoc(doc(db, 'users', agentProf.referredBy))
             if (sponsorSnap.exists()) {
               setSponsorProfile(sponsorSnap.data())
-            }
-          }
-
-          if (agentProf?.branchId) {
-            const branchSnap = await getDoc(doc(db, 'branches', agentProf.branchId))
-            if (branchSnap.exists()) {
-              setBranchDetails(branchSnap.data())
             }
           }
 
@@ -390,7 +382,6 @@ export default function CommissionBill() {
   const displayPanNumber = agentProfile?.panNumber || '—'
   const displayRankName = agentProfile?.rank ? getRank(agentProfile.rank).name : '—'
   const displayRankCode = agentProfile?.rank ? getRank(agentProfile.rank).code : '—'
-  const displayBranchName = branchDetails?.name || '—'
   const displaySponsorName = sponsorProfile?.name 
     ? `${sponsorProfile.name} (${sponsorProfile.sponsorCode || '—'})`
     : '—'
@@ -434,7 +425,7 @@ export default function CommissionBill() {
             <Logo size={46} showText={false} />
             <div>
               <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Performance Portal</p>
               {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
             </div>
           </div>
@@ -454,7 +445,6 @@ export default function CommissionBill() {
             <div><span className="text-gray-500 block">Agent Name</span><span className="font-bold text-gray-800 text-sm">{bill.agentName}</span></div>
             <div><span className="text-gray-500 block">Agent Code</span><span className="font-bold text-gray-800 font-mono">{bill.agentCode || '—'}</span></div>
             <div><span className="text-gray-500 block">Rank</span><span className="font-bold text-gray-800">{displayRankCode} - {displayRankName}</span></div>
-            <div><span className="text-gray-500 block">Branch Office</span><span className="font-bold text-gray-800">{displayBranchName}</span></div>
             <div><span className="text-gray-500 block">Sponsor</span><span className="font-bold text-gray-800">{displaySponsorName}</span></div>
             <div><span className="text-gray-500 block">PAN Number</span><span className="font-bold text-gray-800 font-mono">{displayPanNumber}</span></div>
             <div><span className="text-gray-500 block">Bank Name</span><span className="font-bold text-gray-800">{displayBankName}</span></div>

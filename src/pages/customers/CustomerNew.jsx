@@ -153,7 +153,6 @@ export default function CustomerNew() {
         <Section title="6 · Agent Details">
           <Grid>
             <F label="Enrolled By"><input className="field" disabled value={profile?.name || '—'} /></F>
-            <F label="Branch"><input className="field" disabled value={profile?.branchId || '—'} /></F>
             <F label="Introduction Source *" error={errors.source}>
               <select className="field" {...register('source')}><option>Walk-in</option><option>Referral</option><option>Agent</option></select>
             </F>

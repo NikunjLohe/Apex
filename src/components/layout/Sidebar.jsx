@@ -43,7 +43,6 @@ const ADMIN_GROUPS = [
     title: 'Management',
     items: [
       { to: '/admin/members',    label: 'Members',       Icon: IUsers,    cap: CAP.SUPER_ADMIN },
-      { to: '/admin/branches',   label: 'Branches',      Icon: IBuilding, cap: CAP.SUPER_ADMIN },
       { to: '/admin/customers',  label: 'Customers',     Icon: IUsers,    cap: CAP.SUPER_ADMIN },
       { to: '/admin/policies',   label: 'Policies',      Icon: IDoc,      cap: CAP.SUPER_ADMIN },
     ],

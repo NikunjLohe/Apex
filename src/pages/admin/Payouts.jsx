@@ -100,12 +100,11 @@ export default function Payouts() {
         return
       }
 
-      // 2. Fetch Users, Plans, Customers, Branches in Parallel (Read-Only)
-      const [profiles, plans, custs, branches] = await Promise.all([
+      // 2. Fetch Users, Plans, Customers in Parallel (Read-Only)
+      const [profiles, plans, custs] = await Promise.all([
         profilesAPI.listProfiles().catch(() => []),
         policiesAPI.listPolicies().catch(() => []),
         customersAPI.listCustomers().catch(() => []),
-        masterDataAPI.listBranches().catch(() => [])
       ])
 
       const usersMap = {}
@@ -116,9 +115,6 @@ export default function Payouts() {
 
       const custMap = {}
       ;(custs || []).forEach(d => { custMap[d.id] = d })
-
-      const branchMap = {}
-      ;(branches || []).forEach(d => { branchMap[d.id] = d })
 
       // Group commissions by agent
       const groupedComms = {}
@@ -259,7 +255,6 @@ export default function Payouts() {
         const u = usersMap[c.agentId] || {}
         const plan = plansMap[c.policyId] || Object.values(plansMap).find(p => p.planAccountNumber === c.policyNumber || p.policyNumber === c.policyNumber) || {}
         const cust = custMap[c.customerId] || Object.values(custMap).find(cs => cs.customerId === c.customerAccount || cs.accountNumber === c.customerAccount) || {}
-        const branch = branchMap[u.branchId || cust.branchId] || {}
 
         const isGap = c.compression === true || (c.commissionType === 'adjustment') || Boolean(c.compressionReason && c.compressionReason.includes('Vacant'))
         const absorbedRanksText = getAbsorbedRanksText(c)
@@ -292,7 +287,6 @@ export default function Payouts() {
           'Customer Name': String(c.customerName || cust.name || '—'),
           'Customer Mobile': String(cust.phone || '—'),
           'Customer Address': String(cust.address || '—'),
-          'Customer Branch': String(branch.name || cust.branchId || '—'),
 
           'Policy Number': { v: String(c.policyNumber || plan.policyNumber || '—'), t: 's' },
           'Plan Code': String(c.planCode || plan.type || '—'),

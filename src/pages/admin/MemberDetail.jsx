@@ -22,7 +22,6 @@ export default function MemberDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const agentDoc = useDoc(id ? `users/${id}` : null)
-  const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
   const { user: currentUser, startViewingAs, realProfile } = useAuth()
   const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
@@ -183,7 +182,6 @@ export default function MemberDetail() {
     setViewAsModalOpen(false)
   }
 
-  const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
   const sponsorName = useCallback((uid) => {
     if (!uid) return '—'
     if (sponsorMap[uid]) return sponsorMap[uid]
@@ -194,7 +192,7 @@ export default function MemberDetail() {
     return '…'
   }, [sponsorMap])
 
-  if (agentDoc.loading || branches.loading) {
+  if (agentDoc.loading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="card h-28 animate-pulse bg-navy-2" />
@@ -329,10 +327,6 @@ Here are your official portal details:
               <div>
                 <span className="block text-[10px] text-ink-2">Joining Date</span>
                 <span className="font-semibold text-ink-1">{m.joinDate ? fmtDate(m.joinDate) : '—'}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-ink-2">Current Branch</span>
-                <span className="font-semibold text-ink-1 flex items-center gap-1"><IBuilding size={12} /> {branchName(m.branchId)}</span>
               </div>
               <div>
                 <span className="block text-[10px] text-ink-2">Address</span>

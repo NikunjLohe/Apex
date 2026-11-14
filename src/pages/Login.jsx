@@ -39,7 +39,6 @@ const ROUTE_CAPS = [
   ['/admin/all-reports', 'superAdmin'],
   ['/admin/logs', 'superAdmin'],
   ['/admin/members', 'admin'],
-  ['/admin/branches', 'admin'],
   ['/admin/settings', 'admin'],
   ['/admin/policies', 'admin'],
   ['/admin/payouts', 'admin'],

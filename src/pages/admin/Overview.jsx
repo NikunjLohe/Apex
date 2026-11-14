@@ -12,7 +12,6 @@ export default function Overview() {
   const [policiesList, setPoliciesList] = useState([])
   const [paymentsList, setPaymentsList] = useState([])
   const [profilesList, setProfilesList] = useState([])
-  const [branchesList, setBranchesList] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -20,19 +19,17 @@ export default function Overview() {
     async function fetchOverviewData() {
       setLoading(true)
       try {
-        const [cData, pData, pmData, prData, bData] = await Promise.all([
+        const [cData, pData, pmData, prData] = await Promise.all([
           customersAPI.listCustomers(),
           policiesAPI.listPolicies(),
           paymentsAPI.listPayments(),
           profilesAPI.listProfiles(),
-          masterDataAPI.listBranches(),
         ])
         if (!cancelled) {
           setCustomersList(cData || [])
           setPoliciesList(pData || [])
           setPaymentsList(pmData || [])
           setProfilesList(prData || [])
-          setBranchesList(bData || [])
         }
       } catch (err) {
         console.error('[Overview] Error loading overview metrics:', err)
@@ -55,16 +52,6 @@ export default function Overview() {
     const defaulters = activePlans.filter((p) => { const d = toDate(p.nextDueDate); return d && d < today0 })
     const maturingThisMonth = policiesList.filter((p) => { const m = toDate(p.maturityDate); return m && m >= month0 && m <= monthEnd })
 
-    // Branch-wise collection (this month)
-    const branchMap = {}
-    paymentsList.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
-      branchMap[p.branchId || 'unknown'] = (branchMap[p.branchId || 'unknown'] || 0) + (p.amount || 0)
-    })
-    const branchChart = Object.entries(branchMap).map(([bid, amount]) => ({
-      name: branchesList.find((b) => b.id === bid)?.name || 'Unassigned',
-      amount: Math.round(amount),
-    }))
-
     // Agent leaderboard (this month)
     const agentMap = {}
     paymentsList.filter((p) => toDate(p.paidDate) >= month0).forEach((p) => {
@@ -84,9 +71,9 @@ export default function Overview() {
       defaulters: defaulters.length,
       maturingThisMonth: maturingThisMonth.length,
       members: profilesList.length,
-      branchChart, leaderboard, recent,
+      leaderboard, recent,
     }
-  }, [customersList, policiesList, paymentsList, profilesList, branchesList])
+  }, [customersList, policiesList, paymentsList, profilesList])
 
   if (loading) return <div className="mx-auto max-w-6xl space-y-5"><SkeletonStats count={6} /></div>
 
@@ -111,41 +98,21 @@ export default function Overview() {
         ))}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {/* Branch chart */}
-        <div className="card p-5">
-          <h3 className="mb-3 font-semibold text-ink-1">Branch collections (this month)</h3>
-          {data.branchChart.length ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.branchChart} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#232D42" />
-                  <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} tickFormatter={formatCompactINR} width={56} />
-                  <Tooltip content={<TT />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                  <Bar dataKey="amount" fill="#C9980A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : <Empty />}
-        </div>
-
-        {/* Leaderboard */}
-        <div className="card p-5">
-          <h3 className="mb-3 font-semibold text-ink-1">Agent leaderboard (this month)</h3>
-          {data.leaderboard.length ? (
-            <ul className="space-y-2">
-              {data.leaderboard.map((a, i) => (
-                <li key={i} className="flex items-center gap-3 rounded-card border border-navy-4/60 bg-navy-2/50 px-3 py-2">
-                  <span className="w-5 text-center text-sm font-bold text-gold">{i + 1}</span>
-                  <span className="flex-1 truncate text-sm text-ink-1">{a.name}</span>
-                  <span className="text-xs text-ink-2">{a.count} pmts</span>
-                  <span className="w-24 text-right text-sm font-semibold text-ink-1">{formatCompactINR(a.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <Empty />}
-        </div>
+      {/* Leaderboard */}
+      <div className="card p-5">
+        <h3 className="mb-3 font-semibold text-ink-1">Agent leaderboard (this month)</h3>
+        {data.leaderboard.length ? (
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {data.leaderboard.map((a, i) => (
+              <li key={i} className="flex items-center gap-3 rounded-card border border-navy-4/60 bg-navy-2/50 px-3 py-2">
+                <span className="w-5 text-center text-sm font-bold text-gold">{i + 1}</span>
+                <span className="flex-1 truncate text-sm text-ink-1 font-semibold">{a.name}</span>
+                <span className="text-xs text-ink-2">{a.count} pmts</span>
+                <span className="w-24 text-right text-sm font-semibold text-emerald-400 font-mono">{formatCompactINR(a.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <Empty />}
       </div>
 
       {/* Recent activity */}

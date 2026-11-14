@@ -21,7 +21,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
   const isUsersNeeded = ['active-agents', 'total-business', 'monthly-business', 'active-policies', 'approved-promotions'].includes(metricType)
   const isPromotionsNeeded = metricType === 'approved-promotions'
   const isImportsNeeded = metricType === 'import-errors'
-  const isBranchesNeeded = metricType === 'active-agents'
 
   // 2. Query Firestore collections conditionally
   const plans = useCollection(isPlansCollectionNeeded && open ? 'plans' : null)
@@ -29,18 +28,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
   const users = useCollection(isUsersNeeded && open ? 'users' : null)
   const promotions = useCollection(isPromotionsNeeded && open ? 'promotions_history' : null)
   const imports = useCollection(isImportsNeeded && open ? 'imports' : null)
-  const branches = useCollection(isBranchesNeeded && open ? 'branches' : null)
-
-  // 3. Navigation map for branch and member profiles
-  const branchMap = useMemo(() => {
-    const map = {}
-    if (branches.data) {
-      branches.data.forEach((b) => {
-        map[b.id] = b.name
-      })
-    }
-    return map
-  }, [branches.data])
 
   // 4. State for UI controls
   const [search, setSearch] = useState('')
@@ -66,7 +53,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       case 'total-commissions':
         return payouts.loading
       case 'active-agents':
-        return users.loading || branches.loading
+        return users.loading
       case 'active-policies':
         return plans.loading || users.loading
       case 'approved-promotions':
@@ -76,7 +63,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       default:
         return false
     }
-  }, [open, metricType, plans.loading, payouts.loading, users.loading, promotions.loading, imports.loading, branches.loading])
+  }, [open, metricType, plans.loading, payouts.loading, users.loading, promotions.loading, imports.loading])
 
   // 6. Gather and process raw records for the active metric
   const processedRecords = useMemo(() => {
@@ -164,7 +151,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
         return filteredUsers.map((u) => ({
           id: u.id,
           name: u.name || '—',
-          branch: branchMap[u.branchId] || '—',
           joinDate: u.joinDate || u.createdAt,
           policiesSold: u.activePolicies || 0,
           lastActivityDate: u.recentImportDate || u.joinDate || u.createdAt,
@@ -238,7 +224,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
       default:
         return []
     }
-  }, [open, loading, metricType, plans.data, payouts.data, users.data, promotions.data, imports.data, branchMap, ranksConfig])
+  }, [open, loading, metricType, plans.data, payouts.data, users.data, promotions.data, imports.data, ranksConfig])
 
 
   // 7. Calculate Monthly subtotal chart data (MTD Monthly Business only)
@@ -428,7 +414,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           iconColor: 'text-gold',
           headers: [
             { label: 'Agent Name', key: 'name' },
-            { label: 'Branch Office', key: 'branch' },
             { label: 'Join Date', key: 'joinDate' },
             { label: 'Policies Sold', key: 'policiesSold' },
             { label: 'Last Active', key: 'lastActivityDate' },
@@ -682,7 +667,6 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
                               }}
                             >
                               <td className="font-semibold text-gold hover:underline">{r.name}</td>
-                              <td className="text-ink-2 font-medium">{r.branch}</td>
                               <td className="text-ink-2 font-mono">{r.joinDate ? fmtDate(r.joinDate) : '—'}</td>
                               <td className="font-bold text-ink-1 font-mono">{r.policiesSold}</td>
                               <td className="text-ink-2 font-mono">{r.lastActivityDate ? fmtDate(r.lastActivityDate) : '—'}</td>

@@ -22,7 +22,6 @@ const TITLES = [
   ['/my-downline', 'My Downline'],
   ['/cmd-awards', 'CMD Awards'],
   ['/admin/members', 'Members'],
-  ['/admin/branches', 'Branches'],
   ['/admin/settings', 'Settings'],
   ['/admin/overview', 'Overview'],
   ['/admin/all-reports', 'All Reports'],

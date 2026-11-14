@@ -754,7 +754,7 @@ export default function ManualOnboarding({ onComplete }) {
           <label className="block text-[11px] font-medium text-ink-2 mb-1">Internal Ledger Note (Optional)</label>
           <input
             type="text"
-            placeholder="e.g. Onboarded at Branch counter"
+            placeholder="e.g. Onboarded at counter"
             value={paymentNotes}
             onChange={e => setPaymentNotes(e.target.value)}
             className="field w-full text-xs"

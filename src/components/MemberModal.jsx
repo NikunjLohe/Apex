@@ -122,7 +122,6 @@ export default function MemberModal({ modal, branches, members, settings, onClos
     return [...ownPayments].sort((a, b) => new Date(b.paidDate) - new Date(a.paidDate)).slice(0, 5)
   }, [ownPayments])
 
-  const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
   const memberName = (uid) => members.find((x) => x.id === uid)?.name || '—'
 
   const selectedSponsor = useMemo(() => {
@@ -423,58 +422,24 @@ _Welcome to the Apex Family!_`
               {errors.dob && <p className="err">{errors.dob.message}</p>}
             </div>
             
-            {isSuperAdmin ? (
-              <>
-                <div>
-                  <label className="label">Branch</label>
-                  <select className="field" {...register('branchId')}>
-                    <option value="">— None —</option>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Rank</label>
-                  <select 
-                    className="field" 
-                    disabled={!selectedSponsor && sponsorCodeInputVal?.trim()}
-                    {...register('rank', { valueAsNumber: true })}
-                  >
-                    {activeRanks.length === 0 ? (
-                      <option value="">— No eligible ranks —</option>
-                    ) : (
-                      <>
-                        <option value="">— Select a rank —</option>
-                        {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
-                      </>
-                    )}
-                  </select>
-                  {errors.rank && <p className="err">{errors.rank.message}</p>}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* For non-super admins (Agents): Lock Branch but keep Rank dropdown dynamic */}
-                <div>
-                  <label className="label">Branch</label>
-                  <input type="hidden" value={profile?.branchId || ''} {...register('branchId')} />
-                  <select className="field bg-navy-2/60 text-ink-2" disabled value={profile?.branchId || ''}>
-                    <option value="">— None —</option>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Rank</label>
-                  <select 
-                    className="field"
-                    {...register('rank', { valueAsNumber: true })}
-                  >
+            <div>
+              <label className="label">Rank</label>
+              <select 
+                className="field" 
+                disabled={!selectedSponsor && sponsorCodeInputVal?.trim()}
+                {...register('rank', { valueAsNumber: true })}
+              >
+                {activeRanks.length === 0 ? (
+                  <option value="">— No eligible ranks —</option>
+                ) : (
+                  <>
                     <option value="">— Select a rank —</option>
                     {activeRanks.map((r) => <option key={r.rank} value={r.rank}>{r.rank}. {r.code} — {r.name}</option>)}
-                  </select>
-                  {errors.rank && <p className="err">{errors.rank.message}</p>}
-                </div>
-              </>
-            )}
+                  </>
+                )}
+              </select>
+              {errors.rank && <p className="err">{errors.rank.message}</p>}
+            </div>
           </div>
           
           <div className="grid grid-cols-2 gap-2">
@@ -826,9 +791,8 @@ _Welcome to the Apex Family!_`
 
               {/* Sponsorship details */}
               <div className="border border-navy-4 p-4 rounded-card text-xs space-y-2 bg-navy-2/30">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div><span className="block text-[10px] text-ink-2">Sponsor / Upline</span><span className="font-medium text-ink-1">{m?.referredBy ? memberName(m.referredBy) : '—'}</span></div>
-                  <div><span className="block text-[10px] text-ink-2">Branch Office</span><span className="font-medium text-ink-1">{branchName(m?.branchId)}</span></div>
                   <div><span className="block text-[10px] text-ink-2">Joined Date</span><span className="font-medium text-ink-1">{fmtDate(m?.joinDate)}</span></div>
                 </div>
               </div>
@@ -850,15 +814,6 @@ _Welcome to the Apex Family!_`
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
                 <div><label className="label">PAN Number</label><input className="field font-mono uppercase" maxLength={10} placeholder="ABCDE1234F" {...register('panNumber')} />{errors.panNumber && <p className="err">{errors.panNumber.message}</p>}</div>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="label">Branch</label>
-                  <select className="field" disabled={!isSuperAdmin} {...register('branchId')}>
-                    <option value="">— None —</option>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                </div>
               </div>
               <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
               <div className="grid grid-cols-2 gap-3">
