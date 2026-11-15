@@ -601,13 +601,9 @@ Here are your official portal details:
                         <span className="text-ink-2">MDA Structure Tier</span>
                         <span className="font-semibold text-ink-1 font-mono">{rank.code} ({rank.name})</span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-navy-4/20">
+                      <div className="flex justify-between py-1">
                         <span className="text-ink-2">MFA Monthly Target</span>
                         <span className="font-semibold text-ink-1 font-serif">{formatINR(model.mfa || 0)}</span>
-                      </div>
-                      <div className="flex justify-between py-1">
-                        <span className="text-ink-2">Travel Allowance (TA)</span>
-                        <span className="font-semibold text-ink-1 font-serif">{formatINR(model.ta || 0)}</span>
                       </div>
                     </div>
                   )}

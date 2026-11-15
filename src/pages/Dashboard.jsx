@@ -316,7 +316,7 @@ function AgentDashboard() {
     const rule = promotionsConfig.rules[nextRankObj.code]
     if (!rule) return null
 
-    // Find rank-level config for MFA, PB, TA
+    // Find rank-level config for MFA, PB
     const ranks = config?.RANKS || []
     const myRankIdx = myRank - 1
     const nextRankIdx = (nextRankObj.rank || 2) - 1
@@ -324,10 +324,8 @@ function AgentDashboard() {
     const bizTarget   = rule.businessTarget || 0
     const mfaTarget   = rule.mfaTarget || 0
     const pbTarget    = rule.pbTarget || 0
-    const taTarget    = rule.taTarget || 0
     const mfaAmt      = rule.mfa || 0
     const pbAmt       = rule.pb || 0
-    const taAmt       = rule.ta || 0
 
     const bizCurrent  = metrics.personalBusiness
     const mfaCurrent  = metrics.monthBusiness
@@ -340,7 +338,6 @@ function AgentDashboard() {
       rule, bizTarget, bizCurrent, bizPct,
       mfaTarget, mfaAmt, mfaCurrent,
       pbTarget, pbAmt, pbCurrent,
-      taTarget, taAmt,
       eligible,
     }
   }, [promotionsConfig, metrics, nextRankObj, myRank, config])
@@ -532,16 +529,13 @@ function AgentDashboard() {
           </div>
 
           {promoProgress ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <ProgressBar label="Business Target" value={promoProgress.bizCurrent} max={promoProgress.bizTarget} color="#A3906B" current={promoProgress.bizCurrent} target={promoProgress.bizTarget} />
               {promoProgress.mfaTarget > 0 && (
                 <ProgressBar label="MFA Target" value={promoProgress.mfaCurrent} max={promoProgress.mfaTarget} color="#60A5FA" current={promoProgress.mfaCurrent} target={promoProgress.mfaTarget} />
               )}
               {promoProgress.pbTarget > 0 && (
                 <ProgressBar label="PB Target" value={promoProgress.pbCurrent} max={promoProgress.pbTarget} color="#10B981" current={promoProgress.pbCurrent} target={promoProgress.pbTarget} />
-              )}
-              {promoProgress.taTarget > 0 && (
-                <ProgressBar label="TA Target" value={0} max={promoProgress.taTarget} color="#F59E0B" current={0} target={promoProgress.taTarget} suffix="" />
               )}
             </div>
           ) : (

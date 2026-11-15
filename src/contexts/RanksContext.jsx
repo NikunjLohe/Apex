@@ -23,7 +23,6 @@ function buildConfigFromRanksList(ranksList) {
   // Build legacy flat arrays expected by Settings.jsx, CmdAwards.jsx, earnings.js, etc.
   const MFA               = sorted.map(r => Number(r.mfa) || 0)
   const MFA_TARGET        = sorted.map(r => Number(r.mfaTarget) || 0)
-  const TA                = sorted.map(r => Number(r.ta) || 0)
   const PB_TARGET         = sorted.map(r => Number(r.pbTarget) || 0)
   const PB_AMOUNT         = sorted.map(r => Number(r.pbAmount) || 0)
   const PROMO_TARGET      = sorted.map(r => Number(r.promoTarget) || 0)
@@ -41,7 +40,6 @@ function buildConfigFromRanksList(ranksList) {
     RANKS,
     MFA,
     MFA_TARGET,
-    TA,
     PB_TARGET,
     PB_AMOUNT,
     PROMO_TARGET,
@@ -90,7 +88,6 @@ export function RanksProvider({ children }) {
         })),
         MFA: EMPTY_ARR,
         MFA_TARGET: EMPTY_ARR,
-        TA: EMPTY_ARR,
         PB_TARGET: EMPTY_ARR,
         PB_AMOUNT: EMPTY_ARR,
         PROMO_TARGET: EMPTY_ARR,
@@ -123,7 +120,6 @@ export function RanksProvider({ children }) {
         name: r.name || '',
         mfa: Number(r.mfa) || 0,
         mfaTarget: Number(r.mfaTarget) || 0,
-        ta: Number(r.ta) || 0,
         pbTarget: Number(r.pbTarget) || 0,
         pbAmount: Number(r.pbAmount) || 0,
         promoTarget: Number(r.promoTarget) || 0,

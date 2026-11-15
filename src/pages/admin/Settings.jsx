@@ -118,24 +118,24 @@ export default function Settings() {
   useEffect(() => {
     if (promotionsLoading) return
     const DEFAULT_PROMOTION_RULES = {
-      AO: { businessTarget: 0, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 400, mfaTarget: 20000, pb: 0, pbTarget: 0, ta: 0, cmd: 3000, cmdTarget: 300000 },
-      AM: { businessTarget: 50000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 500, mfaTarget: 40000, pb: 0, pbTarget: 0, ta: 500, cmd: 9000, cmdTarget: 900000 },
-      ADM: { businessTarget: 150000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 600, mfaTarget: 60000, pb: 0, pbTarget: 0, ta: 1000, cmd: 15000, cmdTarget: 1500000 },
-      DM: { businessTarget: 300000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 750, mfaTarget: 80000, pb: 3000, pbTarget: 200000, ta: 1000, cmd: 25000, cmdTarget: 2500000 },
-      SDM: { businessTarget: 500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1000, mfaTarget: 200000, pb: 4000, pbTarget: 500000, ta: 1500, cmd: 40000, cmdTarget: 4000000 },
-      CM: { businessTarget: 750000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1500, mfaTarget: 300000, pb: 6000, pbTarget: 800000, ta: 1500, cmd: 60000, cmdTarget: 6000000 },
-      AGM: { businessTarget: 1500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2000, mfaTarget: 400000, pb: 7000, pbTarget: 1000000, ta: 2000, cmd: 80000, cmdTarget: 8000000 },
-      GM: { businessTarget: 2000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2500, mfaTarget: 600000, pb: 8000, pbTarget: 1500000, ta: 2500, cmd: 100000, cmdTarget: 10000000 },
-      ZM: { businessTarget: 3000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3000, mfaTarget: 800000, pb: 9000, pbTarget: 2000000, ta: 2500, cmd: 150000, cmdTarget: 15000000 },
-      ED: { businessTarget: 4500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3500, mfaTarget: 1000000, pb: 10000, pbTarget: 3000000, ta: 3000, cmd: 200000, cmdTarget: 20000000 },
-      SED: { businessTarget: 6000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 4000, mfaTarget: 1200000, pb: 15000, pbTarget: 4000000, ta: 3000, cmd: 225000, cmdTarget: 30000000 },
-      MD: { businessTarget: 7500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 5000, mfaTarget: 1500000, pb: 20000, pbTarget: 5000000, ta: 3500, cmd: 300000, cmdTarget: 40000000 },
-      CMD: { businessTarget: 9000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 6000, mfaTarget: 1800000, pb: 25000, pbTarget: 6000000, ta: 3500, cmd: 412500, cmdTarget: 55000000 },
-      AVP: { businessTarget: 12000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 7500, mfaTarget: 2100000, pb: 32500, pbTarget: 7500000, ta: 4500, cmd: 525000, cmdTarget: 70000000 },
-      VP: { businessTarget: 15000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 9000, mfaTarget: 2500000, pb: 40000, pbTarget: 9000000, ta: 6000, cmd: 675000, cmdTarget: 90000000 },
-      SVP: { businessTarget: 18000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 12000, mfaTarget: 3000000, pb: 50000, pbTarget: 10500000, ta: 7000, cmd: 550000, cmdTarget: 110000000 },
-      EVP: { businessTarget: 21000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 15000, mfaTarget: 3500000, pb: 60000, pbTarget: 12000000, ta: 9000, cmd: 750000, cmdTarget: 150000000 },
-      MGD: { businessTarget: 25000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 20000, mfaTarget: 4000000, pb: 75000, pbTarget: 13500000, ta: 12000, cmd: 1000000, cmdTarget: 200000000 },
+      AO: { businessTarget: 0, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 400, mfaTarget: 20000, pb: 0, pbTarget: 0, cmd: 3000, cmdTarget: 300000 },
+      AM: { businessTarget: 50000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 500, mfaTarget: 40000, pb: 0, pbTarget: 0, cmd: 9000, cmdTarget: 900000 },
+      ADM: { businessTarget: 150000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 600, mfaTarget: 60000, pb: 0, pbTarget: 0, cmd: 15000, cmdTarget: 1500000 },
+      DM: { businessTarget: 300000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 750, mfaTarget: 80000, pb: 3000, pbTarget: 200000, cmd: 25000, cmdTarget: 2500000 },
+      SDM: { businessTarget: 500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1000, mfaTarget: 200000, pb: 4000, pbTarget: 500000, cmd: 40000, cmdTarget: 4000000 },
+      CM: { businessTarget: 750000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1500, mfaTarget: 300000, pb: 6000, pbTarget: 800000, cmd: 60000, cmdTarget: 6000000 },
+      AGM: { businessTarget: 1500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2000, mfaTarget: 400000, pb: 7000, pbTarget: 1000000, cmd: 80000, cmdTarget: 8000000 },
+      GM: { businessTarget: 2000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2500, mfaTarget: 600000, pb: 8000, pbTarget: 1500000, cmd: 100000, cmdTarget: 10000000 },
+      ZM: { businessTarget: 3000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3000, mfaTarget: 800000, pb: 9000, pbTarget: 2000000, cmd: 150000, cmdTarget: 15000000 },
+      ED: { businessTarget: 4500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3500, mfaTarget: 1000000, pb: 10000, pbTarget: 3000000, cmd: 200000, cmdTarget: 20000000 },
+      SED: { businessTarget: 6000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 4000, mfaTarget: 1200000, pb: 15000, pbTarget: 4000000, cmd: 225000, cmdTarget: 30000000 },
+      MD: { businessTarget: 7500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 5000, mfaTarget: 1500000, pb: 20000, pbTarget: 5000000, cmd: 300000, cmdTarget: 40000000 },
+      CMD: { businessTarget: 9000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 6000, mfaTarget: 1800000, pb: 25000, pbTarget: 6000000, cmd: 412500, cmdTarget: 55000000 },
+      AVP: { businessTarget: 12000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 7500, mfaTarget: 2100000, pb: 32500, pbTarget: 7500000, cmd: 525000, cmdTarget: 70000000 },
+      VP: { businessTarget: 15000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 9000, mfaTarget: 2500000, pb: 40000, pbTarget: 9000000, cmd: 675000, cmdTarget: 90000000 },
+      SVP: { businessTarget: 18000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 12000, mfaTarget: 3000000, pb: 50000, pbTarget: 10500000, cmd: 550000, cmdTarget: 110000000 },
+      EVP: { businessTarget: 21000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 15000, mfaTarget: 3500000, pb: 60000, pbTarget: 12000000, cmd: 750000, cmdTarget: 150000000 },
+      MGD: { businessTarget: 25000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 20000, mfaTarget: 4000000, pb: 75000, pbTarget: 13500000, cmd: 1000000, cmdTarget: 200000000 },
     }
 
     if (promotionsData?.rules && Object.keys(promotionsData.rules).length > 0) {
@@ -155,7 +155,6 @@ export default function Settings() {
       name: r.name,
       mfa: config.MFA[i] || 0,
       mfaTarget: config.MFA_TARGET[i] || 0,
-      ta: config.TA[i] || 0,
       pbTarget: config.PB_TARGET[i] || 0,
       pbAmount: config.PB_AMOUNT[i] || 0,
       promoTarget: config.PROMO_TARGET[i] || 0,
@@ -227,7 +226,6 @@ export default function Settings() {
       name: rankObj.name || '',
       mfa: rankObj.mfa || 0,
       mfaTarget: rankObj.mfaTarget || 0,
-      ta: rankObj.ta || 0,
       pbTarget: rankObj.pbTarget || 0,
       pbAmount: rankObj.pbAmount || 0,
       promoTarget: rankObj.promoTarget || 0,
@@ -251,7 +249,6 @@ export default function Settings() {
       name: '',
       mfa: 0,
       mfaTarget: 0,
-      ta: 0,
       pbTarget: 0,
       pbAmount: 0,
       promoTarget: 0,
@@ -536,7 +533,6 @@ export default function Settings() {
                     <th>Name</th>
                     <th>Recruit</th>
                     <th>MFA</th>
-                    <th>TA</th>
                     <th>PB Target / Reward</th>
                     <th>CMD Target / Reward</th>
                     <th>Status</th>
@@ -555,7 +551,6 @@ export default function Settings() {
                         </span>
                       </td>
                       <td className="text-ink-1">{formatINR(r.mfa)}</td>
-                      <td className="text-ink-1">{formatINR(r.ta)}</td>
                       <td className="text-[10px] text-ink-2">
                         {r.pbTarget > 0 ? (
                           <>
@@ -858,7 +853,7 @@ export default function Settings() {
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
                   <ITrophy size={16} /> Promotion Transition Configurations & Allowances
                 </h3>
-                <p className="text-[11px] text-ink-2 mt-0.5">Configure targets (Lifetime BV), downline requirements, and monthly allowances (MFA, PB, TA, CMD) for all ranks.</p>
+                <p className="text-[11px] text-ink-2 mt-0.5">Configure targets (Lifetime BV), downline requirements, and monthly allowances (MFA, PB, CMD) for all ranks.</p>
               </div>
               <button type="button" onClick={handleSavePromotions} disabled={savingPromotions} className="btn-gold py-1.5 px-4 text-xs">
                 {savingPromotions ? 'Saving...' : 'Save Promotion Rules'}
@@ -878,7 +873,6 @@ export default function Settings() {
                     <th>MFA Reward (₹)</th>
                     <th>PB Target (Monthly BV)</th>
                     <th>PB Reward (₹)</th>
-                    <th>TA Reward (₹)</th>
                     <th>CMD Target (Weighted)</th>
                     <th>CMD Reward (₹)</th>
                   </tr>
@@ -887,7 +881,7 @@ export default function Settings() {
                   {currentRanks.map((r) => {
                     const rule = promotionsState[r.code] || { 
                       businessTarget: 0, requiredPromotedCount: 0, requiredPromotedRank: '',
-                      mfa: 0, mfaTarget: 0, pb: 0, pbTarget: 0, ta: 0, cmd: 0, cmdTarget: 0
+                      mfa: 0, mfaTarget: 0, pb: 0, pbTarget: 0, cmd: 0, cmdTarget: 0
                     }
                     const isRank1 = r.rank === 1
                     return (
@@ -981,15 +975,6 @@ export default function Settings() {
                             value={rule.pb || ''} 
                             placeholder="0" 
                             onChange={(e) => handlePromoRuleChange(r.code, 'pb', e.target.value)} 
-                          />
-                        </td>
-                        <td className="p-1">
-                          <input 
-                            type="number" 
-                            className="field font-mono py-1 px-2 max-w-[80px]" 
-                            value={rule.ta || ''} 
-                            placeholder="0" 
-                            onChange={(e) => handlePromoRuleChange(r.code, 'ta', e.target.value)} 
                           />
                         </td>
                         <td className="p-1">

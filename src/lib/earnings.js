@@ -36,7 +36,6 @@ function mdaForPayment(rankIdx, payment, plan, mdaConfig) {
 export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePlans = [], ranksConfig }) {
   const mdaTable = ranksConfig?.MDA || []
   const mfaTable = ranksConfig?.MFA || []
-  const taTable = ranksConfig?.TA || []
   const pbTargetTable = ranksConfig?.PB_TARGET || []
   const pbAmountTable = ranksConfig?.PB_AMOUNT || []
   const fdPensionTable = ranksConfig?.FD_PENSION || []
@@ -57,10 +56,9 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
   // MDA this month
   const mda = monthPayments.reduce((s, p) => s + mdaForPayment(rankIdx, p, planById[p.planId], mdaTable), 0)
 
-  // MFA / TA flat (only if agent has business records)
+  // MFA flat (only if agent has business records)
   const hasRecords = payments.length > 0 || ownPlans.length > 0 || downlinePlans.length > 0
   const mfa = hasRecords ? (mfaTable[rankIdx] || 0) : 0
-  const ta = hasRecords ? (taTable[rankIdx] || 0) : 0
 
   // Performance bonus
   const pbTarget = pbTargetTable[rankIdx] || 0
@@ -104,7 +102,6 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
     lifetimeBV,
     mda,
     mfa,
-    ta,
     pb: { target: pbTarget, amount: pbAmount, achieved: pbAchieved, progress: pbProgress, current: monthBV },
     fdAccrual,
     promo: { target: promoTarget, progress: promoProgress },
@@ -114,6 +111,6 @@ export function computeEarnings({ rank, ownPlans = [], payments = [], downlinePl
       mainOk, otherOk,
       qualified: weightedTotal >= cmdTarget && mainOk && otherOk,
     },
-    totalThisMonth: mda + mfa + ta + (pbAchieved ? pbAmount : 0),
+    totalThisMonth: mda + mfa + (pbAchieved ? pbAmount : 0),
   }
 }

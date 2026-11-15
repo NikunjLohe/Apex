@@ -498,7 +498,6 @@ export default function AllReports() {
                       <th>Period</th>
                       <th>Commissions</th>
                       <th>MFA Allowance</th>
-                      <th>Travel (TA)</th>
                       <th>Net Payable</th>
                       <th>Status</th>
                     </tr>
@@ -513,7 +512,6 @@ export default function AllReports() {
                         <td>{p.month}/{p.year}</td>
                         <td>{formatINR(p.totalCommission)}</td>
                         <td>{p.mfa > 0 ? formatINR(p.mfa) : '—'}</td>
-                        <td>{p.ta > 0 ? formatINR(p.ta) : '—'}</td>
                         <td className="font-mono font-bold text-gold">{formatINR(p.totalPayable)}</td>
                         <td><StatusBadge status={p.status} /></td>
                       </tr>

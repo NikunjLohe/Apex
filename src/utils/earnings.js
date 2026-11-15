@@ -12,14 +12,12 @@ export function normalizeEarningsDoc(doc) {
   const fd = doc.FD ?? 0
   const mfa = doc.MFA ?? 0
   const pb = doc.PB ?? 0
-  const ta = doc.TA ?? 0
   return {
     mda,
     fd,
     mfa,
     pb,
-    ta,
-    total: doc.totalEarnings ?? mda + fd + mfa + pb + ta,
+    total: doc.totalEarnings ?? mda + fd + mfa + pb,
     businessVolume: doc.businessVolume ?? 0,
     rdPlan: doc.rdPlan ?? '1Y',
     stored: true,
@@ -36,7 +34,6 @@ export function breakdownForMonth({ doc, rankId, businessVolume = 0, rdPlan = '1
     fd: e.fd,
     mfa: e.mfa,
     pb: e.pb,
-    ta: e.ta,
     total: e.total,
     businessVolume,
     rdPlan,
@@ -50,5 +47,4 @@ export const EARNING_COMPONENTS = [
   { key: 'fd', label: 'FD', full: 'FD / Pension', color: '#10B981' },
   { key: 'mfa', label: 'MFA', full: 'Monthly Field Allowance', color: '#60A5FA' },
   { key: 'pb', label: 'PB', full: 'Performance Bonus', color: '#FBBF24' },
-  { key: 'ta', label: 'TA', full: 'Travel Allowance', color: '#A78BFA' },
 ]
