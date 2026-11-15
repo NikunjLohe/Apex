@@ -21,18 +21,18 @@ function buildConfigFromRanksList(ranksList) {
   }))
 
   // Build legacy flat arrays expected by Settings.jsx, CmdAwards.jsx, earnings.js, etc.
-  const MFA               = sorted.map(r => Number(r.mfa) || 0)
-  const MFA_TARGET        = sorted.map(r => Number(r.mfaTarget) || 0)
-  const PB_TARGET         = sorted.map(r => Number(r.pbTarget) || 0)
-  const PB_AMOUNT         = sorted.map(r => Number(r.pbAmount) || 0)
-  const PROMO_TARGET      = sorted.map(r => Number(r.promoTarget) || 0)
-  const CMD_AWARD_TARGET  = sorted.map(r => Number(r.cmdTarget) || 0)
-  const CMD_AWARD_AMOUNT  = sorted.map(r => Number(r.cmdAmount) || 0)
-  const MDA               = sorted.map(r => ({
+  const MFA = sorted.map(r => Number(r.mfa) || 0)
+  const MFA_TARGET = sorted.map(r => Number(r.mfaTarget) || 0)
+  const PB_TARGET = sorted.map(r => Number(r.pbTarget) || 0)
+  const PB_AMOUNT = sorted.map(r => Number(r.pbAmount) || 0)
+  const PROMO_TARGET = sorted.map(r => Number(r.promoTarget) || 0)
+  const CMD_AWARD_TARGET = sorted.map(r => Number(r.cmdTarget) || 0)
+  const CMD_AWARD_AMOUNT = sorted.map(r => Number(r.cmdAmount) || 0)
+  const MDA = sorted.map(r => ({
     y1: Array.isArray(r.mdaY1) ? r.mdaY1.map(v => Number(v) / 100) : [0, 0, 0, 0, 0],
     y2: Array.isArray(r.mdaY2) ? r.mdaY2.map(v => v === null ? null : Number(v) / 100) : [null, 0, 0, 0, 0],
   }))
-  const FD_PENSION        = sorted.map(r =>
+  const FD_PENSION = sorted.map(r =>
     Array.isArray(r.fdPension) ? r.fdPension.map(v => Number(v) / 100) : [0, 0, 0, 0, 0]
   )
 
@@ -74,8 +74,8 @@ export function RanksProvider({ children }) {
 
   const config = useMemo(() => {
     const EMPTY_ARR = DEFAULT_RANKS.map(() => 0)
-    const EMPTY_MDA = DEFAULT_RANKS.map(() => ({ y1: [0,0,0,0,0], y2: [null,0,0,0,0] }))
-    const EMPTY_FD  = DEFAULT_RANKS.map(() => [0,0,0,0,0])
+    const EMPTY_MDA = DEFAULT_RANKS.map(() => ({ y1: [0, 0, 0, 0, 0], y2: [null, 0, 0, 0, 0] }))
+    const EMPTY_FD = DEFAULT_RANKS.map(() => [0, 0, 0, 0, 0])
 
     if (ranksList.length === 0) {
       // Fallback configuration — safe empty arrays prevent crashes before Firestore loads
@@ -93,8 +93,13 @@ export function RanksProvider({ children }) {
         PROMO_TARGET: EMPTY_ARR,
         CMD_AWARD_TARGET: EMPTY_ARR,
         CMD_AWARD_AMOUNT: EMPTY_ARR,
-        MDA: EMPTY_MDA,
-        FD_PENSION: EMPTY_FD,
+        MDA: DEFAULT_RANKS.map(r => ({
+          y1: Array.isArray(r.mdaY1) ? r.mdaY1.map(v => Number(v) / 100) : [0, 0, 0, 0, 0],
+          y2: Array.isArray(r.mdaY2) ? r.mdaY2.map(v => v === null ? null : Number(v) / 100) : [null, 0, 0, 0, 0],
+        })),
+        FD_PENSION: DEFAULT_RANKS.map(r =>
+          Array.isArray(r.fdPension) ? r.fdPension.map(v => Number(v) / 100) : [0, 0, 0, 0, 0]
+        ),
       }
     }
     return buildConfigFromRanksList(ranksList)

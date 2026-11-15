@@ -740,16 +740,20 @@ export default function Settings() {
               }
 
               const handleRateInputChange = (rankCode, val) => {
-                setCommissionsState(prev => ({
-                  ...prev,
-                  [effectiveMatrixCode]: {
-                    ...(prev[effectiveMatrixCode] || {}),
-                    [effectiveYear]: {
-                      ...((prev[effectiveMatrixCode] || {})[effectiveYear] || {}),
+                setCommissionsState(prev => {
+                  const next = { ...prev }
+                  const targetCodes = isExplicitPension ? [selectedPlanCode, 'PENS'] : [selectedPlanCode]
+                  targetCodes.forEach(code => {
+                    if (!code) return
+                    if (!next[code]) next[code] = {}
+                    if (!next[code][effectiveYear]) next[code][effectiveYear] = {}
+                    next[code][effectiveYear] = {
+                      ...next[code][effectiveYear],
                       [rankCode]: Number(val) || 0
                     }
-                  }
-                }))
+                  })
+                  return next
+                })
               }
 
               return (
@@ -799,7 +803,7 @@ export default function Settings() {
                       </thead>
                       <tbody>
                         {currentRanks.map((r) => {
-                          const rate = commissionsState[effectiveMatrixCode]?.[effectiveYear]?.[r.code] ?? 0
+                          const rate = commissionsState[effectiveMatrixCode]?.[effectiveYear]?.[r.code] ?? commissionsState[selectedPlanCode]?.[effectiveYear]?.[r.code] ?? 0
                           const isFocused = focusedRankCode === r.code
                           const displayValue = isFocused
                             ? tempRateValue

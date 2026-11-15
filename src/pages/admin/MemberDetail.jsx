@@ -93,13 +93,13 @@ export default function MemberDetail() {
         // Load branches
         masterDataAPI.listBranches().then(b => {
           if (!cancelled) setBranches(b || [])
-        }).catch(() => {})
+        }).catch(() => { })
 
         // Load sponsor profile if present
         if (profile.sponsorId) {
           profilesAPI.getProfile(profile.sponsorId).then(s => {
             if (!cancelled) setSponsor(s)
-          }).catch(() => {})
+          }).catch(() => { })
         } else {
           setSponsor(null)
         }
