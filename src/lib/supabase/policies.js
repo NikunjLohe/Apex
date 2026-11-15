@@ -5,15 +5,24 @@ import { supabase } from './client'
 import { normalizePolicy } from './normalize'
 
 export async function getPolicy(id) {
-  const { data, error } = await supabase
+  let query = supabase
     .from('policies')
-    .select('*')
-    .eq('id', id)
-    .single()
+    .select('*, customers(name, customer_id), profiles(name, sponsor_code, rank, phone)')
+
+  if (id.includes('-') && id.length === 36) {
+    query = query.eq('id', id)
+  } else {
+    query = query.eq('policy_number', id)
+  }
+
+  const { data, error } = await query.maybeSingle()
 
   if (error) {
-    if (error.code === 'PGRST116') return null
-    throw error
+    // Fallback without joins
+    const fallback = supabase.from('policies').select('*')
+    const fbRes = id.includes('-') && id.length === 36 ? await fallback.eq('id', id).maybeSingle() : await fallback.eq('policy_number', id).maybeSingle()
+    if (fbRes.error) throw error
+    return normalizePolicy(fbRes.data)
   }
   return normalizePolicy(data)
 }
