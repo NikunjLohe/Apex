@@ -350,15 +350,60 @@ export default function PolicyDetail() {
     return chain
   }, [agent, usersMap])
 
+  // Expected MDA Commission Rate Master (Ranks 1-10 updated per Change 1, Ranks 11-18 preserved)
+  const MDA_COMMISSION_RATES = {
+    AO:  { '1Y_RD_Y1': 4.00, '2Y_RD_Y1': 6.00, '2Y_RD_Y2': 4.00, '3Y_RD_Y1': 7.00, '3Y_RD_Y2_3': 4.00, '4Y_RD_Y1': 8.00, '4Y_RD_Y2_4': 4.00, '5Y_RD_Y1': 9.00, '5Y_RD_Y2_5': 5.00, 'FD_Y1': 5.00, 'FD_Y2': 5.50, 'FD_Y3': 6.00, 'FD_Y4': 6.50, 'FD_Y5': 7.00 },
+    AM:  { '1Y_RD_Y1': 1.00, '2Y_RD_Y1': 1.25, '2Y_RD_Y2': 0.75, '3Y_RD_Y1': 2.00, '3Y_RD_Y2_3': 1.00, '4Y_RD_Y1': 3.00, '4Y_RD_Y2_4': 1.00, '5Y_RD_Y1': 3.00, '5Y_RD_Y2_5': 1.00, 'FD_Y1': 2.00, 'FD_Y2': 2.25, 'FD_Y3': 2.50, 'FD_Y4': 2.75, 'FD_Y5': 3.00 },
+    ADM: { '1Y_RD_Y1': 0.70, '2Y_RD_Y1': 0.75, '2Y_RD_Y2': 0.40, '3Y_RD_Y1': 1.00, '3Y_RD_Y2_3': 0.50, '4Y_RD_Y1': 1.00, '4Y_RD_Y2_4': 0.75, '5Y_RD_Y1': 1.00, '5Y_RD_Y2_5': 0.75, 'FD_Y1': 1.50, 'FD_Y2': 1.75, 'FD_Y3': 1.80, 'FD_Y4': 2.00, 'FD_Y5': 2.00 },
+    DM:  { '1Y_RD_Y1': 0.55, '2Y_RD_Y1': 0.60, '2Y_RD_Y2': 0.30, '3Y_RD_Y1': 0.75, '3Y_RD_Y2_3': 0.40, '4Y_RD_Y1': 0.75, '4Y_RD_Y2_4': 0.65, '5Y_RD_Y1': 1.00, '5Y_RD_Y2_5': 0.50, 'FD_Y1': 0.90, 'FD_Y2': 0.90, 'FD_Y3': 1.00, 'FD_Y4': 1.00, 'FD_Y5': 1.00 },
+    SDM: { '1Y_RD_Y1': 0.40, '2Y_RD_Y1': 0.50, '2Y_RD_Y2': 0.25, '3Y_RD_Y1': 0.50, '3Y_RD_Y2_3': 0.35, '4Y_RD_Y1': 0.50, '4Y_RD_Y2_4': 0.50, '5Y_RD_Y1': 0.50, '5Y_RD_Y2_5': 0.40, 'FD_Y1': 0.75, 'FD_Y2': 0.75, 'FD_Y3': 0.80, 'FD_Y4': 0.80, 'FD_Y5': 0.90 },
+    CM:  { '1Y_RD_Y1': 0.35, '2Y_RD_Y1': 0.40, '2Y_RD_Y2': 0.20, '3Y_RD_Y1': 0.40, '3Y_RD_Y2_3': 0.25, '4Y_RD_Y1': 0.40, '4Y_RD_Y2_4': 0.45, '5Y_RD_Y1': 0.40, '5Y_RD_Y2_5': 0.35, 'FD_Y1': 0.70, 'FD_Y2': 0.70, 'FD_Y3': 0.70, 'FD_Y4': 0.75, 'FD_Y5': 0.75 },
+    AGM: { '1Y_RD_Y1': 0.25, '2Y_RD_Y1': 0.30, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.30, '3Y_RD_Y2_3': 0.20, '4Y_RD_Y1': 0.30, '4Y_RD_Y2_4': 0.35, '5Y_RD_Y1': 0.30, '5Y_RD_Y2_5': 0.20, 'FD_Y1': 0.65, 'FD_Y2': 0.65, 'FD_Y3': 0.65, 'FD_Y4': 0.65, 'FD_Y5': 0.70 },
+    GM:  { '1Y_RD_Y1': 0.20, '2Y_RD_Y1': 0.20, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.20, '3Y_RD_Y2_3': 0.15, '4Y_RD_Y1': 0.20, '4Y_RD_Y2_4': 0.15, '5Y_RD_Y1': 0.25, '5Y_RD_Y2_5': 0.15, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.55, 'FD_Y4': 0.55, 'FD_Y5': 0.65 },
+    ZM:  { '1Y_RD_Y1': 0.20, '2Y_RD_Y1': 0.20, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.20, '3Y_RD_Y2_3': 0.15, '4Y_RD_Y1': 0.20, '4Y_RD_Y2_4': 0.15, '5Y_RD_Y1': 0.20, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.50, 'FD_Y4': 0.50, 'FD_Y5': 0.50 },
+    ED:  { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.20, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.50, 'FD_Y4': 0.50, 'FD_Y5': 0.50 },
+    SED: 0.15,
+    MD:  0.10,
+    CMD: 0.10,
+    AVP: 0.10,
+    VP:  0.10,
+    SVP: 0.10,
+    EVP: 0.00,
+    MGD: 0.10
+  }
+
+  const getExpectedMdaRate = (rankCode, planCode, policyYear = 1) => {
+    const code = String(rankCode || '').toUpperCase()
+    if (typeof MDA_COMMISSION_RATES[code] === 'number') {
+      return MDA_COMMISSION_RATES[code]
+    }
+    const table = MDA_COMMISSION_RATES[code]
+    if (!table) return 0
+
+    const p = String(planCode || 'RD1Y').toUpperCase().replace('-', '')
+    const yr = Number(policyYear) || 1
+
+    if (p === 'RD1Y') return table['1Y_RD_Y1'] || 0
+    if (p === 'RD2Y') return yr === 1 ? table['2Y_RD_Y1'] : table['2Y_RD_Y2']
+    if (p === 'RD3Y') return yr === 1 ? table['3Y_RD_Y1'] : table['3Y_RD_Y2_3']
+    if (p === 'RD4Y') return yr === 1 ? table['4Y_RD_Y1'] : table['4Y_RD_Y2_4']
+    if (p === 'RD5Y') return yr === 1 ? table['5Y_RD_Y1'] : table['5Y_RD_Y2_5']
+    if (p.startsWith('FD') || p.startsWith('PENS')) {
+      const yKey = `FD_Y${Math.min(Math.max(yr, 1), 5)}`
+      return table[yKey] || table['FD_Y1'] || 0
+    }
+    return table['1Y_RD_Y1'] || 0
+  }
+
   // Map each rank (1 to 18) to the parsed record or skipped state
   const breakdownRows = useMemo(() => {
     if (!ranksList || ranksList.length === 0) return []
-    
+
     // Sort ranks ascending
     const sortedRanks = [...ranksList].sort((a, b) => Number(a.rank) - Number(b.rank))
-    
+
     let runningTotalPct = 0
-    
+
     return sortedRanks.map(r => {
       const rankNum = Number(r.rank)
       // Find matching ledger entry for this rank
@@ -367,10 +412,11 @@ export default function PolicyDetail() {
         const ag = usersMap[c.agentId]
         return ag && Number(ag.rank) === rankNum
       })
-      
+
       // Find matching agent in the traversed sponsor chain
       const agentInChain = traversedChain.find(a => Number(a.rank) === rankNum)
-      
+      const isSeller = agent && Number(agent.rank) === rankNum
+
       let pct = 0
       let amt = 0
       let type = 'Upline Commission'
@@ -379,42 +425,35 @@ export default function PolicyDetail() {
       let agentName = '—'
       let agentCode = '—'
       let docId = null
-      
+
       if (entry) {
         pct = Number(entry.percentage) || 0
         amt = Number(entry.amount) || 0
         type = (entry.commissionType === 'Direct' || entry.commissionType === 'direct') ? 'Direct' : 'Upline Commission'
-        agentName = entry.agentName || usersMap[entry.agentId]?.name || '—'
-        agentCode = entry.sponsorCode || usersMap[entry.agentId]?.sponsorCode || '—'
+        agentName = entry.agentName || usersMap[entry.agentId]?.name || (agentInChain ? agentInChain.name : (isSeller ? agent.name : '—'))
+        agentCode = entry.sponsorCode || usersMap[entry.agentId]?.sponsorCode || (agentInChain ? agentInChain.sponsorCode : (isSeller ? agent.sponsorCode : '—'))
         docId = entry.id
         runningTotalPct += pct
+      } else if (agentInChain || isSeller) {
+        // Fallback when ledger rows are protected by database RLS: calculate exact MDA commission for agent in hierarchy
+        const ag = isSeller ? agent : agentInChain
+        const bAmt = Number(p?.monthlyAmount) || Number(p?.totalPaid) || Number(p?.fdAmount) || 0
+        const rate = getExpectedMdaRate(r.code, p?.planCode || p?.type, p?.policyYear || 1)
+        pct = rate
+        amt = Number(((bAmt * rate) / 100).toFixed(2))
+        type = isSeller ? 'Direct' : 'Upline Commission'
+        agentName = ag.name
+        agentCode = ag.sponsorCode || '—'
+        runningTotalPct += pct
       } else {
-        // Fallback: If DB commission_ledger rows are empty due to RLS, calculate direct commission for seller
-        const isSeller = agent && Number(agent.rank) === rankNum
-        if (isSeller && p) {
-          const bAmt = Number(p.monthlyAmount) || Number(p.totalPaid) || Number(p.fdAmount) || 0
-          let rate = 4.0
-          if (p.planCode === 'RD1Y' && rankNum === 1) rate = 4.0
-          pct = rate
-          amt = (bAmt * rate) / 100
-          type = 'Direct'
-          agentName = agent.name
-          agentCode = agent.sponsorCode || '—'
-          runningTotalPct += pct
+        skipped = true
+        if (agent && rankNum < Number(agent.rank)) {
+          skipReason = 'Skipped (Below Seller)'
         } else {
-          skipped = true
-          if (agentInChain) {
-            agentName = agentInChain.name
-            agentCode = agentInChain.sponsorCode || '—'
-            skipReason = 'Skipped (0% Commission)'
-          } else if (agent && rankNum < Number(agent.rank)) {
-            skipReason = 'Skipped (Below Seller)'
-          } else {
-            skipReason = 'Skipped (No Agent at Rank)'
-          }
+          skipReason = 'Skipped (No Agent at Rank)'
         }
       }
-      
+
       return {
         rank: rankNum,
         rankCode: r.code,
@@ -495,7 +534,7 @@ export default function PolicyDetail() {
 
       {/* Grid panels */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Columns - Details */}
         <div className="lg:col-span-2 space-y-6">
           {/* Policy Information */}

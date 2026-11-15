@@ -8,6 +8,7 @@ export async function listCommissionLedger(filters = {}) {
   let query = supabase.from('commission_ledger').select('*').order('calculation_date', { ascending: false })
 
   if (filters.agentId) query = query.eq('agent_id', filters.agentId)
+  if (filters.policyId) query = query.eq('policy_id', filters.policyId)
   if (filters.month) query = query.eq('month', filters.month)
   if (filters.year) query = query.eq('year', filters.year)
   if (filters.status) query = query.eq('status', filters.status)
