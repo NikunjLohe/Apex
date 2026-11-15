@@ -7,14 +7,33 @@ import { generateAccountNumber } from './ids'
  * @returns {{ id, accountNumber }}
  */
 export async function createCustomer(form, { uploads = {}, agent }) {
-  console.log("createCustomer Step 1: generating account number")
-  let accountNumber
-  try {
-    accountNumber = await generateAccountNumber()
-    console.log("createCustomer Step 2: generated account number", accountNumber)
-  } catch (err) {
-    console.error("createCustomer Error generating account number:", err)
-    accountNumber = `CUST-${Date.now()}`
+  console.log("createCustomer Step 1: generating or validating account number")
+  let accountNumber = form.customerId?.trim()
+  if (accountNumber) {
+    accountNumber = accountNumber.toUpperCase()
+    // Uniqueness validation against existing customers in Supabase
+    try {
+      const { supabase } = await import('./supabase/client')
+      const { data: dup } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('customer_id', accountNumber)
+        .maybeSingle()
+      if (dup) {
+        throw new Error(`Customer ID "${accountNumber}" is already registered. Please choose a unique Customer ID.`)
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('already registered')) throw e
+      console.warn("Customer uniqueness check warning:", e)
+    }
+  } else {
+    try {
+      accountNumber = await generateAccountNumber()
+      console.log("createCustomer Step 2: generated account number", accountNumber)
+    } catch (err) {
+      console.error("createCustomer Error generating account number:", err)
+      accountNumber = `CUST-${Date.now()}`
+    }
   }
   
   const payload = {

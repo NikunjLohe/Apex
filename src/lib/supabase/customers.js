@@ -31,8 +31,9 @@ export async function listCustomers(filters = {}) {
 }
 
 export async function createCustomer(payload) {
+  const customerIdVal = payload.customerId || payload.accountNumber
   const insertData = {
-    customer_id: payload.customerId || payload.accountNumber,
+    customer_id: customerIdVal,
     name: payload.name,
     phone: payload.phone || null,
     email: payload.email || null,
@@ -46,7 +47,12 @@ export async function createCustomer(payload) {
     .insert([insertData])
     .select()
 
-  if (error) throw error
+  if (error) {
+    if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+      throw new Error(`Customer ID "${customerIdVal}" is already registered. Please choose a unique Customer ID.`)
+    }
+    throw error
+  }
   return data && data.length > 0 ? normalizeCustomer(data[0]) : null
 }
 

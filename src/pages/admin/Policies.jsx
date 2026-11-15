@@ -58,6 +58,7 @@ export default function Policies() {
       return (
         p.policyNumber?.toLowerCase().includes(q) ||
         p.customerName?.toLowerCase().includes(q) ||
+        p.customerAccount?.toLowerCase().includes(q) ||
         p.agentName?.toLowerCase().includes(q) ||
         p.type?.toLowerCase().includes(q)
       )
@@ -145,7 +146,10 @@ export default function Policies() {
                           {p.policyNumber || '—'}
                         </td>
                         <td className="font-semibold text-ink-1">
-                          {p.customerName}
+                          <div>{p.customerName}</div>
+                          {p.customerAccount && p.customerAccount !== '—' && (
+                            <div className="text-[10px] font-mono text-gold-tan font-normal">{p.customerAccount}</div>
+                          )}
                         </td>
                         <td className="text-ink-2 font-medium">{p.agentName || agentMap[p.agentId] || '—'}</td>
                         <td className="text-ink-2 font-semibold uppercase">{p.type || p.planCode || '—'}</td>

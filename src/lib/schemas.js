@@ -7,6 +7,8 @@ const phone = z.string().regex(/^\d{10}$/, '10-digit mobile number')
 const optionalPhone = z.string().regex(/^\d{10}$/, '10-digit mobile number').or(z.literal(''))
 
 export const customerSchema = z.object({
+  // Customer ID
+  customerId: z.string().trim().optional(),
   // Personal
   name: z.string().min(2, 'Full name is required'),
   dob: z.string().min(1, 'Date of birth is required'),

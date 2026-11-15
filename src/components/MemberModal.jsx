@@ -79,31 +79,31 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       return
     }
     let cancelled = false
-    ;(async () => {
-      try {
-        setStatsLoading(true)
-        const plansData = await fetchCollection('plans', [where('agentId', '==', m.id)])
-        const paymentsData = await fetchCollection('payments', [where('agentId', '==', m.id)])
-        
-        // Fetch downline plans
-        const downlineUsers = await fetchCollection('users', [where('referredBy', '==', m.id)])
-        const dlIds = downlineUsers.map((d) => d.id).slice(0, 10)
-        let dlPlansData = []
-        if (dlIds.length > 0) {
-          dlPlansData = await fetchCollection('plans', [where('agentId', 'in', dlIds)])
+      ; (async () => {
+        try {
+          setStatsLoading(true)
+          const plansData = await fetchCollection('plans', [where('agentId', '==', m.id)])
+          const paymentsData = await fetchCollection('payments', [where('agentId', '==', m.id)])
+
+          // Fetch downline plans
+          const downlineUsers = await fetchCollection('users', [where('referredBy', '==', m.id)])
+          const dlIds = downlineUsers.map((d) => d.id).slice(0, 10)
+          let dlPlansData = []
+          if (dlIds.length > 0) {
+            dlPlansData = await fetchCollection('plans', [where('agentId', 'in', dlIds)])
+          }
+
+          if (!cancelled) {
+            setOwnPlans(plansData)
+            setOwnPayments(paymentsData)
+            setDownlinePlans(dlPlansData)
+          }
+        } catch (e) {
+          console.error('Error fetching member details:', e)
+        } finally {
+          if (!cancelled) setStatsLoading(false)
         }
-        
-        if (!cancelled) {
-          setOwnPlans(plansData)
-          setOwnPayments(paymentsData)
-          setDownlinePlans(dlPlansData)
-        }
-      } catch (e) {
-        console.error('Error fetching member details:', e)
-      } finally {
-        if (!cancelled) setStatsLoading(false)
-      }
-    })()
+      })()
     return () => { cancelled = true }
   }, [isEdit, m?.id])
 
@@ -170,6 +170,18 @@ export default function MemberModal({ modal, branches, members, settings, onClos
           setSaving(false)
           return
         }
+      }
+
+      // Agent ID uniqueness check (when entering manual Agent ID)
+      if (form.sponsorCode && form.sponsorCode.trim()) {
+        const cleanAgentId = form.sponsorCode.trim().toUpperCase()
+        const agentIdDup = (members || []).find(u => u.sponsorCode?.toUpperCase() === cleanAgentId)
+        if (agentIdDup && (!isEdit || agentIdDup.id !== m.id)) {
+          toast.error(`Agent ID "${cleanAgentId}" is already assigned to another agent`)
+          setSaving(false)
+          return
+        }
+        form.sponsorCode = cleanAgentId
       }
 
       const phoneDup = (members || []).find(u => u.phone === form.phone)
@@ -245,7 +257,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
       } else {
         const tempPassword = form.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
         const { uid: newUid, sponsorCode: newSponsorCode } = await createMember(cleanForm, tempPassword)
-        
+
         // Re-read settings or build generated email values for modal view
         const domain = settings?.agentEmailDomain || 'apex.local'
         const generatedEmail = cleanForm.email ? cleanForm.email.toLowerCase() : `${newSponsorCode.toLowerCase()}@${domain}`
@@ -361,7 +373,7 @@ _Welcome to the Apex Family!_`
               className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-card bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-sm shadow-md transition-all active:scale-[0.99] cursor-pointer"
             >
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
               </svg>
               <span>Send Credentials on WhatsApp</span>
             </button>
@@ -391,13 +403,13 @@ _Welcome to the Apex Family!_`
   // Adding a member: render the standard ConfirmDialog modal
   if (!isEdit) {
     return (
-      <ConfirmDialog 
-        open 
-        title="Add member" 
-        confirmLabel="Create" 
-        loading={saving} 
+      <ConfirmDialog
+        open
+        title="Add member"
+        confirmLabel="Create"
+        loading={saving}
         confirmDisabled={cannotRecruit || (sponsorCodeInputVal?.trim() && !selectedSponsor)}
-        onConfirm={handleSubmit(submit)} 
+        onConfirm={handleSubmit(submit)}
         onClose={onClose}
       >
         <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit)} autoComplete="off">
@@ -422,11 +434,11 @@ _Welcome to the Apex Family!_`
               <input className="field" type="date" {...register('dob')} />
               {errors.dob && <p className="err">{errors.dob.message}</p>}
             </div>
-            
+
             <div>
               <label className="label">Rank</label>
-              <select 
-                className="field" 
+              <select
+                className="field"
                 disabled={!selectedSponsor && sponsorCodeInputVal?.trim()}
                 {...register('rank', { valueAsNumber: true })}
               >
@@ -442,7 +454,7 @@ _Welcome to the Apex Family!_`
               {errors.rank && <p className="err">{errors.rank.message}</p>}
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2">
               <label className="label">Address</label>
@@ -455,19 +467,25 @@ _Welcome to the Apex Family!_`
               {errors.panNumber && <p className="err">{errors.panNumber.message}</p>}
             </div>
             <div>
-              <label className="label">Agent Code</label>
-              <input className="field" placeholder="Auto-generated" disabled {...register('sponsorCode')} />
-            </div>
- 
-            <div>
-              <label className="label">Sponsor ID</label>
+              <label className="label">Agent ID</label>
               <input 
                 className="field font-mono uppercase" 
+                placeholder="e.g. KB00123 (or leave blank to auto-generate)" 
+                autoComplete="off" 
+                {...register('sponsorCode')} 
+              />
+              <p className="text-[10px] text-ink-2 mt-1">Leave blank to auto-generate sequential Agent ID</p>
+            </div>
+
+            <div>
+              <label className="label">Sponsor ID</label>
+              <input
+                className="field font-mono uppercase"
                 placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
                 autoComplete="off"
                 readOnly
                 onFocus={(e) => e.target.removeAttribute('readOnly')}
-                {...register('sponsorCodeInput')} 
+                {...register('sponsorCodeInput')}
               />
               {selectedSponsor ? (
                 cannotRecruit ? (
@@ -490,7 +508,7 @@ _Welcome to the Apex Family!_`
                 </p>
               ) : null}
             </div>
- 
+
             {isSuperAdmin ? (
               <div>
                 <label className="label">Status</label>
@@ -511,12 +529,12 @@ _Welcome to the Apex Family!_`
           <div className="grid grid-cols-1 gap-2 mt-2">
             <div>
               <label className="label">Email address (optional)</label>
-              <input 
-                type="text" 
-                className="field" 
+              <input
+                type="text"
+                className="field"
                 autoComplete="new-password"
-                placeholder={isSuperAdmin ? "Custom email or leave blank for auto" : "Leave blank for auto-generated login"} 
-                {...register('email')} 
+                placeholder={isSuperAdmin ? "Custom email or leave blank for auto" : "Leave blank for auto-generated login"}
+                {...register('email')}
               />
               {errors.email && <p className="err">{errors.email.message}</p>}
             </div>
@@ -561,27 +579,24 @@ _Welcome to the Apex Family!_`
           <button
             type="button"
             onClick={() => setActiveTab('performance')}
-            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
-              activeTab === 'performance' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
-            }`}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'performance' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+              }`}
           >
             Overview & Performance
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
-              activeTab === 'profile' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
-            }`}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'profile' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+              }`}
           >
             Bank & Identity Details
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('edit')}
-            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${
-              activeTab === 'edit' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
-            }`}
+            className={`px-3.5 py-1.5 text-xs font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'edit' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:bg-navy-4/30'
+              }`}
           >
             Edit Settings
           </button>
@@ -820,9 +835,9 @@ _Welcome to the Apex Family!_`
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Rank</label>
-                  <select 
-                    className="field" 
-                    disabled={!isSuperAdmin || (!selectedSponsor && !isEdit)} 
+                  <select
+                    className="field"
+                    disabled={!isSuperAdmin || (!selectedSponsor && !isEdit)}
                     {...register('rank', { valueAsNumber: true })}
                   >
                     {!selectedSponsor && !isEdit ? (
@@ -835,12 +850,12 @@ _Welcome to the Apex Family!_`
                 </div>
                 <div>
                   <label className="label">Sponsor ID (Agent Code)</label>
-                  <input 
-                    className="field font-mono uppercase" 
-                    placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`} 
+                  <input
+                    className="field font-mono uppercase"
+                    placeholder={`e.g. ${settings?.agentPrefix || 'KB'}000001`}
                     disabled={!isSuperAdmin}
                     autoComplete="new-password"
-                    {...register('sponsorCodeInput')} 
+                    {...register('sponsorCodeInput')}
                   />
                   {isSuperAdmin && selectedSponsor && (
                     cannotRecruit ? (

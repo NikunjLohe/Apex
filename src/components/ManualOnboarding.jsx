@@ -27,6 +27,7 @@ export default function ManualOnboarding({ onComplete }) {
 
   // New Customer Form Fields
   const [newCustomer, setNewCustomer] = useState({
+    customerId: '',
     name: '',
     phone: '',
     email: '',
@@ -150,6 +151,16 @@ export default function ManualOnboarding({ onComplete }) {
         return
       }
     } else {
+      if (newCustomer.customerId?.trim()) {
+        const manualCustId = newCustomer.customerId.trim().toUpperCase()
+        const localDup = existingCustomers.find(c => 
+          c.customerId?.toUpperCase() === manualCustId || c.accountNumber?.toUpperCase() === manualCustId
+        )
+        if (localDup) {
+          toast.error(`Customer ID "${manualCustId}" is already registered. Please enter a unique Customer ID.`)
+          return
+        }
+      }
       if (!newCustomer.name?.trim()) {
         toast.error('Customer name is required.')
         return
@@ -192,17 +203,29 @@ export default function ManualOnboarding({ onComplete }) {
       // 2. Resolve or Create Customer
       let targetCustomer = selectedCustomer
       if (customerMode === 'new') {
-        let generatedAcc = null
-        try {
-          generatedAcc = await generateAccountNumber()
-        } catch {
-          generatedAcc = `APEX-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
+        let assignedAcc = newCustomer.customerId?.trim()?.toUpperCase()
+        if (assignedAcc) {
+          const { supabase } = await import('../lib/supabase/client')
+          const { data: dbDup } = await supabase
+            .from('customers')
+            .select('id')
+            .eq('customer_id', assignedAcc)
+            .maybeSingle()
+          if (dbDup) {
+            throw new Error(`Customer ID "${assignedAcc}" is already registered. Please choose a unique Customer ID.`)
+          }
+        } else {
+          try {
+            assignedAcc = await generateAccountNumber()
+          } catch {
+            assignedAcc = `APEX-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
+          }
         }
 
         const fullAddr = [newCustomer.address, newCustomer.city, newCustomer.state, newCustomer.pincode].filter(Boolean).join(', ')
 
         targetCustomer = await customersAPI.createCustomer({
-          customerId: generatedAcc,
+          customerId: assignedAcc,
           name: newCustomer.name.trim(),
           phone: newCustomer.phone.trim(),
           email: newCustomer.email?.trim() || null,
@@ -296,6 +319,7 @@ export default function ManualOnboarding({ onComplete }) {
     setSelectedCustomer(null)
     setCustomerSearch('')
     setNewCustomer({
+      customerId: '',
       name: '',
       phone: '',
       email: '',
@@ -451,6 +475,17 @@ export default function ManualOnboarding({ onComplete }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="block text-[11px] font-medium text-ink-2 mb-1">Customer ID</label>
+              <input
+                type="text"
+                placeholder="e.g. CUST00123 (or leave blank to auto-generate)"
+                value={newCustomer.customerId}
+                onChange={e => setNewCustomer({ ...newCustomer, customerId: e.target.value })}
+                className="field w-full font-mono uppercase"
+              />
+              <p className="text-[10px] text-ink-2 mt-0.5">Enter custom Customer ID or leave blank to auto-generate</p>
+            </div>
             <div>
               <label className="block text-[11px] font-medium text-ink-2 mb-1">Full Name *</label>
               <input

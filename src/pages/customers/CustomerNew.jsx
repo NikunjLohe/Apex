@@ -76,6 +76,13 @@ export default function CustomerNew() {
         {/* Section 1 */}
         <Section title="1 · Personal Details">
           <Grid>
+            <F label="Customer ID" error={errors.customerId}>
+              <input 
+                className="field font-mono uppercase" 
+                placeholder="e.g. CUST00123 (or leave blank to auto-generate)" 
+                {...register('customerId')} 
+              />
+            </F>
             <F label="Full Name *" error={errors.name}><input className="field" {...register('name')} /></F>
             <F label="Father's/Husband's Name" error={errors.fatherOrHusbandName}><input className="field" {...register('fatherOrHusbandName')} /></F>
             <F label="Mother's Name" error={errors.motherName}><input className="field" {...register('motherName')} /></F>

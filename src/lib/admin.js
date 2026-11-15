@@ -139,8 +139,23 @@ export async function createMember(form, tempPassword) {
     }
   }
 
-  // 4. Concurrency-safe sequential Agent ID generation based on rank (SM for 11-18, KB for 1-10)
-  const sponsorCode = await getNextAgentCode(rankNum)
+  // 4. Resolve Agent ID (manual or concurrency-safe sequential auto-generation)
+  let sponsorCode = (cleanForm.sponsorCode || '').trim().toUpperCase()
+  if (sponsorCode) {
+    // Backend uniqueness check for Agent ID across all agents
+    const { data: codeDup } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('sponsor_code', sponsorCode)
+      .maybeSingle()
+
+    if (codeDup) {
+      throw new Error(`Agent ID "${sponsorCode}" is already assigned to another agent. Please choose a unique Agent ID.`)
+    }
+  } else {
+    // Auto-generate sequential Agent ID based on rank (SM for 11-18, KB for 1-10)
+    sponsorCode = await getNextAgentCode(rankNum)
+  }
   cleanForm.sponsorCode = sponsorCode
 
   // 5. Generate dynamic email if not explicitly provided
