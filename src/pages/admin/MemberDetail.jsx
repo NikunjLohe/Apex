@@ -1,18 +1,23 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { where, getDocs, query, collection, getDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { sendPasswordResetEmail } from 'firebase/auth'
-import { auth, db } from '../../firebase'
 import { useAuth } from '../../contexts/AuthContext'
-import { useDoc, useCollection, fetchCollection } from '../../hooks/useFirestore'
-import { updateMember } from '../../lib/admin'
+import {
+  supabase,
+  profilesAPI,
+  policiesAPI,
+  paymentsAPI,
+  commissionsAPI,
+  masterDataAPI,
+  authAPI,
+  normalizeProfile
+} from '../../lib/supabase'
 import { useRanks } from '../../contexts/RanksContext'
 import { fmtDate, formatINR, formatCompactINR } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { 
-  IUsers, ICash, ITrophy, IShield, INetwork, IBuilding, IClock, IDoc, IPlus, IAlert, IMail
+import {
+  IUsers, ICash, ITrophy, IShield, INetwork, IClock, IDoc, IAlert, IMail
 } from '../../components/ui/icons'
 import ChangeEmailModal from '../../components/ChangeEmailModal'
 import { computeEarnings } from '../../lib/earnings'
@@ -21,143 +26,160 @@ import toast from 'react-hot-toast'
 export default function MemberDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const agentDoc = useDoc(id ? `users/${id}` : null)
-  const branches = useCollection('branches')
   const { config, nextRank, getRank } = useRanks()
-  const { user: currentUser, startViewingAs, realProfile } = useAuth()
-  const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
-  const [changeEmailModalOpen, setChangeEmailModalOpen] = useState(false)
+  const { startViewingAs, realProfile } = useAuth()
 
-  // Lazy recursive downline loader — avoids loading all users
+  // State
+  const [loading, setLoading] = useState(true)
+  const [m, setM] = useState(null)
+  const [sponsor, setSponsor] = useState(null)
+  const [branches, setBranches] = useState([])
   const [downline, setDownline] = useState([])
   const [downlineLoading, setDownlineLoading] = useState(true)
-  // Cache for sponsor name lookups
-  const [sponsorMap, setSponsorMap] = useState({})
 
-  // Agent data states for performance computation
+  // Performance data
   const [ownPlans, setOwnPlans] = useState([])
   const [ownPayments, setOwnPayments] = useState([])
-  const [downlinePlans, setDownlinePlans] = useState([])
+  const [commissionLedger, setCommissionLedger] = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
+
+  // Actions state
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [viewAsModalOpen, setViewAsModalOpen] = useState(false)
+  const [changeEmailModalOpen, setChangeEmailModalOpen] = useState(false)
   const [resetModalOpen, setResetModalOpen] = useState(false)
   const [resetting, setResetting] = useState(false)
 
-  const m = agentDoc.data
-  const rank = getRank(m?.rank)
-  const next = nextRank(m?.rank)
-
-  const handleResetPassword = async () => {
-    if (!m || !id) return
-    setResetting(true)
-    const toastId = toast.loading(`Initiating password reset for ${m.name}…`)
-    try {
-      if (m.email && m.email.includes('@') && !m.email.endsWith('@apex.local')) {
-        try {
-          await sendPasswordResetEmail(auth, m.email)
-        } catch (authErr) {
-          console.warn('[PasswordReset] sendPasswordResetEmail notice:', authErr)
-        }
-      }
-
-      await updateDoc(doc(db, 'users', id), {
-        mustChangePassword: true,
-        passwordResetAt: serverTimestamp(),
-        passwordResetBy: currentUser?.uid || 'admin'
-      })
-
-      toast.success(`Password reset initiated for ${m.name} (${m.sponsorCode || ''}). Force password change active.`, { id: toastId })
-      setResetModalOpen(false)
-    } catch (err) {
-      console.error('Error resetting password:', err)
-      toast.error(`Failed to reset password: ${err.message}`, { id: toastId })
-    } finally {
-      setResetting(false)
-    }
-  }
-
-  // Lazy recursive downline fetch
+  // Load agent profile & metadata
   useEffect(() => {
-    if (!id) return
     let cancelled = false
-    setDownlineLoading(true)
-    ;(async () => {
-      const all = []
-      const visited = new Set()
-      const queue = [id]
-      while (queue.length > 0) {
-        const parentId = queue.shift()
-        if (visited.has(parentId)) continue
-        visited.add(parentId)
-        try {
-          const snaps = await getDocs(query(collection(db, 'users'), where('referredBy', '==', parentId)))
-          snaps.docs.forEach(d => {
-            all.push({ id: d.id, ...d.data() })
-            queue.push(d.id)
-          })
-        } catch (err) {
-          console.error('Downline fetch error:', err)
+
+    async function loadData() {
+      if (!id) return
+      setLoading(true)
+
+      try {
+        let profile = null
+
+        // 1. Try finding by UUID
+        if (id.includes('-') && id.length === 36) {
+          profile = await profilesAPI.getProfile(id).catch(() => null)
         }
+
+        // 2. If not found or not a UUID, find by sponsor_code
+        if (!profile) {
+          const { data: byCode } = await supabase
+            .from('profiles')
+            .select('*')
+            .ilike('sponsor_code', id)
+            .maybeSingle()
+
+          if (byCode) {
+            profile = normalizeProfile(byCode)
+          }
+        }
+
+        if (cancelled) return
+
+        if (!profile) {
+          setM(null)
+          setLoading(false)
+          return
+        }
+
+        setM(profile)
+        setLoading(false)
+
+        // Load branches
+        masterDataAPI.listBranches().then(b => {
+          if (!cancelled) setBranches(b || [])
+        }).catch(() => {})
+
+        // Load sponsor profile if present
+        if (profile.sponsorId) {
+          profilesAPI.getProfile(profile.sponsorId).then(s => {
+            if (!cancelled) setSponsor(s)
+          }).catch(() => {})
+        } else {
+          setSponsor(null)
+        }
+
+        // Load downline
+        setDownlineLoading(true)
+        profilesAPI.getDownline(profile.id).then(dl => {
+          if (!cancelled) {
+            setDownline(dl || [])
+            setDownlineLoading(false)
+          }
+        }).catch(err => {
+          console.error('[MemberDetail] Downline fetch error:', err)
+          if (!cancelled) setDownlineLoading(false)
+        })
+
+        // Load stats, plans, payments & commission ledger
+        setStatsLoading(true)
+        Promise.all([
+          policiesAPI.listPolicies({ agentId: profile.id }).catch(() => []),
+          paymentsAPI.listPayments({ agentId: profile.id }).catch(() => []),
+          commissionsAPI.listCommissionLedger({ agentId: profile.id }).catch(() => []),
+        ]).then(([plansData, paymentsData, commsData]) => {
+          if (!cancelled) {
+            setOwnPlans(plansData || [])
+            setOwnPayments(paymentsData || [])
+            setCommissionLedger(commsData || [])
+            setStatsLoading(false)
+          }
+        }).catch(err => {
+          console.error('[MemberDetail] Stats fetch error:', err)
+          if (!cancelled) setStatsLoading(false)
+        })
+
+      } catch (err) {
+        console.error('[MemberDetail] Load error:', err)
+        if (!cancelled) setLoading(false)
       }
-      if (!cancelled) {
-        setDownline(all.sort((a, b) => (Number(b.rank) || 0) - (Number(a.rank) || 0)))
-        setDownlineLoading(false)
-      }
-    })()
+    }
+
+    loadData()
     return () => { cancelled = true }
   }, [id])
 
-  // Fetch performance data (plans/payments/downline plans)
-  useEffect(() => {
-    if (!id || !agentDoc.exists) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        setStatsLoading(true)
-        const plansData = await fetchCollection('plans', [where('agentId', '==', id)])
-        const paymentsData = await fetchCollection('payments', [where('agentId', '==', id)])
-        
-        // Fetch downline plans
-        const downlineUsers = await fetchCollection('users', [where('referredBy', '==', id)])
-        const dlIds = downlineUsers.map((d) => d.id).slice(0, 10)
-        let dlPlansData = []
-        if (dlIds.length > 0) {
-          dlPlansData = await fetchCollection('plans', [where('agentId', 'in', dlIds)])
-        }
-        
-        if (!cancelled) {
-          setOwnPlans(plansData)
-          setOwnPayments(paymentsData)
-          setDownlinePlans(dlPlansData)
-        }
-      } catch (e) {
-        console.error('Error fetching agent stats:', e)
-      } finally {
-        if (!cancelled) setStatsLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [id, agentDoc.exists])
+  const rank = getRank(m?.rank)
+  const next = nextRank(m?.rank)
 
+  // Compute live performance & promotional target model
   const model = useMemo(() => {
     if (!m || statsLoading) return null
     return computeEarnings({
       rank: m?.rank || 1,
       ownPlans,
       payments: ownPayments,
-      downlinePlans,
+      downlinePlans: [],
       ranksConfig: config,
     })
-  }, [m, statsLoading, ownPlans, ownPayments, downlinePlans, config])
+  }, [m, statsLoading, ownPlans, ownPayments, config])
 
-  // downline is loaded lazily by the useEffect above and already sorted
+  // Aggregate Commission Metrics
+  const totalCommissionsEarned = useMemo(() => {
+    return commissionLedger.reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  }, [commissionLedger])
+
+  const thisMonthCommissions = useMemo(() => {
+    const now = new Date()
+    const curMonth = now.getMonth() + 1
+    const curYear = now.getFullYear()
+    return commissionLedger
+      .filter(c => (c.month === curMonth && c.year === curYear) || (!c.month && c.calculationDate && new Date(c.calculationDate).getMonth() + 1 === curMonth))
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  }, [commissionLedger])
 
   const toggleStatus = async () => {
     if (!m) return
     setUpdatingStatus(true)
     const newStatus = m.status === 'inactive' ? 'active' : 'inactive'
     try {
-      await updateMember(id, { status: newStatus })
+      await profilesAPI.updateProfile(m.id, { status: newStatus })
+      setM(prev => ({ ...prev, status: newStatus }))
       toast.success(`Agent ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`)
     } catch (e) {
       toast.error('Failed to update status')
@@ -169,11 +191,7 @@ export default function MemberDetail() {
   const handleStartViewAs = async () => {
     if (!m) return
     const toastId = toast.loading(`Starting View As Agent mode...`)
-    
-    // Navigate away from the admin-only route BEFORE changing identity,
-    // to prevent the route guard from throwing a 403 during the transition.
     navigate('/dashboard')
-    
     try {
       await startViewingAs(m)
       toast.success(`Now viewing as ${m.name}`, { id: toastId })
@@ -183,18 +201,27 @@ export default function MemberDetail() {
     setViewAsModalOpen(false)
   }
 
-  const branchName = (bid) => branches.data.find((b) => b.id === bid)?.name || '—'
-  const sponsorName = useCallback((uid) => {
-    if (!uid) return '—'
-    if (sponsorMap[uid]) return sponsorMap[uid]
-    // Trigger async fetch and cache
-    getDoc(doc(db, 'users', uid)).then(snap => {
-      if (snap.exists()) setSponsorMap(prev => ({ ...prev, [uid]: snap.data().name || '—' }))
-    }).catch(() => {})
-    return '…'
-  }, [sponsorMap])
+  const handleResetPassword = async () => {
+    if (!m) return
+    setResetting(true)
+    const toastId = toast.loading(`Initiating password reset for ${m.name}…`)
+    try {
+      if (m.email && m.email.includes('@') && !m.email.endsWith('@apex.local')) {
+        await authAPI.requestPasswordReset(m.email).catch(e => console.warn('Reset notice:', e))
+      }
+      toast.success(`Password reset initiated for ${m.name} (${m.sponsorCode || ''}).`, { id: toastId })
+      setResetModalOpen(false)
+    } catch (err) {
+      console.error('Error resetting password:', err)
+      toast.error(`Failed to reset password: ${err.message}`, { id: toastId })
+    } finally {
+      setResetting(false)
+    }
+  }
 
-  if (agentDoc.loading || branches.loading) {
+  const branchName = (bid) => branches.find((b) => b.id === bid)?.name || '—'
+
+  if (loading) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="card h-28 animate-pulse bg-navy-2" />
@@ -204,7 +231,7 @@ export default function MemberDetail() {
     )
   }
 
-  if (!agentDoc.exists) {
+  if (!m) {
     return (
       <div className="mx-auto max-w-md py-12 text-center space-y-4">
         <h2 className="text-xl font-bold text-ink-1">Agent Not Found</h2>
@@ -222,11 +249,7 @@ export default function MemberDetail() {
         <div className="relative flex flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-navy-4/50 text-gold-1 font-serif text-2xl font-bold shadow-inner">
-              {m.photo ? (
-                <img src={m.photo} alt={m.name} className="h-full w-full rounded-full object-cover" />
-              ) : (
-                m.name?.substring(0, 2).toUpperCase()
-              )}
+              {m.name?.substring(0, 2).toUpperCase()}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -234,10 +257,10 @@ export default function MemberDetail() {
                 <RankBadge rank={m.rank} />
                 <StatusBadge status={m.status || 'active'} />
               </div>
-              <p className="text-sm text-ink-2 mt-1 font-mono font-medium">Agent Code: {m.sponsorCode || '—'}</p>
+              <p className="text-sm text-ink-2 mt-1 font-mono font-medium">Agent ID: <span className="text-gold-1 font-bold">{m.sponsorCode || '—'}</span></p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {m?.phone && (
               <button
                 type="button"
@@ -289,11 +312,10 @@ Here are your official portal details:
             <button
               onClick={toggleStatus}
               disabled={updatingStatus}
-              className={`py-2 px-4 text-xs font-bold uppercase rounded-md tracking-wider transition-all shadow-sm ${
-                m.status === 'inactive' 
-                  ? 'bg-ok text-white hover:bg-ok-hover' 
-                  : 'bg-danger text-white hover:bg-danger-hover'
-              }`}
+              className={`py-2 px-4 text-xs font-bold uppercase rounded-md tracking-wider transition-all shadow-sm ${m.status === 'inactive'
+                ? 'bg-ok text-white hover:bg-ok-hover'
+                : 'bg-danger text-white hover:bg-danger-hover'
+                }`}
             >
               {updatingStatus ? 'Updating...' : m.status === 'inactive' ? 'Activate Agent' : 'Deactivate Agent'}
             </button>
@@ -323,15 +345,25 @@ Here are your official portal details:
                 <span className="font-semibold text-ink-1">{m.email || '—'}</span>
               </div>
               <div>
-                <span className="block text-[10px] text-ink-2">Date of Birth</span>
-                <span className="font-semibold text-ink-1">{m.dob || '—'}</span>
+                <span className="block text-[10px] text-ink-2">Immediate Sponsor</span>
+                {sponsor ? (
+                  <Link to={`/admin/members/${sponsor.id}`} className="font-semibold text-gold-1 hover:underline">
+                    {sponsor.name} ({sponsor.sponsorCode || '—'})
+                  </Link>
+                ) : (
+                  <span className="font-semibold text-ink-1 font-mono">None (Root Agent)</span>
+                )}
+              </div>
+              <div>
+                <span className="block text-[10px] text-ink-2">Branch</span>
+                <span className="font-semibold text-ink-1">{branchName(m.branchId)}</span>
               </div>
               <div>
                 <span className="block text-[10px] text-ink-2">Joining Date</span>
-                <span className="font-semibold text-ink-1">{m.joinDate ? fmtDate(m.joinDate) : '—'}</span>
+                <span className="font-semibold text-ink-1">{m.createdAt ? fmtDate(m.createdAt) : '—'}</span>
               </div>
               <div>
-                <span className="block text-[10px] text-ink-2">Address</span>
+                <span className="block text-[10px] text-ink-2">Residential Address</span>
                 <span className="font-semibold text-ink-1 whitespace-pre-wrap">{m.address || '—'}</span>
               </div>
             </div>
@@ -350,11 +382,11 @@ Here are your official portal details:
                 </div>
                 <div>
                   <span className="block text-[10px] text-ink-2">PAN Card</span>
-                  <span className="font-semibold text-ink-1 font-mono uppercase">{m.pan || '—'}</span>
+                  <span className="font-semibold text-ink-1 font-mono uppercase">{m.panNumber || m.pan || '—'}</span>
                 </div>
               </div>
               <div className="border-t border-navy-4/50 my-2" />
-              {m.profileCompleted ? (
+              {m.bankDetails && Object.keys(m.bankDetails).length > 0 ? (
                 <div className="space-y-3">
                   <div>
                     <span className="block text-[10px] text-ink-2">Account Holder Name</span>
@@ -362,7 +394,7 @@ Here are your official portal details:
                   </div>
                   <div>
                     <span className="block text-[10px] text-ink-2">Bank & Branch</span>
-                    <span className="font-semibold text-ink-1">{m.bankDetails?.bankName} · {m.bankDetails?.branch}</span>
+                    <span className="font-semibold text-ink-1">{m.bankDetails?.bankName || '—'} · {m.bankDetails?.branch || '—'}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -376,19 +408,8 @@ Here are your official portal details:
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-ink-2 italic py-1">Onboarding details not completed yet.</p>
+                <p className="text-xs text-ink-2 italic py-1">Bank details not updated yet.</p>
               )}
-            </div>
-          </div>
-
-          {/* Photo & Documents Placeholder */}
-          <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <IDoc size={16} /> Documents & Attachments
-            </h3>
-            <div className="rounded-card border border-dashed border-navy-4 bg-navy-2/30 p-4 text-center text-xs text-ink-2 space-y-2">
-              <p>Uploaded photo, Aadhaar/PAN scans, and bank passbooks will be shown here.</p>
-              <div className="text-[10px] bg-navy-4/30 p-1.5 rounded inline-block text-gold">Optional Document Store Placeholder</div>
             </div>
           </div>
         </div>
@@ -403,7 +424,7 @@ Here are your official portal details:
               </h3>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-ink-2 uppercase">Current Rank:</span>
-                <span className="text-xs font-extrabold text-ink-1 uppercase">{rank.code}</span>
+                <span className="text-xs font-extrabold text-ink-1 uppercase">{rank.code} ({rank.name})</span>
               </div>
             </div>
             {statsLoading ? (
@@ -412,7 +433,7 @@ Here are your official portal details:
               <div className="space-y-4">
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-xs">
-                    <span className="text-ink-2">Promotion Target Progress to <strong>{next.code}</strong></span>
+                    <span className="text-ink-2">Promotion Target Progress to <strong>{next.code} ({next.name})</strong></span>
                     <span className="text-ink-2 font-mono font-medium">{formatCompactINR(model.lifetimeBV)} / {formatCompactINR(model.promo.target)} BV</span>
                   </div>
                   <div className="h-2 bg-navy-2 rounded-full overflow-hidden">
@@ -466,70 +487,135 @@ Here are your official portal details:
             {/* Business Summary */}
             <div className="card p-5 space-y-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-                <IDoc size={16} /> Business Summary
+                <IDoc size={16} /> Direct Business Summary
               </h3>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="border border-navy-4 p-3 rounded-card bg-navy-2/30">
-                  <span className="text-[10px] text-ink-2 uppercase">Active Plans</span>
+                  <span className="text-[10px] text-ink-2 uppercase">Active Policies</span>
                   <p className="text-lg font-bold text-ink-1 font-serif mt-0.5">{statsLoading ? '—' : ownPlans.length}</p>
                 </div>
                 <div className="border border-navy-4 p-3 rounded-card bg-navy-2/30">
-                  <span className="text-[10px] text-ink-2 uppercase">Direct Payments</span>
+                  <span className="text-[10px] text-ink-2 uppercase">Collected Payments</span>
                   <p className="text-lg font-bold text-ink-1 font-serif mt-0.5">{statsLoading ? '—' : ownPayments.length}</p>
                 </div>
               </div>
               <div className="border border-navy-4 p-3.5 rounded-card bg-navy-2/30 text-xs">
-                <h4 className="text-[10px] font-bold uppercase text-gold-tan mb-1">Imported Customers Placeholder</h4>
-                <p className="text-[11px] text-ink-2">Customers and sales policies linked to this agent code from daily bank uploads will list here.</p>
+                <span className="text-[10px] text-ink-2 uppercase block mb-1">Accumulated Business Volume</span>
+                <span className="font-serif font-bold text-sm text-gold-1">{formatINR(m.accumulatedVolume || m.businessVolume || 0)}</span>
               </div>
             </div>
 
-            {/* Commissions */}
+            {/* Commissions Overview */}
             <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-                <ICash size={16} /> Commission & Payouts
-              </h3>
+              <div className="flex items-center justify-between border-b border-navy-4/50 pb-1.5">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                  <ICash size={16} /> Commission & Payouts
+                </h3>
+                <Link to="/admin/payouts" className="text-xs text-gold-1 hover:underline font-semibold">
+                  Payout Engine &rarr;
+                </Link>
+              </div>
+
               {statsLoading ? (
                 <SkeletonStats count={2} />
-              ) : model ? (
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-navy-4/20">
-                    <span className="text-ink-2">This Month Earnings</span>
-                    <span className="font-semibold text-gold-1 font-serif">{formatINR(model.totalThisMonth)}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-navy-4/20">
-                    <span className="text-ink-2">MDA Accrual (this month)</span>
-                    <span className="font-semibold text-ink-1 font-serif">{formatINR(model.mda)}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-navy-4/20">
-                    <span className="text-ink-2">MFA Commission</span>
-                    <span className="font-semibold text-ink-1 font-serif">{formatINR(model.mfa)}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-navy-4/20">
-                    <span className="text-ink-2">Travel Allowance (TA)</span>
-                    <span className="font-semibold text-ink-1 font-serif">{formatINR(model.ta)}</span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-ink-2">Accrued FD Pension</span>
-                    <span className="font-semibold text-ink-1 font-serif">{formatINR(model.fdAccrual)}</span>
-                  </div>
-                </div>
               ) : (
-                <p className="text-xs text-ink-2 italic">Commission metrics not computed.</p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="border border-navy-4 p-3 rounded-card bg-navy-2/30">
+                      <span className="text-[10px] text-ink-2 uppercase tracking-wider block">Total Earned</span>
+                      <p className="text-lg font-bold text-emerald-400 font-serif mt-0.5">{formatINR(totalCommissionsEarned || model?.totalThisMonth || 0)}</p>
+                    </div>
+                    <div className="border border-navy-4 p-3 rounded-card bg-navy-2/30">
+                      <span className="text-[10px] text-ink-2 uppercase tracking-wider block">This Month (Accrued)</span>
+                      <p className="text-lg font-bold text-gold-1 font-serif mt-0.5">{formatINR(thisMonthCommissions || model?.mda || 0)}</p>
+                    </div>
+                  </div>
+
+                  {model && (
+                    <div className="space-y-1 text-xs pt-1">
+                      <div className="flex justify-between py-1 border-b border-navy-4/20">
+                        <span className="text-ink-2">MDA Structure Tier</span>
+                        <span className="font-semibold text-ink-1 font-mono">{rank.code} ({rank.name})</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-navy-4/20">
+                        <span className="text-ink-2">MFA Monthly Target</span>
+                        <span className="font-semibold text-ink-1 font-serif">{formatINR(model.mfa || 0)}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-ink-2">Travel Allowance (TA)</span>
+                        <span className="font-semibold text-ink-1 font-serif">{formatINR(model.ta || 0)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              <div className="border border-navy-4 p-3 rounded-card bg-navy-2/30 text-xs">
-                <h4 className="text-[10px] font-bold uppercase text-gold-tan mb-0.5">Monthly Payouts Log</h4>
-                <p className="text-[10px] text-ink-2 italic">Payout logs appear after monthly accounts finalize.</p>
-              </div>
             </div>
+          </div>
+
+          {/* Commission Ledger Table */}
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-navy-4/50 pb-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <ICash size={16} /> Commission Ledger Transactions ({commissionLedger.length})
+              </h3>
+              <span className="text-xs text-ink-2 font-mono">Real-time ledger audit</span>
+            </div>
+
+            {statsLoading ? (
+              <SkeletonTable rows={3} cols={6} />
+            ) : commissionLedger.length > 0 ? (
+              <div className="border border-navy-4 rounded-card overflow-hidden">
+                <table className="tbl text-xs">
+                  <thead>
+                    <tr>
+                      <th className="py-2">Date</th>
+                      <th className="py-2">Plan</th>
+                      <th className="py-2">Inst. #</th>
+                      <th className="py-2 text-right">Business Amount</th>
+                      <th className="py-2 text-center">Commission Rate</th>
+                      <th className="py-2 text-right">Commission Amount</th>
+                      <th className="py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {commissionLedger.slice(0, 10).map((c) => (
+                      <tr key={c.id}>
+                        <td className="py-2 font-mono text-[11px] text-ink-2">{c.calculationDate ? fmtDate(c.calculationDate) : '—'}</td>
+                        <td className="py-2 font-semibold text-ink-1 uppercase">{c.planCode || c.planType || '—'}</td>
+                        <td className="py-2 font-mono text-ink-2">{c.installmentNumber || 1}</td>
+                        <td className="py-2 font-mono text-right text-ink-1">{formatINR(c.businessAmount)}</td>
+                        <td className="py-2 font-mono text-center text-gold-1 font-bold">{c.percentage}%</td>
+                        <td className="py-2 font-mono text-right font-bold text-emerald-400">{formatINR(c.amount)}</td>
+                        <td className="py-2"><StatusBadge status={c.status || 'accrued'} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {commissionLedger.length > 10 && (
+                  <div className="p-2.5 text-center text-xs text-ink-2 bg-navy-2/40 border-t border-navy-4">
+                    Showing latest 10 of {commissionLedger.length} commission entries.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="border border-navy-4 p-4 rounded-card bg-navy-2/30 text-xs text-ink-2 text-center">
+                <p className="font-semibold text-ink-1 mb-1">No commission records generated yet</p>
+                <p className="text-[11px]">When new business or installment payments are recorded under this agent or their downline network, commissions calculated by the database engine will appear here.</p>
+              </div>
+            )}
           </div>
 
           {/* Network Downlines */}
           <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-              <INetwork size={16} /> Recursive Team Downline
-            </h3>
-            {downline.length ? (
+            <div className="flex items-center justify-between border-b border-navy-4/50 pb-1.5">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
+                <INetwork size={16} /> Recursive Team Downline ({downline.length})
+              </h3>
+              <span className="text-[11px] text-ink-2 font-mono">{downline.length} Agent{downline.length === 1 ? '' : 's'}</span>
+            </div>
+            {downlineLoading ? (
+              <SkeletonTable rows={4} cols={5} />
+            ) : downline.length ? (
               <div className="border border-navy-4 rounded-card overflow-hidden">
                 <table className="tbl text-xs">
                   <thead>
@@ -537,25 +623,25 @@ Here are your official portal details:
                       <th className="py-2">Agent ID</th>
                       <th className="py-2">Name</th>
                       <th className="py-2">Rank</th>
-                      <th className="py-2">Sponsor</th>
+                      <th className="py-2">Direct Sponsor</th>
                       <th className="py-2">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {downline.slice(0, 6).map((x) => (
-                      <tr key={x.id}>
-                        <td className="py-2 font-mono text-[10px] font-semibold text-ink-1">{x.sponsorCode || '—'}</td>
+                    {downline.slice(0, 10).map((x) => (
+                      <tr key={x.id} className="hover:bg-navy-2/30 cursor-pointer" onClick={() => navigate(`/admin/members/${x.id}`)}>
+                        <td className="py-2 font-mono text-[10px] font-semibold text-gold-1">{x.sponsorCode || '—'}</td>
                         <td className="py-2 font-medium text-ink-1">{x.name}</td>
                         <td className="py-2"><RankBadge rank={x.rank} size="sm" /></td>
-                        <td className="py-2 text-ink-2">{x.referredBy === id ? 'This Agent' : sponsorName(x.referredBy)}</td>
+                        <td className="py-2 text-ink-2 font-mono text-[11px]">{x.sponsorId === m.id ? 'This Agent' : (x.sponsorCode ? 'Direct' : '—')}</td>
                         <td className="py-2"><StatusBadge status={x.status || 'active'} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {downline.length > 6 && (
+                {downline.length > 10 && (
                   <div className="p-2.5 text-center text-xs text-ink-2 bg-navy-2/40 border-t border-navy-4">
-                    Showing 6 of {downline.length} downline network agents.
+                    Showing 10 of {downline.length} downline network agents.
                   </div>
                 )}
               </div>
@@ -566,47 +652,21 @@ Here are your official portal details:
             )}
           </div>
 
-          {/* Activity Timeline & Promotions */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            {/* Timeline */}
-            <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-                <IClock size={16} /> Activity Timeline
-              </h3>
-              <div className="relative pl-4 border-l border-navy-4 space-y-3.5 text-xs text-ink-2">
-                <div className="relative">
-                  <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-gold-1" />
-                  <p className="font-semibold text-ink-1">Profile Onboarded</p>
-                  <p className="text-[10px]">{m.joinDate ? fmtDate(m.joinDate) : '—'}</p>
-                </div>
-                {m.profileCompleted && (
-                  <div className="relative">
-                    <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-ok" />
-                    <p className="font-semibold text-ink-1">Bank & ID Validation Verified</p>
-                    <p className="text-[10px]">Onboarding verification finalized by Agent</p>
-                  </div>
-                )}
+          {/* Activity Timeline */}
+          <div className="card p-5 space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
+              <IClock size={16} /> Activity & Rank History
+            </h3>
+            <div className="relative pl-4 border-l border-navy-4 space-y-3.5 text-xs text-ink-2">
+              <div className="relative">
+                <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-gold-1" />
+                <p className="font-semibold text-ink-1">Agent Enrolled in System</p>
+                <p className="text-[10px]">{m.createdAt ? fmtDate(m.createdAt) : '—'}</p>
               </div>
-            </div>
-
-            {/* Promotion History */}
-            <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
-                <ITrophy size={16} /> Promotion History Log
-              </h3>
-              <div className="relative pl-4 border-l border-navy-4 space-y-3.5 text-xs text-ink-2">
-                <div className="relative">
-                  <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-gold-1" />
-                  <p className="font-semibold text-ink-1">Assigned Initial Rank: AO</p>
-                  <p className="text-[10px]">{m.joinDate ? fmtDate(m.joinDate) : '—'}</p>
-                </div>
-                {m.rank > 1 && (
-                  <div className="relative">
-                    <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-gold-2" />
-                    <p className="font-semibold text-ink-1">Promoted to Current Rank: {rank.code}</p>
-                    <p className="text-[10px]">Promotions checked annually according to system records.</p>
-                  </div>
-                )}
+              <div className="relative">
+                <div className="absolute -left-[20.5px] top-1 h-3.5 w-3.5 rounded-full border-2 border-navy-3 bg-ok" />
+                <p className="font-semibold text-ink-1">Current Active Rank: {rank.code} ({rank.name})</p>
+                <p className="text-[10px]">Rank Tier {m.rank} of 18</p>
               </div>
             </div>
           </div>
@@ -626,12 +686,8 @@ Here are your official portal details:
             </p>
             <div className="bg-navy-3/60 p-3 rounded text-xs space-y-1 font-mono text-ink-2 border border-navy-4">
               <div>Email: {m.email || '—'}</div>
-              <div>Agent Code: {m.sponsorCode || '—'}</div>
-              <div>Password Status: {m.mustChangePassword ? 'Force Change Active' : 'Normal'}</div>
+              <div>Agent ID: {m.sponsorCode || '—'}</div>
             </div>
-            <p className="text-[11px] text-ink-2 italic">
-              This action dispatches a reset authorization email and flags the user account to require a password change on next login. No plaintext passwords are displayed or stored.
-            </p>
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -674,8 +730,7 @@ Here are your official portal details:
             </p>
             <div className="bg-navy-3/60 p-3 rounded text-xs space-y-2 text-ink-2 border border-navy-4">
               <div className="text-red-400 font-bold uppercase tracking-wider text-[10px]">Read-Only Mode</div>
-              <p>Actions will be performed in an impersonated context.</p>
-              <p>Firestore security rules will enforce strict <strong>read-only</strong> access while viewing as an agent. You cannot create, update, or delete policies, customers, or payments.</p>
+              <p>You will see this agent&apos;s personal portal view: their earnings, downlines, and achievements.</p>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <button
