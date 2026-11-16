@@ -84,3 +84,24 @@ export async function createPolicy(payload) {
   if (error) throw error
   return data && data.length > 0 ? normalizePolicy(data[0]) : null
 }
+
+export async function updatePolicy(id, updates) {
+  const patch = {}
+  if (updates.paidInstallments !== undefined) patch.paid_installments = updates.paidInstallments
+  if (updates.totalPaid !== undefined) patch.total_paid = updates.totalPaid
+  if (updates.nextDueDate !== undefined) patch.next_due_date = updates.nextDueDate
+  if (updates.status !== undefined) patch.status = updates.status
+  if (updates.monthlyAmount !== undefined) patch.monthly_amount = updates.monthlyAmount
+  if (updates.fdAmount !== undefined) patch.fd_amount = updates.fdAmount
+  if (updates.maturityDate !== undefined) patch.maturity_date = updates.maturityDate
+
+  const { data, error } = await client
+    .from('policies')
+    .update(patch)
+    .eq('id', id)
+    .select()
+
+  if (error) throw error
+  return data && data.length > 0 ? normalizePolicy(data[0]) : null
+}
+

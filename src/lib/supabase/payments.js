@@ -1,10 +1,18 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Payments Module
 // ============================================================================
+import { addMonths } from 'date-fns'
 import { supabase, adminSupabase } from './client'
 import { normalizePayment } from './normalize'
 
 const client = adminSupabase || supabase
+
+function generateReceiptNumber() {
+  const d = new Date()
+  const dateStr = d.toISOString().slice(0, 10).replace(/-/g, '')
+  const randomHex = Math.random().toString(36).substring(2, 8).toUpperCase()
+  return `RCP-${dateStr}-${randomHex}`
+}
 
 export async function listPayments(filters = {}) {
   let query = client
@@ -88,3 +96,202 @@ export async function recordPayment(payload) {
     commissionsGenerated: data?.commissions_generated,
   }
 }
+
+/**
+ * recordInstallmentPayment()
+ * High-Precision RD Monthly Installment Collection:
+ * - Validates policy, agent, customer, and installment sequence
+ * - Prevents duplicate installment submissions
+ * - Updates policy paid installments, total paid amount, and next due date
+ * - Creates payment and receipt records
+ * - Marks policy matured if all installments are completed
+ * - Does not duplicate enrollment commissions
+ */
+export async function recordInstallmentPayment(payload) {
+  // Guard: View As Agent mode is strictly read-only
+  const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+  if (session?.active || session?.is_read_only) {
+    throw new Error('READ-ONLY: Payment creation is strictly disabled in View As Agent mode.')
+  }
+
+  const policyId = payload.policyId || payload.policy_id || payload.planId
+  const amount = Number(payload.amount ?? payload.installmentAmount)
+  const paymentMode = (payload.paymentMode || 'cash').toLowerCase()
+  const transactionRef = payload.transactionRef || payload.transactionId || null
+  const paidDate = payload.paidDate ? new Date(payload.paidDate) : new Date()
+  const notes = payload.notes || payload.remarks || null
+
+  if (!policyId) throw new Error('Policy ID is required.')
+  if (isNaN(amount) || amount <= 0) throw new Error('Valid installment amount is required.')
+
+  // 1. Fetch current policy record
+  const { data: policy, error: polErr } = await client
+    .from('policies')
+    .select('*, customers(*), profiles(*)')
+    .eq('id', policyId)
+    .single()
+
+  if (polErr || !policy) throw new Error('RD Policy not found.')
+
+  const totalInstallments = Number(policy.total_installments) || 1
+  const currentPaid = Number(policy.paid_installments) || 0
+
+  if (currentPaid >= totalInstallments || policy.status === 'matured') {
+    throw new Error(`Policy #${policy.policy_number} is already fully paid or matured (${currentPaid}/${totalInstallments} installments completed).`)
+  }
+
+  const nextInstallmentNumber = currentPaid + 1
+
+  // 2. Idempotency & Duplicate check: Ensure this exact installment number hasn't been collected already
+  const { data: existingPayments } = await client
+    .from('payments')
+    .select('id, receipt_number, status')
+    .eq('policy_id', policyId)
+    .eq('installment_number', nextInstallmentNumber)
+
+  const activeExistingPayment = (existingPayments || []).find(p => p.status !== 'reversed')
+
+  if (activeExistingPayment) {
+    throw new Error(`Installment #${nextInstallmentNumber} for Policy #${policy.policy_number} has already been recorded (Receipt: ${activeExistingPayment.receipt_number}). Duplicate collection is blocked.`)
+  }
+
+  // 3. Generate unique receipt number
+  const receiptNumber = generateReceiptNumber()
+
+  // 4. Determine current user for audit tracking
+  let authUserId = null
+  try {
+    const { data: authData } = await supabase.auth.getUser()
+    authUserId = authData?.user?.id || null
+  } catch {
+    authUserId = null
+  }
+
+  // 5. Insert payment record into public.payments
+  const insertPaymentData = {
+    policy_id: policy.id,
+    customer_id: policy.customer_id,
+    agent_id: policy.agent_id,
+    branch_id: policy.branch_id,
+    installment_number: nextInstallmentNumber,
+    amount: amount,
+    payment_mode: paymentMode,
+    transaction_ref: transactionRef || (notes ? `NOTE: ${notes}` : null),
+    receipt_number: receiptNumber,
+    paid_date: paidDate.toISOString(),
+    due_date: policy.next_due_date || paidDate.toISOString(),
+    is_late: false,
+    days_late: 0,
+    status: 'completed',
+  }
+
+  const { data: newPayment, error: payErr } = await client
+    .from('payments')
+    .insert([insertPaymentData])
+    .select()
+    .single()
+
+  if (payErr) {
+    throw new Error(`Failed to record installment payment: ${payErr.message}`)
+  }
+
+  // 6. Insert receipt into public.receipts
+  try {
+    await client.from('receipts').insert([{
+      payment_id: newPayment.id,
+      receipt_number: receiptNumber,
+      customer_id: policy.customer_id,
+      generated_by: authUserId || policy.agent_id
+    }])
+  } catch (recErr) {
+    console.warn('Receipt record warning:', recErr)
+  }
+
+  // 7. Calculate next due date and new policy status
+  const startDate = policy.start_date ? new Date(policy.start_date) : new Date()
+  const nextDueDate = addMonths(startDate, nextInstallmentNumber)
+  const isMatured = nextInstallmentNumber >= totalInstallments
+  const newStatus = isMatured ? 'matured' : (policy.status || 'active')
+  const newTotalPaid = Number(policy.total_paid || 0) + amount
+
+  // 8. Update policy progress
+  const { error: updErr } = await client
+    .from('policies')
+    .update({
+      paid_installments: nextInstallmentNumber,
+      total_paid: newTotalPaid,
+      next_due_date: nextDueDate.toISOString().slice(0, 10),
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', policy.id)
+
+  if (updErr) {
+    console.error('Failed to update policy installment progress:', updErr)
+    throw new Error(`Payment saved, but policy update failed: ${updErr.message}`)
+  }
+
+  return {
+    success: true,
+    paymentId: newPayment.id,
+    receiptNumber: receiptNumber,
+    installmentNumber: nextInstallmentNumber,
+    isMatured,
+    totalPaid: newTotalPaid,
+    remainingInstallments: Math.max(0, totalInstallments - nextInstallmentNumber)
+  }
+}
+
+/**
+ * reversePayment()
+ * Reverses an installment payment without deleting history.
+ */
+export async function reversePayment(paymentId, reason = 'Administrative Reversal') {
+  const session = JSON.parse(sessionStorage.getItem('apex_impersonation') || '{}')
+  if (session?.active || session?.is_read_only) {
+    throw new Error('READ-ONLY: Payment reversal is disabled in View As Agent mode.')
+  }
+
+  const { data: payment, error: pErr } = await client
+    .from('payments')
+    .select('*, policies(*)')
+    .eq('id', paymentId)
+    .single()
+
+  if (pErr || !payment) throw new Error('Payment record not found.')
+  if (payment.status === 'reversed') throw new Error('This payment is already marked as reversed.')
+
+  const policy = payment.policies
+  if (!policy) throw new Error('Associated policy not found for payment reversal.')
+
+  // 1. Mark payment as reversed
+  const { error: updPayErr } = await client
+    .from('payments')
+    .update({
+      status: 'reversed',
+      transaction_ref: payment.transaction_ref ? `${payment.transaction_ref} [REVERSED: ${reason}]` : `[REVERSED: ${reason}]`
+    })
+    .eq('id', paymentId)
+
+  if (updPayErr) throw updPayErr
+
+  // 2. Adjust policy progress safely
+  const newPaidCount = Math.max(0, (policy.paid_installments || 0) - 1)
+  const newTotalPaid = Math.max(0, (policy.total_paid || 0) - Number(payment.amount || 0))
+  const startDate = policy.start_date ? new Date(policy.start_date) : new Date()
+  const recalibratedDueDate = addMonths(startDate, newPaidCount)
+
+  await client
+    .from('policies')
+    .update({
+      paid_installments: newPaidCount,
+      total_paid: newTotalPaid,
+      next_due_date: recalibratedDueDate.toISOString().slice(0, 10),
+      status: 'active',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', policy.id)
+
+  return { success: true, reversedPaymentId: paymentId }
+}
+
