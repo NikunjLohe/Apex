@@ -1,10 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { payoutsAPI, profilesAPI, commissionsAPI, policiesAPI, customersAPI, masterDataAPI } from '../../lib/supabase'
 import { formatINR, fmtDate } from '../../utils/format'
 import { getPayoutGross, getPayoutTds, getPayoutAdminCharge, getPayoutNet } from '../../utils/payoutHelpers'
-import { useDoc } from '../../hooks/useFirestore'
 import { IPrint, IUsers, IDashboard, IPlus } from '../../components/ui/icons'
 import Logo from '../../components/ui/Logo'
 import { useRanks } from '../../contexts/RanksContext'
@@ -12,7 +10,7 @@ import React from 'react'
 
 export default function CommissionBill() {
   const { id } = useParams()
-  const { data: settings } = useDoc('config/settings')
+  const [settings, setSettings] = useState({ companyName: 'Apex Multisolutions', headOffice: '' })
   const { getRank } = useRanks()
   
   const [loading, setLoading] = useState(true)
@@ -39,121 +37,75 @@ export default function CommissionBill() {
   const [nextRankLoading, setNextRankLoading] = useState(false)
 
   useEffect(() => {
+    masterDataAPI.getCommissionMaster().then(cfg => {
+      if (cfg) setSettings(prev => ({ ...prev, ...cfg }))
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     async function loadData() {
       try {
-        const docRef = doc(db, 'payouts', id)
-        const snap = await getDoc(docRef)
-        if (snap.exists()) {
-          const payoutData = snap.data()
-          setBill({ id: snap.id, ...payoutData })
+        const payout = await payoutsAPI.getPayout(id)
+        if (payout) {
+          setBill(payout)
 
-          let agentProf = null
-          if (payoutData.agentId) {
-            const agentSnap = await getDoc(doc(db, 'users', payoutData.agentId))
-            if (agentSnap.exists()) {
-              agentProf = agentSnap.data()
-              setAgentProfile(agentProf)
-            }
+          const [agentProf, allProfiles, commList] = await Promise.all([
+            payout.agentId ? profilesAPI.getProfile(payout.agentId) : null,
+            profilesAPI.listProfiles().catch(() => []),
+            commissionsAPI.listCommissions({ month: payout.month, year: payout.year }).catch(() => [])
+          ])
+
+          setAgentProfile(agentProf)
+
+          const sponsorId = agentProf?.sponsorId || agentProf?.sponsor_id || agentProf?.referredBy
+          let sponsorProf = null
+          if (sponsorId && sponsorId !== 'none') {
+            sponsorProf = (allProfiles || []).find(p => p.id === sponsorId || p.sponsorCode === sponsorId) || null
           }
+          setSponsorProfile(sponsorProf)
 
-          if (agentProf?.referredBy && agentProf.referredBy !== 'none') {
-            const sponsorSnap = await getDoc(doc(db, 'users', agentProf.referredBy))
-            if (sponsorSnap.exists()) {
-              setSponsorProfile(sponsorSnap.data())
-            }
-          }
-
-          const allUsersSnap = await getDocs(collection(db, 'users'))
           const uMap = {}
-          allUsersSnap.forEach(d => {
-            uMap[d.id] = d.data()
+          ;(allProfiles || []).forEach(d => {
+            uMap[d.id] = d
           })
           setUsersMap(uMap)
 
-          const commQuery = query(
-            collection(db, 'commission_ledger'),
-            where('agentId', '==', payoutData.agentId),
-            where('month', '==', payoutData.month),
-            where('year', '==', payoutData.year)
-          )
-          const commSnap = await getDocs(commQuery)
-          const commList = []
-          commSnap.forEach(d => commList.push({ id: d.id, ...d.data() }))
-          setCommissions(commList)
-
-          const policyNumbers = [...new Set(commList.map(c => c.policyNumber).filter(Boolean))]
-          const histComms = []
-          for (let i = 0; i < policyNumbers.length; i += 30) {
-            const chunk = policyNumbers.slice(i, i + 30)
-            const q = query(
-              collection(db, 'commission_ledger'),
-              where('policyNumber', 'in', chunk),
-              where('month', '==', payoutData.month),
-              where('year', '==', payoutData.year)
-            )
-            const snap = await getDocs(q)
-            snap.forEach(doc => histComms.push({ id: doc.id, ...doc.data() }))
-          }
+          const agentComms = (commList || []).filter(c => c.agentId === payout.agentId)
+          setCommissions(agentComms)
 
           const policyMap = {}
-          histComms.forEach(c => {
-            if (!policyMap[c.policyNumber]) {
-              policyMap[c.policyNumber] = []
+          ;(commList || []).forEach(c => {
+            const pNo = c.policyNumber || c.policyId
+            if (pNo) {
+              if (!policyMap[pNo]) policyMap[pNo] = []
+              policyMap[pNo].push(c)
             }
-            policyMap[c.policyNumber].push(c)
           })
           setPolicyCommissionsMap(policyMap)
 
-          // ── Agent Business Summary ──────────────────────────────────────
-          // Uses the same data sources as the Dashboard to guarantee identical
-          // totals: agentProfile.businessVolume is incremented at import time
-          // by the same calculatedAmount that feeds system_summaries/dashboard.
-          //
-          // We intentionally avoid getAggregateFromServer here because it
-          // requires the Blaze billing plan and throws on Spark – silently
-          // zeroing every stat when caught by the outer try/catch.
-          // ──────────────────────────────────────────────────────────────────
-          if (payoutData.agentId && agentProf) {
+          if (payout.agentId && agentProf) {
             try {
-              // 1. Lifetime business & counts – read from agent profile
-              //    (same field incremented by ImportData.jsx → matches Dashboard)
-              const lifetimeBusiness = Number(agentProf.businessVolume || 0)
-              const policyCount      = Number(agentProf.activePolicies  || 0)
-              const customerCount    = Number(agentProf.totalCustomers  || 0)
+              const allPolicies = await policiesAPI.listPolicies().catch(() => [])
+              const allCustomers = await customersAPI.listCustomers().catch(() => [])
+              
+              const agentPolicies = (allPolicies || []).filter(p => p.agentId === payout.agentId)
+              const agentCustomers = (allCustomers || []).filter(c => c.enrolledBy === payout.agentId)
 
-              // 2. Current-month business – query plans and filter in JS
-              //    Amount formula matches import: RD → monthlyAmount (not ×12), FD → fdAmount
+              const lifetimeBusiness = Number(agentProf.businessVolume || agentProf.accumulatedVolume || 0) ||
+                agentPolicies.reduce((sum, p) => sum + (Number(p.monthlyAmount) || Number(p.totalPaid) || 0), 0)
+              const policyCount = agentPolicies.length
+              const customerCount = agentCustomers.length
+
               let currentMonthBusiness = 0
-              const plansQ = query(
-                collection(db, 'plans'),
-                where('agentId', '==', payoutData.agentId)
-              )
-              const pSnap = await getDocs(plansQ)
-              pSnap.forEach(d => {
-                const p = d.data()
-                const pDate = p.startDate
-                  ? new Date(p.startDate.toDate ? p.startDate.toDate() : p.startDate)
-                  : null
-                if (
-                  pDate &&
-                  pDate.getMonth() + 1 === payoutData.month &&
-                  pDate.getFullYear()  === payoutData.year
-                ) {
-                  const isRDPlan = (p.planType || p.type || '').toLowerCase().startsWith('rd')
-                  currentMonthBusiness += isRDPlan
-                    ? Number(p.monthlyAmount || 0)
-                    : Number(p.fdAmount || 0)
+              agentPolicies.forEach(p => {
+                const pDate = p.startDate ? new Date(p.startDate) : null
+                if (pDate && pDate.getMonth() + 1 === payout.month && pDate.getFullYear() === payout.year) {
+                  const isRDPlan = (p.planType || p.planCode || '').toLowerCase().startsWith('rd')
+                  currentMonthBusiness += isRDPlan ? Number(p.monthlyAmount || 0) : Number(p.fdAmount || 0)
                 }
               })
 
-              // 3. Lifetime commission – getDocs + reduce (no Blaze required)
-              const ledgQ = query(
-                collection(db, 'commission_ledger'),
-                where('agentId', '==', payoutData.agentId)
-              )
-              const lSnap = await getDocs(ledgQ)
-              let commissionEarned = 0
-              lSnap.forEach(d => { commissionEarned += Number(d.data().amount || 0) })
+              const commissionEarned = agentComms.reduce((sum, c) => sum + Number(c.amount || 0), 0)
 
               setAgentStats({
                 lifetimeBusiness,
@@ -168,7 +120,7 @@ export default function CommissionBill() {
           }
         }
       } catch (err) {
-        console.error(err)
+        console.error('Error loading payout bill:', err)
       } finally {
         setLoading(false)
       }
@@ -188,7 +140,8 @@ export default function CommissionBill() {
     const targetRank = currentRank - 1
     const queue = []
     Object.values(usersMap).forEach(u => {
-      if (u.referredBy === bill.agentId) queue.push(u.id)
+      const spId = u.sponsor_id || u.sponsorId || u.referredBy
+      if (spId === bill.agentId) queue.push(u.id)
     })
 
     const visited = new Set()
@@ -207,7 +160,8 @@ export default function CommissionBill() {
       }
 
       Object.values(usersMap).forEach(u => {
-        if (u.referredBy === cid) queue.push(u.id)
+        const spId = u.sponsor_id || u.sponsorId || u.referredBy
+        if (spId === cid) queue.push(u.id)
       })
     }
 
@@ -219,69 +173,54 @@ export default function CommissionBill() {
     async function loadTeamStats() {
       setNextRankLoading(true)
       try {
-        const agentIds = targetAgents.map(a => a.id)
+        const agentIds = new Set(targetAgents.map(a => a.id))
         
-        // 1. Fetch Plans for Total/Monthly BV and Active Policies
-        const allPlans = []
-        for (let i = 0; i < agentIds.length; i += 30) {
-          const chunk = agentIds.slice(i, i + 30)
-          const q = query(collection(db, 'plans'), where('agentId', 'in', chunk))
-          const snap = await getDocs(q)
-          snap.forEach(d => allPlans.push(d.data()))
-        }
+        const [allPolicies, allCustomers, allComms] = await Promise.all([
+          policiesAPI.listPolicies().catch(() => []),
+          customersAPI.listCustomers().catch(() => []),
+          commissionsAPI.listCommissions().catch(() => [])
+        ])
 
         const planStats = {}
-        targetAgents.forEach(a => planStats[a.id] = { totalBV: 0, monthlyBV: 0, policyCount: 0 })
+        targetAgents.forEach(a => { planStats[a.id] = { totalBV: 0, monthlyBV: 0, policyCount: 0 } })
         
-        allPlans.forEach(p => {
-          if (planStats[p.agentId]) {
-            const planTypeStr = (p.planType || p.type || '').toLowerCase()
-            const amt = planTypeStr.startsWith('rd') ? (p.monthlyAmount * 12) : (p.fdAmount || 0)
+        ;(allPolicies || []).forEach(p => {
+          if (agentIds.has(p.agentId) && planStats[p.agentId]) {
+            const planTypeStr = (p.planType || p.planCode || '').toLowerCase()
+            const amt = planTypeStr.startsWith('rd') ? ((Number(p.monthlyAmount) || 0) * 12) : (Number(p.fdAmount) || 0)
             planStats[p.agentId].totalBV += amt
             planStats[p.agentId].policyCount += 1
             
-            const pDate = p.startDate ? new Date(p.startDate.toDate ? p.startDate.toDate() : p.startDate) : (p.date ? new Date(p.date) : null)
-            if (pDate) {
-              if (pDate.getMonth() + 1 === bill.month && pDate.getFullYear() === bill.year) {
-                planStats[p.agentId].monthlyBV += amt
-              }
+            const pDate = p.startDate ? new Date(p.startDate) : null
+            if (pDate && pDate.getMonth() + 1 === bill.month && pDate.getFullYear() === bill.year) {
+              planStats[p.agentId].monthlyBV += amt
             }
           }
         })
 
-        // 2. Fetch Customer Count
         const custCounts = {}
-        for (let i = 0; i < agentIds.length; i += 30) {
-          const chunk = agentIds.slice(i, i + 30)
-          const q = query(collection(db, 'customers'), where('enrolledBy', 'in', chunk))
-          const snap = await getDocs(q)
-          chunk.forEach(id => custCounts[id] = 0)
-          snap.forEach(d => {
-            const c = d.data()
-            if (custCounts[c.enrolledBy] !== undefined) custCounts[c.enrolledBy]++
-          })
-        }
+        targetAgents.forEach(a => { custCounts[a.id] = 0 })
+        ;(allCustomers || []).forEach(c => {
+          if (agentIds.has(c.enrolledBy)) {
+            custCounts[c.enrolledBy] = (custCounts[c.enrolledBy] || 0) + 1
+          }
+        })
 
-        // 3. Fetch Lifetime Commission (Using client summation due to 'in' clause limitation with aggregations)
         const commStats = {}
-        targetAgents.forEach(a => commStats[a.id] = 0)
-        for (let i = 0; i < agentIds.length; i += 30) {
-          const chunk = agentIds.slice(i, i + 30)
-          const q = query(collection(db, 'commission_ledger'), where('agentId', 'in', chunk))
-          const snap = await getDocs(q)
-          snap.forEach(d => {
-            const c = d.data()
-            if (commStats[c.agentId] !== undefined) commStats[c.agentId] += (c.amount || 0)
-          })
-        }
+        targetAgents.forEach(a => { commStats[a.id] = 0 })
+        ;(allComms || []).forEach(c => {
+          if (agentIds.has(c.agentId)) {
+            commStats[c.agentId] = (commStats[c.agentId] || 0) + (Number(c.amount) || 0)
+          }
+        })
 
         const enriched = targetAgents.map(a => ({
           ...a,
-          totalBV: planStats[a.id].totalBV,
-          monthlyBV: planStats[a.id].monthlyBV,
-          policyCount: planStats[a.id].policyCount,
-          customerCount: custCounts[a.id],
-          totalCommission: commStats[a.id]
+          totalBV: planStats[a.id]?.totalBV || 0,
+          monthlyBV: planStats[a.id]?.monthlyBV || 0,
+          policyCount: planStats[a.id]?.policyCount || 0,
+          customerCount: custCounts[a.id] || 0,
+          totalCommission: commStats[a.id] || 0
         }))
 
         setNextRankTeam(enriched)
@@ -316,9 +255,9 @@ export default function CommissionBill() {
         id: currId,
         name: u.name,
         rank: u.rank,
-        sponsorCode: u.sponsorCode || ''
+        sponsorCode: u.sponsorCode || u.sponsor_code || ''
       })
-      currId = u.referredBy
+      currId = u.sponsor_id || u.sponsorId || u.referredBy
     }
 
     const historicalComms = policyCommissionsMap[policyNo] || []
@@ -433,7 +372,7 @@ export default function CommissionBill() {
             <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Payout Statement</h2>
             <p className="text-xs text-gray-500 mt-1">Payout ID: <span className="font-mono">{bill.id.toUpperCase()}</span></p>
             <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{new Date(bill.year, bill.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}</span></p>
-            <p className="text-xs text-gray-500 mt-0.5">Generated: {bill.createdAt ? fmtDate(bill.createdAt) : '—'}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Generated: {bill.generatedDate || bill.createdAt ? fmtDate(bill.generatedDate || bill.createdAt) : '—'}</p>
             <p className="text-xs text-gray-500 mt-0.5">Paid: {bill.paidDate ? fmtDate(bill.paidDate) : '—'}</p>
           </div>
         </div>
@@ -442,8 +381,8 @@ export default function CommissionBill() {
         <div className="bg-gray-50/50 border border-gray-100 rounded-lg p-6 mb-6">
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Agent Profile Snapshot</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-6 text-xs">
-            <div><span className="text-gray-500 block">Agent Name</span><span className="font-bold text-gray-800 text-sm">{bill.agentName}</span></div>
-            <div><span className="text-gray-500 block">Agent Code</span><span className="font-bold text-gray-800 font-mono">{bill.agentCode || '—'}</span></div>
+            <div><span className="text-gray-500 block">Agent Name</span><span className="font-bold text-gray-800 text-sm">{agentProfile?.name || bill.agentName || '—'}</span></div>
+            <div><span className="text-gray-500 block">Agent Code</span><span className="font-bold text-gray-800 font-mono">{agentProfile?.sponsorCode || bill.agentCode || '—'}</span></div>
             <div><span className="text-gray-500 block">Rank</span><span className="font-bold text-gray-800">{displayRankCode} - {displayRankName}</span></div>
             <div><span className="text-gray-500 block">Sponsor</span><span className="font-bold text-gray-800">{displaySponsorName}</span></div>
             <div><span className="text-gray-500 block">PAN Number</span><span className="font-bold text-gray-800 font-mono">{displayPanNumber}</span></div>

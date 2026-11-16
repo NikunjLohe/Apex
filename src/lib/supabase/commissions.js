@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Commission Ledger Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizeCommissionLedger } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function listCommissionLedger(filters = {}) {
-  let query = supabase.from('commission_ledger').select('*').order('calculation_date', { ascending: false })
+  let query = client.from('commission_ledger').select('*').order('calculation_date', { ascending: false })
 
   if (filters.agentId) query = query.eq('agent_id', filters.agentId)
   if (filters.policyId) query = query.eq('policy_id', filters.policyId)

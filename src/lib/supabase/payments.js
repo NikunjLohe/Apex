@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Payments Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizePayment } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function listPayments(filters = {}) {
-  let query = supabase
+  let query = client
     .from('payments')
     .select('*, customers(name), profiles(name), policies(policy_number)')
     .order('created_at', { ascending: false })
@@ -20,7 +22,7 @@ export async function listPayments(filters = {}) {
 
   const { data, error } = await query
   if (error) {
-    let fallback = supabase.from('payments').select('*').order('created_at', { ascending: false })
+    let fallback = client.from('payments').select('*').order('created_at', { ascending: false })
     if (filters.policyId) fallback = fallback.eq('policy_id', filters.policyId)
     if (filters.customerId) fallback = fallback.eq('customer_id', filters.customerId)
     if (filters.agentId) fallback = fallback.eq('agent_id', filters.agentId)
@@ -34,7 +36,7 @@ export async function listPayments(filters = {}) {
 }
 
 export async function getPayment(id) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('payments')
     .select('*')
     .eq('id', id)

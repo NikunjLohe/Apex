@@ -1,8 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { where, collection, doc, updateDoc, addDoc, getDocs, query, serverTimestamp, writeBatch } from 'firebase/firestore'
-import { db } from '../../firebase'
-import { useDoc, useCollection } from '../../hooks/useFirestore'
+import { customersAPI, policiesAPI, profilesAPI, masterDataAPI, auditAPI } from '../../lib/supabase'
 import { fmtDate, formatINR } from '../../utils/format'
 import RankBadge from '../../components/ui/RankBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
@@ -19,18 +17,42 @@ export default function CustomerDetail() {
   const { can, CAP, isSuperAdmin } = usePermission()
   const canEdit = isSuperAdmin || can(CAP.ADMIN)
 
-  const customerDoc = useDoc(id ? `customers/${id}` : null)
-  const plans = useCollection('plans', id ? [where('customerId', '==', id)] : null)
-  const users = useCollection('users')
-  const branches = useCollection('branches')
-
-  const c = customerDoc.data
+  const [loading, setLoading] = useState(true)
+  const [c, setC] = useState(null)
+  const [plansData, setPlansData] = useState([])
+  const [usersData, setUsersData] = useState([])
+  const [branchesData, setBranchesData] = useState([])
 
   // Edit / Correction State
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', customerId: '' })
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const fetchCustomerData = async () => {
+    setLoading(true)
+    try {
+      const [cust, pols, profs, branches] = await Promise.all([
+        customersAPI.getCustomer(id),
+        policiesAPI.listPolicies({ customerId: id }).catch(() => []),
+        profilesAPI.listProfiles().catch(() => []),
+        masterDataAPI.getBranches().catch(() => [])
+      ])
+      setC(cust)
+      setPlansData(pols || [])
+      setUsersData(profs || [])
+      setBranchesData(branches || [])
+    } catch (err) {
+      console.error('Error loading customer:', err)
+      toast.error('Failed to load customer details')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (id) fetchCustomerData()
+  }, [id])
 
   // Pre-fill edit form when modal opens
   useEffect(() => {
@@ -47,15 +69,15 @@ export default function CustomerDetail() {
 
   // Get assigned agent details
   const agent = useMemo(() => {
-    if (!c?.enrolledBy || !users.data) return null
-    return users.data.find(u => u.id === c.enrolledBy)
-  }, [c?.enrolledBy, users.data])
+    if (!c?.enrolledBy || !usersData) return null
+    return usersData.find(u => u.id === c.enrolledBy)
+  }, [c?.enrolledBy, usersData])
 
   // Get branch details
   const branchName = useMemo(() => {
-    if (!c?.branchId || !branches.data) return '—'
-    return branches.data.find(b => b.id === c.branchId)?.name || '—'
-  }, [c?.branchId, branches.data])
+    if (!c?.branchId || !branchesData) return '—'
+    return branchesData.find(b => b.id === c.branchId)?.name || '—'
+  }, [c?.branchId, branchesData])
 
   // Compute live diff preview
   const diffs = useMemo(() => {
@@ -95,69 +117,31 @@ export default function CustomerDetail() {
       const newCustId = editForm.customerId.trim()
       const newName = editForm.name.trim()
 
-      // Duplicate CIF Check if changed
-      if (newCustId !== c.customerId) {
-        const dupQ = query(collection(db, 'customers'), where('customerId', '==', newCustId))
-        const dupSnap = await getDocs(dupQ)
-        const exists = dupSnap.docs.some(d => d.id !== id)
-        if (exists) {
-          toast.error(`Customer CIF ID "${newCustId}" already belongs to another customer.`, { id: loader })
-          setSaving(false)
-          return
-        }
-      }
-
-      // Update customer document
-      const custRef = doc(db, 'customers', id)
-      await updateDoc(custRef, {
+      await customersAPI.updateCustomer(id, {
         name: newName,
         phone: editForm.phone.trim(),
         address: editForm.address.trim(),
-        customerId: newCustId,
-        updatedAt: serverTimestamp()
       })
-
-      // If Name or CustomerId changed, update linked plans and commission entries
-      const batch = writeBatch(db)
-      let batchCount = 0
-
-      if (newName !== c.name || newCustId !== c.customerId) {
-        // Linked plans
-        const plansQ = query(collection(db, 'plans'), where('customerId', '==', id))
-        const plansSnap = await getDocs(plansQ)
-        plansSnap.forEach(pDoc => {
-          batch.update(pDoc.ref, { customerName: newName, customerAccount: newCustId })
-          batchCount++
-        })
-
-        // Linked commissions
-        const commQ = query(collection(db, 'commission_ledger'), where('customerId', '==', id))
-        const commSnap = await getDocs(commQ)
-        commSnap.forEach(cDoc => {
-          batch.update(cDoc.ref, { customerName: newName, customerAccount: newCustId })
-          batchCount++
-        })
-
-        if (batchCount > 0) {
-          await batch.commit()
-        }
-      }
 
       // Write Audit Log
-      await addDoc(collection(db, 'audit_logs'), {
-        type: 'Customer Correction',
-        recordId: id,
-        targetType: 'customer',
-        customerName: newName,
-        adminUid: user?.uid || 'system',
-        adminName: profile?.name || user?.email || 'Admin',
-        timestamp: serverTimestamp(),
-        reason: reason.trim(),
-        changes: diffs
-      })
+      try {
+        await auditAPI.logAuditEvent({
+          type: 'Customer Correction',
+          recordId: id,
+          targetType: 'customer',
+          customerName: newName,
+          performedBy: user?.id || 'system',
+          performedByEmail: user?.email || profile?.email || 'Admin',
+          reason: reason.trim(),
+          changes: diffs
+        })
+      } catch (aErr) {
+        console.warn('Audit log write error:', aErr)
+      }
 
       toast.success('Customer details corrected successfully!', { id: loader })
       setEditOpen(false)
+      fetchCustomerData()
     } catch (err) {
       console.error('Error saving customer correction:', err)
       toast.error(`Correction failed: ${err.message}`, { id: loader })
@@ -165,8 +149,6 @@ export default function CustomerDetail() {
       setSaving(false)
     }
   }
-
-  const loading = customerDoc.loading || plans.loading || users.loading || branches.loading
 
   if (loading) {
     return (
@@ -178,7 +160,7 @@ export default function CustomerDetail() {
     )
   }
 
-  if (!customerDoc.exists) {
+  if (!c) {
     return (
       <div className="mx-auto max-w-md py-12 text-center space-y-4">
         <h2 className="text-xl font-bold text-ink-1">Customer Not Found</h2>
@@ -289,7 +271,7 @@ export default function CustomerDetail() {
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan pb-1.5 border-b border-navy-4/50 flex items-center gap-2">
               <IDoc size={16} /> Linked Policies
             </h3>
-            {plans.data?.length ? (
+            {plansData?.length ? (
               <div className="table-wrap">
                 <table className="tbl text-xs">
                   <thead>
@@ -303,7 +285,7 @@ export default function CustomerDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {plans.data.map((p) => (
+                    {plansData.map((p) => (
                       <tr key={p.id}>
                         <td className="font-mono text-[10px] font-semibold text-gold">
                           <Link to={`/admin/policies/${p.id}`} className="hover:underline">
@@ -347,7 +329,7 @@ export default function CustomerDetail() {
                 <span className="text-xs font-semibold text-ink-1">CIF Profile Created</span>
                 <p className="text-[11px] text-ink-2 mt-0.5">Account auto-generated via daily ledger upload.</p>
               </div>
-              {plans.data.map((p) => (
+              {plansData.map((p) => (
                 <div key={p.id} className="relative pl-6">
                   <span className="absolute left-[5px] top-1 h-2 w-2 rounded-full bg-ok ring-4 ring-navy-3" />
                   <span className="block text-[10px] text-ink-2 font-mono">

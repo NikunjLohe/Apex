@@ -2,7 +2,7 @@
 // APEX Supabase Data Access Layer — Main Index Export
 // ============================================================================
 
-export { supabase } from './client'
+export { supabase, adminSupabase } from './client'
 export * from './normalize'
 export * as authAPI from './auth'
 export * as profilesAPI from './profiles'

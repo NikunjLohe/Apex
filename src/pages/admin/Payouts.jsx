@@ -567,7 +567,7 @@ export default function Payouts() {
                   return (
                     <tr key={p.id}>
                       <td>
-                        <span className="font-semibold text-ink-1 block">{p.agentName}</span>
+                        <span className="font-semibold text-ink-1 block">{u.name || p.agentName || '—'}</span>
                         <span className="text-[10px] text-ink-2 font-mono">
                           Code: {u.sponsorCode || p.agentCode || '—'} | PAN: {u.pan || u.panNumber || p.panNumber || '—'}
                         </span>

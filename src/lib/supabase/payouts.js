@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Payouts Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizePayout } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function listPayouts(filters = {}) {
-  let query = supabase.from('payouts').select('*').order('generated_date', { ascending: false })
+  let query = client.from('payouts').select('*').order('generated_date', { ascending: false })
 
   if (filters.agentId) query = query.eq('agent_id', filters.agentId)
   if (filters.month) query = query.eq('month', filters.month)
@@ -18,7 +20,7 @@ export async function listPayouts(filters = {}) {
 }
 
 export async function getPayout(id) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('payouts')
     .select('*')
     .eq('id', id)
@@ -42,7 +44,7 @@ export async function generateMonthlyPayouts(month, year) {
     throw new Error('READ-ONLY: Payout generation is strictly disabled in View As Agent mode.')
   }
 
-  const { data, error } = await supabase.rpc('generate_monthly_payouts', {
+  const { data, error } = await client.rpc('generate_monthly_payouts', {
     p_month: Number(month),
     p_year: Number(year),
   })
@@ -67,7 +69,7 @@ export async function updatePayoutStatus(id, status, notes = null) {
   const patch = { status, updated_at: new Date().toISOString() }
   if (notes) patch.notes = notes
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('payouts')
     .update(patch)
     .eq('id', id)

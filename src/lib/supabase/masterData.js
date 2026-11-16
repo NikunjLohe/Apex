@@ -30,6 +30,8 @@ export async function listBranches() {
   return data || []
 }
 
+export const getBranches = listBranches
+
 export async function createBranch(payload) {
   // Generate branch code if not provided
   let branchCode = payload.branchCode

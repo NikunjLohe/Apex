@@ -18,6 +18,11 @@ const supabaseAnonKey =
   import.meta.env?.SUPABASE_ANON_KEY ||
   ''
 
+const supabaseServiceKey =
+  import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY ||
+  import.meta.env?.SUPABASE_SERVICE_ROLE_KEY ||
+  ''
+
 if (!supabaseAnonKey) {
   console.warn('[Supabase Client] Missing Supabase Public ANON Key in environment.')
 }
@@ -29,5 +34,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
   },
 })
+
+export const adminSupabase = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
+  : supabase
 
 export default supabase
