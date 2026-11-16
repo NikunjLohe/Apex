@@ -16,12 +16,12 @@ const supabaseUrl = (
 const supabaseAnonKey =
   import.meta.env?.VITE_SUPABASE_ANON_KEY ||
   import.meta.env?.SUPABASE_ANON_KEY ||
-  ''
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpcWpjbGdtZXR5Y3hmamVvenZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5ODk2MzQsImV4cCI6MjEwNTU2NTYzNH0.oXF7QxSeMp_UInYXNGEnYykLe4esb3RjC6dFBvQZuVk'
 
 const supabaseServiceKey =
   import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY ||
   import.meta.env?.SUPABASE_SERVICE_ROLE_KEY ||
-  ''
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpcWpjbGdtZXR5Y3hmamVvenZtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTk4OTYzNCwiZXhwIjoyMTA1NTY1NjM0fQ.sRxBS_bhblowAePr-5gDxgK9Q2Fw2g8ow75STwcIML4'
 
 if (!supabaseAnonKey) {
   console.warn('[Supabase Client] Missing Supabase Public ANON Key in environment.')
