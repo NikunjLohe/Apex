@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { startOfMonth, subMonths, format } from 'date-fns'
@@ -19,33 +19,113 @@ import {
   ResponsiveContainer, BarChart, Bar
 } from 'recharts'
 import { useRanks } from '../contexts/RanksContext'
+import { policiesAPI, paymentsAPI, commissionsAPI, profilesAPI, masterDataAPI } from '../lib/supabase'
 
-// ─── Super Admin Dashboard (unchanged) ───────────────────────────────────────
+// ─── Super Admin Dashboard ───────────────────────────────────────────────────
 function SuperAdminDashboard() {
-  const { data: summary, loading: summaryLoading } = useDoc('system_summaries/dashboard')
-  const recentUsers    = useCollection('users',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-users')
-  const recentImports  = useCollection('imports', [orderBy('importDate',   'desc'), limit(3)], 'recent-imports')
-  const recentPlans    = useCollection('plans',   [orderBy('createdAt',    'desc'), limit(5)], 'recent-plans')
-  const recentPayouts  = useCollection('payouts', [orderBy('generatedDate','desc'), limit(5)], 'recent-payouts')
-  const loading = summaryLoading || recentUsers.loading || recentImports.loading || recentPlans.loading || recentPayouts.loading
+  const [loading, setLoading] = useState(true)
+  const [policies, setPolicies] = useState([])
+  const [payments, setPayments] = useState([])
+  const [commissions, setCommissions] = useState([])
+  const [profiles, setProfiles] = useState([])
+  const [branches, setBranches] = useState([])
   const { profile } = useAuth()
 
-  const stats = useMemo(() => ({
-    totalBusiness:          summary?.totalBusiness         || 0,
-    monthlyBusiness:        summary?.monthlyBusiness       || 0,
-    activeAgents:           summary?.activeAgents          || 0,
-    activePlans:            summary?.activePlans           || 0,
-    totalCommission:        summary?.totalCommission       || 0,
-    pendingPayouts:         summary?.pendingPayouts        || 0,
-    promotionsCount:        summary?.promotionsCount       || 0,
-    pendingImportErrors:    summary?.pendingImportErrors   || 0,
-    topAgentsList:          summary?.topAgentsList         || [],
-    branchPerformance:      summary?.branchPerformance     || [],
-    growthData:             summary?.growthData            || [],
-    recentImports:          recentImports?.data            || [],
-    recentPolicies:         recentPlans?.data              || [],
-    recentFinancial:        recentPayouts?.data            || [],
-  }), [summary, recentImports?.data, recentPlans?.data, recentPayouts?.data])
+  useEffect(() => {
+    let cancelled = false
+    async function loadDashboard() {
+      setLoading(true)
+      try {
+        const [polList, payList, commList, profList, branchList] = await Promise.all([
+          policiesAPI.listPolicies().catch(() => []),
+          paymentsAPI.listPayments().catch(() => []),
+          commissionsAPI.listCommissionLedger().catch(() => []),
+          profilesAPI.listProfiles().catch(() => []),
+          masterDataAPI.listBranches().catch(() => []),
+        ])
+        if (!cancelled) {
+          setPolicies(polList || [])
+          setPayments(payList || [])
+          setCommissions(commList || [])
+          setProfiles(profList || [])
+          setBranches(branchList || [])
+        }
+      } catch (err) {
+        console.error('[Dashboard] Error loading data:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadDashboard()
+    return () => { cancelled = true }
+  }, [])
+
+  const stats = useMemo(() => {
+    const now = new Date()
+    const month0 = startOfMonth(now)
+
+    // Total business volume = sum of (12 * monthlyAmount for RD, or fdAmount / totalPaid for FD/Pension)
+    const totalBusiness = (policies || []).reduce((sum, p) => {
+      const isRD = String(p.planType || p.type || '').toUpperCase() === 'RD' || String(p.planCode || '').toUpperCase().startsWith('RD')
+      const amt = isRD ? ((Number(p.monthlyAmount) || 0) * 12) : (Number(p.fdAmount) || Number(p.totalPaid) || 0)
+      return sum + amt
+    }, 0)
+
+    // Monthly business = sum of payments collected this month
+    const monthlyBusiness = (payments || []).filter(p => toDate(p.paidDate) >= month0).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+
+    // Total commissions
+    const totalCommission = (commissions || []).reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+
+    const activeAgents = (profiles || []).filter(p => p.status === 'active' && p.role !== 'admin' && !p.isSuperAdmin).length
+    const activePlans = (policies || []).filter(p => p.status === 'active').length
+
+    // Monthly Business Growth data (past 6 months)
+    const growthData = Array.from({ length: 6 }, (_, i) => {
+      const d = subMonths(now, 5 - i)
+      const start = startOfMonth(d)
+      const nextM = startOfMonth(subMonths(d, -1))
+      const monthBiz = (payments || [])
+        .filter(p => { const pd = toDate(p.paidDate); return pd && pd >= start && pd < nextM })
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+      return {
+        month: format(d, 'MMM yyyy'),
+        Business: monthBiz
+      }
+    })
+
+    // Branch Office Performance
+    let branchPerformance = []
+    if (branches && branches.length > 0) {
+      branchPerformance = branches.map(b => {
+        const sales = (policies || []).filter(p => p.branchId === b.id).reduce((sum, p) => {
+          const isRD = String(p.planType || '').toUpperCase() === 'RD' || String(p.planCode || '').toUpperCase().startsWith('RD')
+          return sum + (isRD ? ((Number(p.monthlyAmount) || 0) * 12) : (Number(p.fdAmount) || Number(p.totalPaid) || 0))
+        }, 0)
+        return { name: b.name || b.code, Sales: sales }
+      })
+    } else {
+      const rdTotal = (policies || []).filter(p => String(p.planType || p.planCode || '').toUpperCase().includes('RD')).reduce((sum, p) => sum + ((Number(p.monthlyAmount) || 0) * 12), 0)
+      const fdTotal = (policies || []).filter(p => !String(p.planType || p.planCode || '').toUpperCase().includes('RD')).reduce((sum, p) => sum + (Number(p.fdAmount) || Number(p.totalPaid) || 0), 0)
+      branchPerformance = [
+        { name: 'Head Office', Sales: totalBusiness },
+        { name: 'RD Plans', Sales: rdTotal },
+        { name: 'FD / Pension', Sales: fdTotal },
+      ]
+    }
+
+    return {
+      totalBusiness,
+      monthlyBusiness,
+      totalCommission,
+      activeAgents,
+      activePlans,
+      promotionsCount: 0,
+      pendingImportErrors: 0,
+      growthData,
+      branchPerformance,
+    }
+  }, [policies, payments, commissions, profiles, branches])
 
   if (loading) return (
     <div className="mx-auto max-w-6xl space-y-6">
