@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Profiles Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizeProfile } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function getProfile(id) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('profiles')
     .select('*')
     .eq('id', id)
@@ -25,7 +27,7 @@ export async function getCurrentProfile() {
 }
 
 export async function listProfiles(filters = {}) {
-  let query = supabase.from('profiles').select('*').order('created_at', { ascending: false })
+  let query = client.from('profiles').select('*').order('created_at', { ascending: false })
 
   if (filters.sponsorId) query = query.eq('sponsor_id', filters.sponsorId)
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
@@ -46,7 +48,7 @@ export async function updateAllowedProfileFields(id, updates) {
   if (updates.panNumber !== undefined) allowed.pan_number = updates.panNumber
   if (updates.bankDetails !== undefined) allowed.bank_details = updates.bankDetails
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('profiles')
     .update(allowed)
     .eq('id', id)
@@ -57,12 +59,12 @@ export async function updateAllowedProfileFields(id, updates) {
 }
 
 export async function getDownline(agentId) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .rpc('get_downline', { p_agent_id: agentId })
 
   if (error) {
     // Fallback if RPC get_downline is not present: query profiles where sponsor_id chain or list profiles
-    const { data: list, error: err2 } = await supabase
+    const { data: list, error: err2 } = await client
       .from('profiles')
       .select('*')
     if (err2) throw error
@@ -99,7 +101,7 @@ export async function updateProfile(id, updates) {
   if (updates.panNumber !== undefined) patch.pan_number = updates.panNumber
   if (updates.bankDetails !== undefined) patch.bank_details = updates.bankDetails
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('profiles')
     .update(patch)
     .eq('id', id)

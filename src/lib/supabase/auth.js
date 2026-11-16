@@ -45,4 +45,5 @@ export async function requestPasswordReset(email, redirectTo) {
 }
 
 export const resetPassword = requestPasswordReset
+export const resetPasswordForEmail = requestPasswordReset
 

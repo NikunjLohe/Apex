@@ -14,7 +14,7 @@ const AGENT_GROUPS = [
       { to: '/dashboard',     label: 'Dashboard',     Icon: IDashboard, cap: null,           end: true },
       { to: '/my-profile',    label: 'My Profile',    Icon: IUsers,     cap: null },
       { to: '/my-earnings',   label: 'My Earnings',   Icon: ITrophy,    cap: CAP.AGENT_ONLY },
-      { to: '/my-downline',   label: 'My Downline',   Icon: INetwork,   cap: CAP.AGENT_ONLY },
+      { to: '/my-downline',   label: 'My Downline & Team Business', Icon: INetwork, cap: CAP.AGENT_ONLY },
       { to: '/cmd-awards',    label: 'CMD Awards',    Icon: IShield,    cap: CAP.AGENT_ONLY },
     ],
   },

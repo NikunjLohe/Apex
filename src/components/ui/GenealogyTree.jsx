@@ -33,7 +33,7 @@ async function searchUsers(term) {
 // GenealogyTree Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function GenealogyTree({ rootId = null }) {
+export default function GenealogyTree({ rootId = null, onSelectAgent = null }) {
   // ── Lazy node cache: id → { ...userData, childrenIds?: string[], childrenLoaded: bool } ──
   const [nodeCache, setNodeCache] = useState({})
 
@@ -299,7 +299,10 @@ export default function GenealogyTree({ rootId = null }) {
       <div className="flex flex-col items-center relative" key={nodeId}>
         {/* Node Card */}
         <div
+          onClick={() => onSelectAgent?.(node)}
           className={`relative z-10 card p-4 w-52 bg-navy-3 border transition-all ${
+            onSelectAgent ? 'cursor-pointer hover:border-gold-1 hover:shadow-lg' : ''
+          } ${
             isHighlighted
               ? 'border-gold-1 ring-2 ring-gold-1/30 shadow-[0_0_15px_rgba(163,144,107,0.25)]'
               : 'border-navy-4 hover:border-gold-1/30'

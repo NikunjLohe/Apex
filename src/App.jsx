@@ -185,6 +185,7 @@ export default function App() {
               {/* My Earnings — agent accounts only (rank 1–18, not pure super admin) */}
               <Route path="/my-earnings" element={<Protected capability={CAP.AGENT_ONLY}><MyEarnings /></Protected>} />
               <Route path="/my-downline" element={<Protected capability={CAP.AGENT_ONLY}><MyDownline /></Protected>} />
+              <Route path="/portal/downline" element={<Protected capability={CAP.AGENT_ONLY}><MyDownline /></Protected>} />
               <Route path="/cmd-awards"  element={<Protected capability={CAP.AGENT_ONLY}><CmdAwards /></Protected>} />
 
 

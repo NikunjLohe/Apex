@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Policies Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizePolicy } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function getPolicy(id) {
-  let query = supabase
+  let query = client
     .from('policies')
     .select('*, customers(name, customer_id), profiles(name, sponsor_code, rank, phone)')
 
@@ -19,7 +21,7 @@ export async function getPolicy(id) {
 
   if (error) {
     // Fallback without joins
-    const fallback = supabase.from('policies').select('*')
+    const fallback = client.from('policies').select('*')
     const fbRes = id.includes('-') && id.length === 36 ? await fallback.eq('id', id).maybeSingle() : await fallback.eq('policy_number', id).maybeSingle()
     if (fbRes.error) throw error
     return normalizePolicy(fbRes.data)
@@ -28,7 +30,7 @@ export async function getPolicy(id) {
 }
 
 export async function listPolicies(filters = {}) {
-  let query = supabase
+  let query = client
     .from('policies')
     .select('*, customers(name, customer_id), profiles(name)')
     .order('created_at', { ascending: false })
@@ -43,7 +45,7 @@ export async function listPolicies(filters = {}) {
 
   const { data, error } = await query
   if (error) {
-    let fallback = supabase.from('policies').select('*').order('created_at', { ascending: false })
+    let fallback = client.from('policies').select('*').order('created_at', { ascending: false })
     if (filters.agentId) fallback = fallback.eq('agent_id', filters.agentId)
     if (filters.customerId) fallback = fallback.eq('customer_id', filters.customerId)
     if (filters.status) fallback = fallback.eq('status', filters.status)

@@ -1,11 +1,13 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Customers Module
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
 import { normalizeCustomer } from './normalize'
 
+const client = adminSupabase || supabase
+
 export async function getCustomer(id) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('customers')
     .select('*')
     .eq('id', id)
@@ -19,7 +21,7 @@ export async function getCustomer(id) {
 }
 
 export async function listCustomers(filters = {}) {
-  let query = supabase.from('customers').select('*').order('created_at', { ascending: false })
+  let query = client.from('customers').select('*').order('created_at', { ascending: false })
 
   if (filters.enrolledBy) query = query.eq('enrolled_by', filters.enrolledBy)
   if (filters.branchId) query = query.eq('branch_id', filters.branchId)
@@ -42,7 +44,7 @@ export async function createCustomer(payload) {
     enrolled_by: payload.enrolledBy,
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('customers')
     .insert([insertData])
     .select()
@@ -63,7 +65,7 @@ export async function updateCustomer(id, updates) {
   if (updates.email !== undefined) patchData.email = updates.email
   if (updates.address !== undefined) patchData.address = updates.address
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('customers')
     .update(patchData)
     .eq('id', id)
