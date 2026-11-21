@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { format, endOfMonth } from 'date-fns'
-import { useCollection } from '../../hooks/useFirestore'
+import { paymentsAPI, policiesAPI, profilesAPI } from '../../lib/supabase'
 import { formatINR, fmtDate, toDate } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -12,10 +12,6 @@ import {
   IReport,
   IDownload,
   ISearch,
-  ICash,
-  IDoc,
-  IUsers,
-  IChevronDown,
 } from '../../components/ui/icons'
 
 const MONTH_NAMES = [
@@ -58,36 +54,51 @@ function getCategory(plan, payment) {
   return 'RD'
 }
 
+function pickLabel(...candidates) {
+  for (const val of candidates) {
+    if (val && val !== '—') return val
+  }
+  return '—'
+}
+
 /** Build business detail items from a sorted payment array using shared FD/PENS dedup maps */
-function buildDetailItems(sortedPayments, planMaps, fdSeenGlobal, pensSeenGlobal, monthTag) {
+function buildDetailItems(sortedPayments, planMaps, usersMap, fdSeenGlobal, pensSeenGlobal, monthTag) {
   const rdItems = []
   const fdItems = []
   const pensItems = []
 
   sortedPayments.forEach((pay) => {
-    const plan = planMaps.byId[pay.planId] || planMaps.byAcc[pay.planAccountNumber] || {}
+    const plan = planMaps.byId[pay.policyId || pay.planId] || planMaps.byAcc[pay.planAccountNumber] || {}
     const category = getCategory(plan, pay)
     const termLabel = formatTerm(plan)
-    const policyNumber = pay.planAccountNumber || plan.policyNumber || plan.planAccountNumber || '—'
-    const customerName = pay.customerName || plan.customerName || '—'
-    const agentName = pay.agentName || plan.agentName || '—'
-    const businessDate = pay.paidDate
+    const policyNumber = pickLabel(plan.policyNumber, plan.planAccountNumber, pay.planAccountNumber)
+    const customerName = pickLabel(pay.customerName, plan.customerName)
+    const agentName = pickLabel(
+      pay.agentName,
+      plan.agentName,
+      usersMap[pay.agentId || plan.agentId]?.name
+    )
+    const businessDate = pay.paidDate || pay.createdAt
+    const planId = plan.id || pay.policyId || pay.planId
+    const baseItem = {
+      id: pay.id,
+      policyNumber,
+      customerName,
+      agentName,
+      category,
+      term: termLabel,
+      businessDate,
+      status: pay.status || plan.status || 'active',
+      planId,
+      ...(monthTag !== undefined ? { month: monthTag } : {}),
+    }
 
     if (category === 'RD') {
       const amount = Number(pay.amount) || Number(plan.monthlyAmount) || 0
       rdItems.push({
-        id: pay.id,
-        policyNumber,
-        customerName,
-        agentName,
-        planCode: plan.type || 'RD',
-        category: 'RD',
-        term: termLabel,
-        businessDate,
+        ...baseItem,
+        planCode: plan.type || plan.planCode || 'RD',
         businessAmount: amount,
-        status: pay.status || plan.status || 'active',
-        planId: plan.id || pay.planId,
-        month: monthTag,
       })
     } else if (category === 'FD') {
       const planKey = plan.id || policyNumber
@@ -95,18 +106,9 @@ function buildDetailItems(sortedPayments, planMaps, fdSeenGlobal, pensSeenGlobal
         fdSeenGlobal.add(planKey)
         const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
         fdItems.push({
-          id: pay.id,
-          policyNumber,
-          customerName,
-          agentName,
-          planCode: plan.type || 'FD',
-          category: 'FD',
-          term: termLabel,
-          businessDate,
+          ...baseItem,
+          planCode: plan.type || plan.planCode || 'FD',
           businessAmount: amount,
-          status: pay.status || plan.status || 'active',
-          planId: plan.id || pay.planId,
-          month: monthTag,
         })
       }
     } else if (category === 'PENS') {
@@ -115,18 +117,9 @@ function buildDetailItems(sortedPayments, planMaps, fdSeenGlobal, pensSeenGlobal
         pensSeenGlobal.add(planKey)
         const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
         pensItems.push({
-          id: pay.id,
-          policyNumber,
-          customerName,
-          agentName,
-          planCode: plan.type || 'PENS',
-          category: 'PENS',
-          term: termLabel,
-          businessDate,
+          ...baseItem,
+          planCode: plan.type || plan.planCode || 'PENS',
           businessAmount: amount,
-          status: pay.status || plan.status || 'active',
-          planId: plan.id || pay.planId,
-          month: monthTag,
         })
       }
     }
@@ -135,12 +128,117 @@ function buildDetailItems(sortedPayments, planMaps, fdSeenGlobal, pensSeenGlobal
   return { rdItems, fdItems, pensItems }
 }
 
-export default function MonthlyBusiness() {
-  const paymentsCollection = useCollection('payments')
-  const plansCollection = useCollection('plans')
-  const usersCollection = useCollection('users')
+function summarizeBusinessDetails(rdItems, fdItems, pensItems) {
+  const rdTermMap = {}
+  rdItems.forEach((item) => {
+    if (!rdTermMap[item.term]) {
+      rdTermMap[item.term] = { term: item.term, policiesSet: new Set(), business: 0 }
+    }
+    rdTermMap[item.term].policiesSet.add(item.planId || item.policyNumber)
+    rdTermMap[item.term].business += item.businessAmount
+  })
+  const rdTermSummary = Object.values(rdTermMap)
+    .map((t) => ({ term: t.term, policies: t.policiesSet.size, business: t.business }))
+    .sort((a, b) => a.term.localeCompare(b.term))
 
-  const loading = paymentsCollection.loading || plansCollection.loading || usersCollection.loading
+  const fdTermMap = {}
+  fdItems.forEach((item) => {
+    if (!fdTermMap[item.term]) {
+      fdTermMap[item.term] = { term: item.term, policies: 0, business: 0 }
+    }
+    fdTermMap[item.term].policies += 1
+    fdTermMap[item.term].business += item.businessAmount
+  })
+  const fdTermSummary = Object.values(fdTermMap)
+    .map((t) => ({ term: t.term, policies: t.policies, business: t.business }))
+    .sort((a, b) => a.term.localeCompare(b.term))
+
+  const pensTermMap = {}
+  pensItems.forEach((item) => {
+    const prod = 'Pension'
+    if (!pensTermMap[prod]) {
+      pensTermMap[prod] = { product: prod, policies: 0, business: 0 }
+    }
+    pensTermMap[prod].policies += 1
+    pensTermMap[prod].business += item.businessAmount
+  })
+  const pensSummary = Object.values(pensTermMap)
+
+  const rdPoliciesCount = new Set(rdItems.map((i) => i.planId || i.policyNumber)).size
+  const rdBusinessTotal = rdItems.reduce((s, i) => s + i.businessAmount, 0)
+  const fdPoliciesCount = fdItems.length
+  const fdBusinessTotal = fdItems.reduce((s, i) => s + i.businessAmount, 0)
+  const pensPoliciesCount = pensItems.length
+  const pensBusinessTotal = pensItems.reduce((s, i) => s + i.businessAmount, 0)
+
+  const totalBusiness = rdBusinessTotal + fdBusinessTotal + pensBusinessTotal
+  const totalPolicies = rdPoliciesCount + fdPoliciesCount + pensPoliciesCount
+
+  const overallSummary = [
+    { type: 'RD', name: 'Recurring Deposit (RD)', policies: rdPoliciesCount, business: rdBusinessTotal },
+    { type: 'FD', name: 'Fixed Deposit (FD)', policies: fdPoliciesCount, business: fdBusinessTotal },
+    { type: 'PENS', name: 'Pension Plan', policies: pensPoliciesCount, business: pensBusinessTotal },
+  ]
+
+  const topSummary = {
+    totalBusiness,
+    totalPolicies,
+    rdBusiness: rdBusinessTotal,
+    rdPolicies: rdPoliciesCount,
+    fdBusiness: fdBusinessTotal,
+    fdPolicies: fdPoliciesCount,
+    pensBusiness: pensBusinessTotal,
+    pensPolicies: pensPoliciesCount,
+  }
+
+  return { rdTermSummary, fdTermSummary, pensSummary, overallSummary, topSummary }
+}
+
+export default function MonthlyBusiness() {
+  const [paymentsRaw, setPaymentsRaw] = useState([])
+  const [policiesRaw, setPoliciesRaw] = useState([])
+  const [profilesRaw, setProfilesRaw] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadBusinessData() {
+      setLoading(true)
+      try {
+        const [payList, polList, profList] = await Promise.all([
+          paymentsAPI.listPayments(),
+          policiesAPI.listPolicies(),
+          profilesAPI.listProfiles().catch(() => []),
+        ])
+        if (!cancelled) {
+          setPaymentsRaw(payList || [])
+          setPoliciesRaw(polList || [])
+          setProfilesRaw(profList || [])
+        }
+      } catch (err) {
+        console.error('[MonthlyBusiness] Failed to load Supabase business data:', err)
+        toast.error('Failed to load business data')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadBusinessData()
+    return () => { cancelled = true }
+  }, [])
+
+  const validPayments = useMemo(() => {
+    return paymentsRaw.filter(
+      (p) => p.status !== 'reversed' && p.status !== 'cancelled' && p.status !== 'failed'
+    )
+  }, [paymentsRaw])
+
+  const usersMap = useMemo(() => {
+    const map = {}
+    profilesRaw.forEach((u) => {
+      map[u.id] = u
+    })
+    return map
+  }, [profilesRaw])
 
   // Report mode: 'month' | 'year'
   const [reportMode, setReportMode] = useState('month')
@@ -158,21 +256,21 @@ export default function MonthlyBusiness() {
   const planMaps = useMemo(() => {
     const byId = {}
     const byAcc = {}
-    ;(plansCollection.data || []).forEach((p) => {
+    policiesRaw.forEach((p) => {
       byId[p.id] = p
       if (p.policyNumber) byAcc[p.policyNumber] = p
       if (p.planAccountNumber) byAcc[p.planAccountNumber] = p
     })
     return { byId, byAcc }
-  }, [plansCollection.data])
+  }, [policiesRaw])
 
   // Derive available months from payments data (up to current month)
   const availableMonths = useMemo(() => {
     const set = new Set()
     set.add(currentMonthStr)
 
-    ;(paymentsCollection.data || []).forEach((p) => {
-      const d = toDate(p.paidDate)
+    validPayments.forEach((p) => {
+      const d = toDate(p.paidDate || p.createdAt)
       if (d) {
         const m = format(d, 'yyyy-MM')
         if (m <= currentMonthStr) {
@@ -182,22 +280,22 @@ export default function MonthlyBusiness() {
     })
 
     return Array.from(set).sort().reverse()
-  }, [paymentsCollection.data, currentMonthStr])
+  }, [validPayments, currentMonthStr])
 
   // Derive available years from payments data
   const availableYears = useMemo(() => {
     const set = new Set([currentYear])
-    paymentsCollection.data.forEach((p) => {
-      const d = toDate(p.paidDate)
+    validPayments.forEach((p) => {
+      const d = toDate(p.paidDate || p.createdAt)
       if (d) {
         const y = d.getFullYear()
         if (y <= currentYear) set.add(y)
       }
     })
     return Array.from(set).sort().reverse()
-  }, [paymentsCollection.data, currentYear])
+  }, [validPayments, currentYear])
 
-  // ─── Monthly Data (unchanged logic) ────────────────────────────────────────
+  // ─── Monthly Data ──────────────────────────────────────────────────────────
   const monthlyData = useMemo(() => {
     if (loading) {
       return {
@@ -229,154 +327,15 @@ export default function MonthlyBusiness() {
     endDate.setHours(23, 59, 59, 999)
 
     // Filter payments falling in selected month
-    const monthPayments = paymentsCollection.data.filter((p) => {
-      const d = toDate(p.paidDate)
+    const monthPayments = validPayments.filter((p) => {
+      const d = toDate(p.paidDate || p.createdAt)
       return d && d >= startDate && d <= endDate
     })
 
-    // Grouping & Deduplication
-    const rdDetailItems = []
-    const fdPolicyMap = new Map()
-    const pensPolicyMap = new Map()
-
-    monthPayments.forEach((pay) => {
-      const plan = planMaps.byId[pay.planId] || planMaps.byAcc[pay.planAccountNumber] || {}
-      const category = getCategory(plan, pay)
-      const termLabel = formatTerm(plan)
-      const policyNumber = pay.planAccountNumber || plan.policyNumber || plan.planAccountNumber || '—'
-      const customerName = pay.customerName || plan.customerName || '—'
-      const agentName = pay.agentName || plan.agentName || '—'
-      const businessDate = pay.paidDate
-
-      if (category === 'RD') {
-        const amount = Number(pay.amount) || Number(plan.monthlyAmount) || 0
-        rdDetailItems.push({
-          id: pay.id,
-          policyNumber,
-          customerName,
-          agentName,
-          planCode: plan.type || 'RD',
-          category: 'RD',
-          term: termLabel,
-          businessDate,
-          businessAmount: amount,
-          status: pay.status || plan.status || 'active',
-          planId: plan.id || pay.planId,
-        })
-      } else if (category === 'FD') {
-        const planKey = plan.id || policyNumber
-        if (!fdPolicyMap.has(planKey)) {
-          const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
-          fdPolicyMap.set(planKey, {
-            id: pay.id,
-            policyNumber,
-            customerName,
-            agentName,
-            planCode: plan.type || 'FD',
-            category: 'FD',
-            term: termLabel,
-            businessDate,
-            businessAmount: amount,
-            status: pay.status || plan.status || 'active',
-            planId: plan.id || pay.planId,
-          })
-        }
-      } else if (category === 'PENS') {
-        const planKey = plan.id || policyNumber
-        if (!pensPolicyMap.has(planKey)) {
-          const amount = Number(plan.fdAmount) || Number(pay.amount) || 0
-          pensPolicyMap.set(planKey, {
-            id: pay.id,
-            policyNumber,
-            customerName,
-            agentName,
-            planCode: plan.type || 'PENS',
-            category: 'PENS',
-            term: termLabel,
-            businessDate,
-            businessAmount: amount,
-            status: pay.status || plan.status || 'active',
-            planId: plan.id || pay.planId,
-          })
-        }
-      }
-    })
-
-    const fdDetailItems = Array.from(fdPolicyMap.values())
-    const pensDetailItems = Array.from(pensPolicyMap.values())
+    const { rdItems: rdDetailItems, fdItems: fdDetailItems, pensItems: pensDetailItems } =
+      buildDetailItems(monthPayments, planMaps, usersMap, new Set(), new Set())
     const allDetailItems = [...rdDetailItems, ...fdDetailItems, ...pensDetailItems]
-
-    // RD Term Summaries
-    const rdTermMap = {}
-    rdDetailItems.forEach((item) => {
-      if (!rdTermMap[item.term]) {
-        rdTermMap[item.term] = { term: item.term, policiesSet: new Set(), business: 0 }
-      }
-      rdTermMap[item.term].policiesSet.add(item.planId || item.policyNumber)
-      rdTermMap[item.term].business += item.businessAmount
-    })
-    const rdTermSummary = Object.values(rdTermMap).map((t) => ({
-      term: t.term,
-      policies: t.policiesSet.size,
-      business: t.business,
-    })).sort((a, b) => a.term.localeCompare(b.term))
-
-    // FD Term Summaries
-    const fdTermMap = {}
-    fdDetailItems.forEach((item) => {
-      if (!fdTermMap[item.term]) {
-        fdTermMap[item.term] = { term: item.term, policies: 0, business: 0 }
-      }
-      fdTermMap[item.term].policies += 1
-      fdTermMap[item.term].business += item.businessAmount
-    })
-    const fdTermSummary = Object.values(fdTermMap).map((t) => ({
-      term: t.term,
-      policies: t.policies,
-      business: t.business,
-    })).sort((a, b) => a.term.localeCompare(b.term))
-
-    // Pension Summaries
-    const pensTermMap = {}
-    pensDetailItems.forEach((item) => {
-      const prod = 'Pension'
-      if (!pensTermMap[prod]) {
-        pensTermMap[prod] = { product: prod, policies: 0, business: 0 }
-      }
-      pensTermMap[prod].policies += 1
-      pensTermMap[prod].business += item.businessAmount
-    })
-    const pensSummary = Object.values(pensTermMap)
-
-    // Totals per category
-    const rdPoliciesCount = new Set(rdDetailItems.map((i) => i.planId || i.policyNumber)).size
-    const rdBusinessTotal = rdDetailItems.reduce((s, i) => s + i.businessAmount, 0)
-
-    const fdPoliciesCount = fdDetailItems.length
-    const fdBusinessTotal = fdDetailItems.reduce((s, i) => s + i.businessAmount, 0)
-
-    const pensPoliciesCount = pensDetailItems.length
-    const pensBusinessTotal = pensDetailItems.reduce((s, i) => s + i.businessAmount, 0)
-
-    const totalBusiness = rdBusinessTotal + fdBusinessTotal + pensBusinessTotal
-    const totalPolicies = rdPoliciesCount + fdPoliciesCount + pensPoliciesCount
-
-    const overallSummary = [
-      { type: 'RD', name: 'Recurring Deposit (RD)', policies: rdPoliciesCount, business: rdBusinessTotal },
-      { type: 'FD', name: 'Fixed Deposit (FD)', policies: fdPoliciesCount, business: fdBusinessTotal },
-      { type: 'PENS', name: 'Pension Plan', policies: pensPoliciesCount, business: pensBusinessTotal },
-    ]
-
-    const topSummary = {
-      totalBusiness,
-      totalPolicies,
-      rdBusiness: rdBusinessTotal,
-      rdPolicies: rdPoliciesCount,
-      fdBusiness: fdBusinessTotal,
-      fdPolicies: fdPoliciesCount,
-      pensBusiness: pensBusinessTotal,
-      pensPolicies: pensPoliciesCount,
-    }
+    const summaries = summarizeBusinessDetails(rdDetailItems, fdDetailItems, pensDetailItems)
 
     return {
       paymentsCount: monthPayments.length,
@@ -384,13 +343,9 @@ export default function MonthlyBusiness() {
       fdDetailItems,
       pensDetailItems,
       allDetailItems,
-      rdTermSummary,
-      fdTermSummary,
-      pensSummary,
-      overallSummary,
-      topSummary,
+      ...summaries,
     }
-  }, [selectedMonth, paymentsCollection.data, planMaps, loading])
+  }, [selectedMonth, validPayments, planMaps, usersMap, loading])
 
   // ─── Yearly Data ────────────────────────────────────────────────────────────
   const yearlyData = useMemo(() => {
@@ -400,14 +355,14 @@ export default function MonthlyBusiness() {
     const endDate = new Date(selectedYear, 11, 31, 23, 59, 59, 999)
 
     // All payments in the year, sorted ascending by paidDate for stable first-occurrence detection
-    const yearPayments = paymentsCollection.data
+    const yearPayments = validPayments
       .filter((p) => {
-        const d = toDate(p.paidDate)
+        const d = toDate(p.paidDate || p.createdAt)
         return d && d >= startDate && d <= endDate
       })
       .sort((a, b) => {
-        const da = toDate(a.paidDate) || new Date(0)
-        const db = toDate(b.paidDate) || new Date(0)
+        const da = toDate(a.paidDate || a.createdAt) || new Date(0)
+        const db = toDate(b.paidDate || b.createdAt) || new Date(0)
         return da - db
       })
 
@@ -428,13 +383,14 @@ export default function MonthlyBusiness() {
       monthEnd.setHours(23, 59, 59, 999)
 
       const monthPays = yearPayments.filter((p) => {
-        const d = toDate(p.paidDate)
+        const d = toDate(p.paidDate || p.createdAt)
         return d && d >= monthStart && d <= monthEnd
       })
 
       const { rdItems, fdItems, pensItems } = buildDetailItems(
         monthPays,
         planMaps,
+        usersMap,
         fdSeenGlobal,
         pensSeenGlobal,
         m,
@@ -467,73 +423,7 @@ export default function MonthlyBusiness() {
       }
     })
 
-    // Term summaries for full year
-    const rdTermMap = {}
-    allRd.forEach((item) => {
-      if (!rdTermMap[item.term]) {
-        rdTermMap[item.term] = { term: item.term, policiesSet: new Set(), business: 0 }
-      }
-      rdTermMap[item.term].policiesSet.add(item.planId || item.policyNumber)
-      rdTermMap[item.term].business += item.businessAmount
-    })
-    const rdTermSummary = Object.values(rdTermMap).map((t) => ({
-      term: t.term,
-      policies: t.policiesSet.size,
-      business: t.business,
-    })).sort((a, b) => a.term.localeCompare(b.term))
-
-    const fdTermMap = {}
-    allFd.forEach((item) => {
-      if (!fdTermMap[item.term]) {
-        fdTermMap[item.term] = { term: item.term, policies: 0, business: 0 }
-      }
-      fdTermMap[item.term].policies += 1
-      fdTermMap[item.term].business += item.businessAmount
-    })
-    const fdTermSummary = Object.values(fdTermMap).map((t) => ({
-      term: t.term,
-      policies: t.policies,
-      business: t.business,
-    })).sort((a, b) => a.term.localeCompare(b.term))
-
-    const pensTermMap = {}
-    allPens.forEach((item) => {
-      const prod = 'Pension'
-      if (!pensTermMap[prod]) {
-        pensTermMap[prod] = { product: prod, policies: 0, business: 0 }
-      }
-      pensTermMap[prod].policies += 1
-      pensTermMap[prod].business += item.businessAmount
-    })
-    const pensSummary = Object.values(pensTermMap)
-
-    // Yearly totals
-    const rdPoliciesCount = new Set(allRd.map((i) => i.planId || i.policyNumber)).size
-    const rdBusinessTotal = allRd.reduce((s, i) => s + i.businessAmount, 0)
-    const fdPoliciesCount = allFd.length
-    const fdBusinessTotal = allFd.reduce((s, i) => s + i.businessAmount, 0)
-    const pensPoliciesCount = allPens.length
-    const pensBusinessTotal = allPens.reduce((s, i) => s + i.businessAmount, 0)
-    const totalBusiness = rdBusinessTotal + fdBusinessTotal + pensBusinessTotal
-    const totalPolicies = rdPoliciesCount + fdPoliciesCount + pensPoliciesCount
-
-    const topSummary = {
-      totalBusiness,
-      totalPolicies,
-      rdBusiness: rdBusinessTotal,
-      rdPolicies: rdPoliciesCount,
-      fdBusiness: fdBusinessTotal,
-      fdPolicies: fdPoliciesCount,
-      pensBusiness: pensBusinessTotal,
-      pensPolicies: pensPoliciesCount,
-    }
-
-    const overallSummary = [
-      { type: 'RD', name: 'Recurring Deposit (RD)', policies: rdPoliciesCount, business: rdBusinessTotal },
-      { type: 'FD', name: 'Fixed Deposit (FD)', policies: fdPoliciesCount, business: fdBusinessTotal },
-      { type: 'PENS', name: 'Pension Plan', policies: pensPoliciesCount, business: pensBusinessTotal },
-    ]
-
+    const summaries = summarizeBusinessDetails(allRd, allFd, allPens)
     const allDetailItems = [...allRd, ...allFd, ...allPens]
 
     return {
@@ -541,14 +431,10 @@ export default function MonthlyBusiness() {
       rdDetailItems: allRd,
       fdDetailItems: allFd,
       pensDetailItems: allPens,
-      rdTermSummary,
-      fdTermSummary,
-      pensSummary,
-      overallSummary,
-      topSummary,
+      ...summaries,
       monthBreakdown,
     }
-  }, [reportMode, selectedYear, paymentsCollection.data, planMaps, loading])
+  }, [reportMode, selectedYear, validPayments, planMaps, usersMap, loading])
 
   // Active data source based on mode
   const activeData = reportMode === 'month' ? monthlyData : yearlyData
@@ -845,7 +731,7 @@ export default function MonthlyBusiness() {
               <EmptyState
                 icon={<IReport size={32} className="text-gold-1 mx-auto" />}
                 title={`No business recorded for ${periodLabel}`}
-                message="There were no payments or investments logged in Firestore for this selected period."
+                message="There were no payments or investments recorded for this selected period."
               />
             </div>
           ) : (
