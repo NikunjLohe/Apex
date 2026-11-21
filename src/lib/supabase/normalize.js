@@ -120,6 +120,11 @@ export function normalizePayout(p) {
 
 export function normalizeCommissionLedger(c) {
   if (!c) return null
+  const agentName = c.agent?.name || c.profiles?.name || c.agent_name || null
+  const agentCode = c.agent?.sponsor_code || c.profiles?.sponsor_code || null
+  const originalAgentName = c.original_agent?.name || null
+  const originalSponsorCode = c.original_agent?.sponsor_code || null
+
   return {
     id: c.id,
     agentId: c.agent_id,
@@ -127,6 +132,16 @@ export function normalizeCommissionLedger(c) {
     policyId: c.policy_id,
     paymentId: c.payment_id,
     payoutId: c.payout_id,
+    originalAgentId: c.original_agent_id || c.policies?.agent_id || null,
+    originalRank: c.original_rank ?? null,
+    policyNumber: c.policies?.policy_number || c.policy_number || null,
+    customerName: c.customers?.name || c.customer_name || null,
+    customerAccount: c.customers?.customer_id || c.customer_account || null,
+    agentName,
+    agentCode,
+    originalAgentName,
+    originalSponsorCode,
+    sponsorCode: agentCode || originalSponsorCode || c.sponsor_code || null,
     receivingRank: c.receiving_rank,
     receivingRankCode: c.receiving_rank_code,
     planCode: c.plan_code,

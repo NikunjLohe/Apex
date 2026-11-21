@@ -56,9 +56,9 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen print:block print:min-h-0 print:bg-white">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-navy-4 lg:block">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-navy-4 lg:block print:hidden">
         <Sidebar />
       </aside>
 
@@ -70,7 +70,7 @@ export default function Layout() {
       <div
         onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
         onClick={closeDrawer}
-        className={`fixed inset-0 z-40 bg-navy-1/70 lg:hidden transition-all duration-300 ${
+        className={`fixed inset-0 z-40 bg-navy-1/70 lg:hidden print:hidden transition-all duration-300 ${
           drawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       />
@@ -80,7 +80,7 @@ export default function Layout() {
         Always mounted, controlled via CSS transforms.
       */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 lg:hidden bg-navy-2 shadow-card transition-transform duration-300 transform ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 lg:hidden print:hidden bg-navy-2 shadow-card transition-transform duration-300 transform ${
           drawer ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -116,7 +116,7 @@ export default function Layout() {
           userSelect: 'none',
           WebkitTapHighlightColor: 'transparent',
         }}
-        className={`lg:hidden flex items-center gap-2 shadow-lg transition-all duration-300 ${
+        className={`lg:hidden print:hidden flex items-center gap-2 shadow-lg transition-all duration-300 ${
           drawer ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'
         }`}
         aria-label="Close menu"
@@ -125,11 +125,11 @@ export default function Layout() {
         Close Menu
       </button>
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen flex-1 flex-col print:block print:min-h-0">
         <Topbar title={title} onMenu={() => setDrawer(d => !d)} />
 
         {isViewingAs && (
-          <div className="bg-red-500/10 border-b border-red-500/30 px-4 py-2 flex items-center justify-between shadow-sm backdrop-blur-sm z-30 sticky top-16 lg:top-0">
+          <div className="bg-red-500/10 border-b border-red-500/30 px-4 py-2 flex items-center justify-between shadow-sm backdrop-blur-sm z-30 sticky top-16 lg:top-0 print:hidden">
             <div className="flex items-center gap-2 text-red-500 font-medium text-sm">
               <IAlert size={18} />
               <span>
@@ -145,14 +145,14 @@ export default function Layout() {
           </div>
         )}
 
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 p-4 lg:p-6 print:p-0">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>
         </main>
         
         {/* Premium Fyndevs Footer */}
-        <footer className="border-t border-navy-4 bg-navy-3 py-4 text-xs text-ink-2">
+        <footer className="border-t border-navy-4 bg-navy-3 py-4 text-xs text-ink-2 print:hidden">
           <div className="mx-auto px-4 lg:px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
             <p className="font-medium">
               &copy; 2026{' '}

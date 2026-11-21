@@ -269,7 +269,7 @@ export default function CommissionBill() {
         levels.push({
           rank: r,
           agentId: hist.agentId,
-          agentName: hist.agentName,
+          agentName: hist.agentName || usersMap[hist.agentId]?.name || '—',
           amount: hist.amount || 0,
           percentage: hist.percentage || 0,
           commissionType: hist.commissionType,
@@ -313,6 +313,8 @@ export default function CommissionBill() {
   const companyName = settings?.companyName || 'Apex Multisolutions'
   const headOffice = settings?.headOffice || ''
 
+  const currentAgentRank = Number(agentProfile?.rank || 1)
+  const targetTeamRank = currentAgentRank - 1
   const displayBankName = agentProfile?.bankDetails?.bankName || '—'
   const displayAccountNumber = agentProfile?.bankDetails?.accountNumber
     ? '•••• •••• ' + agentProfile.bankDetails.accountNumber.slice(-4)
@@ -321,29 +323,51 @@ export default function CommissionBill() {
   const displayPanNumber = agentProfile?.panNumber || '—'
   const displayRankName = agentProfile?.rank ? getRank(agentProfile.rank).name : '—'
   const displayRankCode = agentProfile?.rank ? getRank(agentProfile.rank).code : '—'
-  const displaySponsorName = sponsorProfile?.name 
+  const displaySponsorName = sponsorProfile?.name
     ? `${sponsorProfile.name} (${sponsorProfile.sponsorCode || '—'})`
     : '—'
 
+  const cycleLabel = new Date(bill.year, bill.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+  const generatedOnLabel = bill.generatedDate || bill.createdAt ? fmtDate(bill.generatedDate || bill.createdAt) : '—'
+  const paidOnLabel = bill.paidDate ? fmtDate(bill.paidDate) : '—'
+  const isUnapproved = bill.status === 'generated'
+  const approvedByLabel = isUnapproved
+    ? 'Pending Approval'
+    : ((bill.approvedBy && usersMap[bill.approvedBy]?.name) || bill.approvedBy || 'Super Admin')
+  const approvedOnLabel = bill.approvedDate
+    ? fmtDate(bill.approvedDate)
+    : (bill.paidDate ? fmtDate(bill.paidDate) : (isUnapproved ? 'Pending' : '—'))
+
+  const statusTone =
+    bill.status === 'paid'
+      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+      : bill.status === 'approved'
+        ? 'bg-amber-50 text-amber-800 border-amber-300'
+        : 'bg-slate-100 text-slate-700 border-slate-300'
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-20 px-4 sm:px-0">
-      
+    <div className="mx-auto max-w-5xl space-y-6 pb-20 px-4 sm:px-0 print:max-w-none print:space-y-0 print:pb-0 print:px-0">
+
       <style>{`
         @media print {
-          body {
-            background: white !important;
-            color: black !important;
-            font-size: 11px !important;
+          @page {
+            size: A4 portrait;
+            margin: 12mm 14mm;
           }
-          .print\\:hidden { display: none !important; }
-          .print\\:block { display: block !important; }
-          .print\\:shadow-none { box-shadow: none !important; }
-          .print\\:border-none { border: none !important; }
-          .print\\:p-0 { padding: 0 !important; }
-          .print\\:m-0 { margin: 0 !important; }
-          .hierarchy-container { display: block !important; page-break-inside: avoid; }
-          tr { page-break-inside: avoid; }
-          @page { size: A4; margin: 1.5cm; }
+          html, body {
+            background: #ffffff !important;
+            color: #111827 !important;
+            font-size: 10.5px !important;
+            line-height: 1.4 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-avoid-break {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
@@ -351,178 +375,225 @@ export default function CommissionBill() {
         <Link to="/admin/payouts" className="text-gold flex items-center gap-1 text-sm font-semibold hover:underline">
           &larr; Back to Payouts
         </Link>
-        <button onClick={() => window.print()} className="btn-dark px-4 py-2 flex items-center gap-2 text-xs uppercase font-bold">
+        <button onClick={() => window.print()} className="btn-gold px-4 py-2 flex items-center gap-2 text-xs uppercase font-bold">
           <IPrint size={14} /> Print Statement
         </button>
       </div>
 
-      <div className="card p-8 bg-white text-black border border-gray-200 print:shadow-none print:border-none print:m-0 print:p-0">
-        
+      <div className="card p-6 sm:p-8 bg-white text-gray-900 border border-gray-200 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
+
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-gray-200 pb-6 mb-6 gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row print:flex-row justify-between items-start border-b-2 border-slate-800 pb-5 mb-5 print:pb-3 print:mb-4 gap-4 print-avoid-break">
+          <div className="flex items-center gap-3.5">
             <Logo size={46} showText={false} />
             <div>
-              <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Performance Portal</p>
-              {headOffice && <p className="text-xs text-gray-500 mt-1 max-w-xs">{headOffice}</p>}
+              <h1 className="text-2xl print:text-xl font-serif font-black tracking-tight text-slate-900">{companyName}</h1>
+              <p className="text-[10px] text-amber-800 uppercase tracking-[0.16em] font-bold">Apex Multisolutions Performance Portal</p>
+              {headOffice && <p className="text-xs text-slate-500 mt-1 max-w-xs">{headOffice}</p>}
             </div>
           </div>
-          <div className="sm:text-right">
-            <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Payout Statement</h2>
-            <p className="text-xs text-gray-500 mt-1">Payout ID: <span className="font-mono">{bill.id.toUpperCase()}</span></p>
-            <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{new Date(bill.year, bill.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}</span></p>
-            <p className="text-xs text-gray-500 mt-0.5">Generated: {bill.generatedDate || bill.createdAt ? fmtDate(bill.generatedDate || bill.createdAt) : '—'}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Paid: {bill.paidDate ? fmtDate(bill.paidDate) : '—'}</p>
+          <div className="sm:text-right print:text-right shrink-0">
+            <div className="flex sm:justify-end print:justify-end items-center gap-2.5">
+              <h2 className="text-xl print:text-lg font-black text-slate-900 uppercase tracking-[0.14em]">Payout Statement</h2>
+              <span className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${statusTone}`}>
+                {bill.status}
+              </span>
+            </div>
+            <div className="mt-2 space-y-0.5 text-[11px] text-slate-600">
+              <p>Payout ID: <span className="font-mono font-semibold text-slate-800 whitespace-nowrap">{bill.id.toUpperCase()}</span></p>
+              <p>Cycle: <span className="font-semibold text-slate-800">{cycleLabel}</span> &nbsp;|&nbsp; Generated: <span className="font-semibold text-slate-800">{generatedOnLabel}</span></p>
+              <p>Paid Date: <span className="font-semibold text-slate-800">{paidOnLabel}</span></p>
+            </div>
           </div>
         </div>
 
         {/* Agent Details */}
-        <div className="bg-gray-50/50 border border-gray-100 rounded-lg p-6 mb-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1">Agent Profile Snapshot</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-6 text-xs">
-            <div><span className="text-gray-500 block">Agent Name</span><span className="font-bold text-gray-800 text-sm">{agentProfile?.name || bill.agentName || '—'}</span></div>
-            <div><span className="text-gray-500 block">Agent Code</span><span className="font-bold text-gray-800 font-mono">{agentProfile?.sponsorCode || bill.agentCode || '—'}</span></div>
-            <div><span className="text-gray-500 block">Rank</span><span className="font-bold text-gray-800">{displayRankCode} - {displayRankName}</span></div>
-            <div><span className="text-gray-500 block">Sponsor</span><span className="font-bold text-gray-800">{displaySponsorName}</span></div>
-            <div><span className="text-gray-500 block">PAN Number</span><span className="font-bold text-gray-800 font-mono">{displayPanNumber}</span></div>
-            <div><span className="text-gray-500 block">Bank Name</span><span className="font-bold text-gray-800">{displayBankName}</span></div>
-            <div><span className="text-gray-500 block">Account Number</span><span className="font-bold text-gray-800 font-mono">{displayAccountNumber}</span></div>
-            <div><span className="text-gray-500 block">IFSC Code</span><span className="font-bold text-gray-800 font-mono">{displayIfscCode}</span></div>
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-5 print:mb-4 print-avoid-break">
+          <div className="bg-slate-100/80 px-4 py-2 border-b border-slate-200">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">Agent Profile Snapshot</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-y-3 gap-x-5 p-4 print:p-3 bg-white text-xs">
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Agent Name</span><span className="font-bold text-slate-900 text-xs sm:text-sm print:text-xs">{agentProfile?.name || bill.agentName || '—'}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Agent Code</span><span className="font-bold text-slate-900 font-mono">{agentProfile?.sponsorCode || bill.agentCode || '—'}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Rank</span><span className="font-bold text-slate-900">{displayRankCode} - {displayRankName}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Sponsor</span><span className="font-bold text-slate-900">{displaySponsorName}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">PAN Number</span><span className="font-bold text-slate-900 font-mono">{displayPanNumber}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Bank Name</span><span className="font-bold text-slate-900">{displayBankName}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Account Number</span><span className="font-bold text-slate-900 font-mono">{displayAccountNumber}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">IFSC Code</span><span className="font-bold text-slate-900 font-mono">{displayIfscCode}</span></div>
           </div>
         </div>
 
         {/* Agent Summary Dashboard */}
-        <div className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Business Summary (Aggregated Source of Truth)</h3>
+        <div className="mb-5 print:mb-4 border border-slate-200 rounded-lg overflow-hidden print-avoid-break">
+          <div className="bg-slate-100/80 px-4 py-2 border-b border-slate-200">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">Business Summary (Aggregated Source of Truth)</h3>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-gray-100 bg-white">
-            <div className="p-4 text-center">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Lifetime Business</span>
-              <span className="text-sm font-extrabold text-gray-800">{formatINR(agentStats.lifetimeBusiness)}</span>
+          <div className="grid grid-cols-2 sm:grid-cols-5 print:grid-cols-5 divide-x divide-y sm:divide-y-0 print:divide-y-0 divide-slate-200 bg-white">
+            <div className="px-2.5 py-3 print:py-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Lifetime Business</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums whitespace-nowrap">{formatINR(agentStats.lifetimeBusiness)}</span>
             </div>
-            <div className="p-4 text-center">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Current Month Business</span>
-              <span className="text-sm font-extrabold text-blue-700">{formatINR(agentStats.currentMonthBusiness)}</span>
+            <div className="px-2.5 py-3 print:py-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Current Month Business</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-blue-800 tabular-nums whitespace-nowrap">{formatINR(agentStats.currentMonthBusiness)}</span>
             </div>
-            <div className="p-4 text-center">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Total Policies</span>
-              <span className="text-sm font-extrabold text-gray-800">{agentStats.policyCount}</span>
+            <div className="px-2.5 py-3 print:py-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Total Policies</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums">{agentStats.policyCount}</span>
             </div>
-            <div className="p-4 text-center">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Total Customers</span>
-              <span className="text-sm font-extrabold text-gray-800">{agentStats.customerCount}</span>
+            <div className="px-2.5 py-3 print:py-2.5 text-center">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Total Customers</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums">{agentStats.customerCount}</span>
             </div>
-            <div className="p-4 text-center bg-gray-50">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Lifetime Commission Earned</span>
-              <span className="text-sm font-black text-green-700">{formatINR(agentStats.commissionEarned)}</span>
+            <div className="px-2.5 py-3 print:py-2.5 text-center bg-emerald-50/50 col-span-2 sm:col-span-1 print:col-span-1">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Lifetime Commission Earned</span>
+              <span className="text-sm print:text-[13px] font-black text-emerald-800 tabular-nums whitespace-nowrap">{formatINR(agentStats.commissionEarned)}</span>
             </div>
           </div>
         </div>
 
         {/* Visual payment flow */}
-        <div className="mb-8">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Payment Calculation Flow</h3>
-          <div className="grid grid-cols-1 md:grid-cols-7 items-center gap-2">
-            <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-center shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-blue-600 block">Gross Commission</span>
-              <span className="text-sm font-extrabold text-blue-900 block mt-1">{formatINR(getPayoutGross(bill))}</span>
+        <div className="mb-6 print:mb-4 print-avoid-break">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">Payment Calculation Flow</h3>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] print:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch gap-2 print:gap-1.5">
+            <div className="bg-blue-50/70 border border-blue-200 px-3 py-2.5 rounded-lg text-center flex flex-col justify-center">
+              <span className="text-[10px] uppercase font-bold text-blue-700 block">Gross Commission</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-blue-950 block mt-1 tabular-nums whitespace-nowrap">{formatINR(getPayoutGross(bill))}</span>
             </div>
-            <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
-            <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
-            <div className="bg-red-50 border border-red-100 p-3 rounded-lg text-center shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-red-600 block">TDS (5%)</span>
-              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(getPayoutTds(bill))}</span>
+            <div className="hidden md:flex print:flex items-center justify-center text-slate-400 font-bold text-base px-0.5">&rarr;</div>
+            <div className="flex md:hidden print:hidden items-center justify-center text-slate-400 font-bold text-sm">&darr;</div>
+            <div className="bg-rose-50/70 border border-rose-200 px-3 py-2.5 rounded-lg text-center flex flex-col justify-center">
+              <span className="text-[10px] uppercase font-bold text-rose-700 block">TDS (5%)</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-rose-950 block mt-1 tabular-nums whitespace-nowrap">&minus;{formatINR(getPayoutTds(bill))}</span>
             </div>
-            <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
-            <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
-            <div className="bg-red-50 border border-red-100 p-3 rounded-lg text-center shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-red-600 block">Admin Charges (5%)</span>
-              <span className="text-sm font-extrabold text-red-900 block mt-1">-{formatINR(getPayoutAdminCharge(bill))}</span>
+            <div className="hidden md:flex print:flex items-center justify-center text-slate-400 font-bold text-base px-0.5">&rarr;</div>
+            <div className="flex md:hidden print:hidden items-center justify-center text-slate-400 font-bold text-sm">&darr;</div>
+            <div className="bg-rose-50/70 border border-rose-200 px-3 py-2.5 rounded-lg text-center flex flex-col justify-center">
+              <span className="text-[10px] uppercase font-bold text-rose-700 block">Admin Charges (5%)</span>
+              <span className="text-sm print:text-[13px] font-extrabold text-rose-950 block mt-1 tabular-nums whitespace-nowrap">&minus;{formatINR(getPayoutAdminCharge(bill))}</span>
             </div>
-            <div className="text-center text-gray-400 font-bold text-lg hidden md:block">➔</div>
-            <div className="text-center text-gray-400 font-bold text-lg block md:hidden">▼</div>
-            <div className="bg-green-50 border border-green-200 p-3 rounded-lg text-center shadow-sm ring-2 ring-green-500/20">
-              <span className="text-[10px] uppercase font-bold text-green-600 block">Net Payable</span>
-              <span className="text-base font-black text-green-900 block mt-1">{formatINR(getPayoutNet(bill))}</span>
+            <div className="hidden md:flex print:flex items-center justify-center text-slate-400 font-bold text-base px-0.5">&rarr;</div>
+            <div className="flex md:hidden print:hidden items-center justify-center text-slate-400 font-bold text-sm">&darr;</div>
+            <div className="bg-emerald-50 border-2 border-emerald-400 px-3 py-2.5 rounded-lg text-center flex flex-col justify-center">
+              <span className="text-[10px] uppercase font-bold text-emerald-700 block">Net Payable</span>
+              <span className="text-base print:text-sm font-black text-emerald-950 block mt-1 tabular-nums whitespace-nowrap">{formatINR(getPayoutNet(bill))}</span>
             </div>
           </div>
         </div>
 
         {/* Commission Breakdown Table */}
-        <div className="mb-10">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Commission Ledger Breakdown</h3>
-          <div className="overflow-x-auto">
+        <div className="mb-6 print:mb-4">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">Commission Ledger Breakdown</h3>
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-gray-100 border-b-2 border-gray-200 text-gray-600">
-                  <th className="py-2 px-3 font-semibold">Policy No.</th>
-                  <th className="py-2 px-3 font-semibold">Customer</th>
-                  <th className="py-2 px-3 font-semibold">Selling Agent</th>
-                  <th className="py-2 px-3 font-semibold text-center">Comm %</th>
-                  <th className="py-2 px-3 font-semibold text-right">Commission</th>
-                  <th className="py-2 px-3 font-semibold text-center">Type</th>
-                  <th className="py-2 px-3 font-semibold text-center print:hidden">Hierarchy & Allocation</th>
+                <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
+                  <th className="py-2.5 px-3 font-semibold">Policy No.</th>
+                  <th className="py-2.5 px-3 font-semibold">Customer</th>
+                  <th className="py-2.5 px-3 font-semibold">Selling Agent</th>
+                  <th className="py-2.5 px-3 font-semibold text-center">Comm %</th>
+                  <th className="py-2.5 px-3 font-semibold text-right">Commission</th>
+                  <th className="py-2.5 px-3 font-semibold text-center">Type</th>
+                  <th className="py-2.5 px-3 font-semibold text-center print:hidden">Hierarchy &amp; Allocation</th>
                 </tr>
               </thead>
               <tbody>
                 {commissions.length === 0 ? (
-                  <tr><td colSpan={7} className="py-4 text-center text-gray-400 italic">No commission entries found in ledger for this cycle.</td></tr>
+                  <tr><td colSpan={7} className="py-4 text-center text-slate-400 italic">No commission entries found in ledger for this cycle.</td></tr>
                 ) : commissions.map((c, idx) => {
-                  const hasHierarchyExpanded = expandedPolicies.has(c.policyNumber)
-                  const levels = getHierarchyForPolicy(c.policyNumber, c.originalAgentId)
+                  const policyKey = c.policyNumber || c.policyId
+                  const hasHierarchyExpanded = expandedPolicies.has(policyKey)
+                  const levels = getHierarchyForPolicy(policyKey, c.originalAgentId)
+                  const sellingAgentName = c.originalAgentId
+                    ? (usersMap[c.originalAgentId]?.name || c.originalAgentName || c.agentName || '—')
+                    : (c.agentName || '—')
+                  const sellingAgentCode = c.originalAgentId
+                    ? (usersMap[c.originalAgentId]?.sponsorCode || c.originalSponsorCode || c.sponsorCode || '—')
+                    : (c.agentCode || c.sponsorCode || '—')
+
                   return (
                     <React.Fragment key={(c.id || idx)}>
-                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="py-3 px-3 font-mono font-bold text-gray-700">{c.policyNumber}</td>
-                        <td className="py-3 px-3 font-medium">{c.customerName}</td>
-                        <td className="py-3 px-3">
-                          <span className="block font-medium">{c.originalAgentId ? (usersMap[c.originalAgentId]?.name || '—') : c.agentName}</span>
-                          <span className="text-[10px] text-gray-400 font-mono block mt-0.5">{c.sponsorCode || '—'}</span>
+                      <tr className="border-b border-slate-100 hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">{c.policyNumber || '—'}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="block font-semibold text-slate-900">{c.customerName || '—'}</span>
+                          {c.customerAccount && <span className="text-[10px] text-slate-500 font-mono block">{c.customerAccount}</span>}
                         </td>
-                        <td className="py-3 px-3 text-center font-mono">{Number(c.percentage || 0).toFixed(2)}%</td>
-                        <td className="py-3 px-3 text-right font-bold text-gray-800">{formatINR(c.amount)}</td>
-                        <td className="py-3 px-3 text-center uppercase">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                        <td className="py-2.5 px-3">
+                          <span className="block font-medium text-slate-900">{sellingAgentName}</span>
+                          <span className="text-[10px] text-slate-500 font-mono block">{sellingAgentCode}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums whitespace-nowrap">{Number(c.percentage || 0).toFixed(2)}%</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-900 tabular-nums whitespace-nowrap">{formatINR(c.amount)}</td>
+                        <td className="py-2.5 px-3 text-center uppercase whitespace-nowrap">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                             {c.commissionType === 'Direct' || c.commissionType === 'direct' || c.commissionType === 'direct_own' || (!c.commissionType && !c.compression) ? 'Direct' : 'Upline Commission'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-center print:hidden flex items-center justify-center gap-2">
-                          <button type="button" onClick={() => toggleExpandPolicy(c.policyNumber)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
-                            {hasHierarchyExpanded ? '▼ Hide Hierarchy' : '▶ View Hierarchy'}
-                          </button>
-                          <span className="text-gray-300">|</span>
-                          <button type="button" onClick={() => setAllocationPolicy(c)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
-                            View Allocation
-                          </button>
+                        <td className="py-2.5 px-3 text-center print:hidden">
+                          <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+                            <button type="button" onClick={() => toggleExpandPolicy(policyKey)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
+                              {hasHierarchyExpanded ? '▼ Hide Hierarchy' : '▶ View Hierarchy'}
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button type="button" onClick={() => setAllocationPolicy(c)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
+                              View Allocation
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                      <tr className={`bg-gray-50/30 ${hasHierarchyExpanded ? '' : 'hidden print:table-row'}`}>
-                        <td colSpan={7} className="p-0 border-b border-gray-100">
-                          <div className="px-6 pb-4 pt-2">
-                            <div className="text-[10px] font-bold text-gray-500 uppercase mb-2">Genealogy Sponsor Path & Differential Split</div>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-3 text-[10px]">
-                              <span className="font-bold text-gray-600">Customer:</span><span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium">{c.customerName || '—'}</span>
-                              <span className="text-gray-400 font-bold">➔</span>
-                              <span className="font-bold text-gray-600">Policy:</span><span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-mono font-bold">{c.policyNumber || '—'}</span>
-                              <span className="text-gray-400 font-bold">➔</span>
-                              <span className="font-bold text-gray-600">Product:</span><span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium uppercase">{c.planCode || c.planType || '—'}</span>
+                      <tr className={`bg-slate-50/50 ${hasHierarchyExpanded ? '' : 'hidden print:table-row'}`}>
+                        <td colSpan={7} className="p-0 border-b border-slate-200">
+                          <div className="px-4 py-3 print:px-3 print:py-2.5 print-avoid-break">
+                            <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Genealogy Sponsor Path &amp; Differential Split</div>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2.5 text-[10px]">
+                              <span className="font-bold text-slate-600">Customer:</span>
+                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium">{c.customerName || '—'}</span>
+                              <span className="text-slate-400 font-bold">&rarr;</span>
+                              <span className="font-bold text-slate-600">Policy:</span>
+                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-mono font-bold">{c.policyNumber || '—'}</span>
+                              <span className="text-slate-400 font-bold">&rarr;</span>
+                              <span className="font-bold text-slate-600">Product:</span>
+                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium uppercase">{c.planCode || c.planType || '—'}</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-1.5">
                               {levels.map((lvl) => {
                                 const rInfo = getRank(lvl.rank)
                                 return (
-                                  <div key={lvl.rank} className={`flex items-center justify-between p-2 rounded border text-[10px] ${lvl.isReceiver ? 'bg-gold-50 border-gold-300 font-bold ring-1 ring-gold-400/20 shadow-sm' : lvl.isOccupied ? 'bg-white border-gray-200 text-gray-800' : 'bg-gray-50/50 border-gray-100 text-gray-300 italic'}`}>
+                                  <div
+                                    key={lvl.rank}
+                                    className={`flex items-center justify-between px-2 py-1.5 print:py-1 rounded border text-[10px] print:text-[9px] ${
+                                      lvl.isReceiver
+                                        ? 'bg-amber-50 border-amber-400 font-bold'
+                                        : lvl.isOccupied
+                                          ? 'bg-white border-slate-200 text-slate-800'
+                                          : 'bg-slate-50 border-slate-200/70 text-slate-400'
+                                    }`}
+                                  >
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${lvl.isReceiver ? 'bg-gold-600 text-white' : lvl.isOccupied ? 'bg-navy-100 text-navy-800' : 'bg-gray-200 text-gray-400'}`}>R{lvl.rank}</span>
-                                      <span className="truncate max-w-[80px] font-medium" title={rInfo.name}>{rInfo.code}</span>
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase shrink-0 ${
+                                          lvl.isReceiver
+                                            ? 'bg-amber-600 text-white'
+                                            : lvl.isOccupied
+                                              ? 'bg-slate-800 text-white'
+                                              : 'bg-slate-200 text-slate-500'
+                                        }`}
+                                      >
+                                        R{lvl.rank}
+                                      </span>
+                                      <span className="truncate font-semibold" title={rInfo.name}>{rInfo.code}</span>
                                     </div>
                                     <div className="truncate text-right pl-2 min-w-0 flex-1">
                                       {lvl.isOccupied ? (
                                         <div className="truncate">
-                                          <span className={lvl.isReceiver ? 'text-gold-900 font-black' : 'text-gray-900'}>{lvl.agentName}</span>
-                                          {lvl.amount > 0 && <span className="text-[9px] text-green-600 font-bold block mt-0.5">+{formatINR(lvl.amount)} ({Number(lvl.percentage || 0).toFixed(2)}%)</span>}
+                                          <span className={lvl.isReceiver ? 'text-amber-950 font-black' : 'text-slate-900 font-medium'}>{lvl.agentName}</span>
+                                          {lvl.amount > 0 && (
+                                            <span className="text-[9px] text-emerald-700 font-bold block leading-tight tabular-nums">
+                                              +{formatINR(lvl.amount)} ({Number(lvl.percentage || 0).toFixed(2)}%)
+                                            </span>
+                                          )}
                                         </div>
                                       ) : <span>—</span>}
                                     </div>
@@ -541,85 +612,83 @@ export default function CommissionBill() {
           </div>
         </div>
 
-        {/* Next Rank Team Summary Section */}
-        <div className="mb-8">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-200 pb-1">
-            Next Rank Team Summary (Rank {Number(agentProfile?.rank || 1) - 1})
-          </h3>
-          {Number(agentProfile?.rank || 1) === 1 ? (
-            <div className="p-4 bg-gray-50 text-center text-xs text-gray-500 italic border border-gray-100 rounded-lg">
-              No lower-rank team exists for this agent.
-            </div>
-          ) : nextRankLoading ? (
-            <div className="p-4 bg-gray-50 text-center text-xs text-gray-500 border border-gray-100 rounded-lg">
-              Aggregating team performance...
-            </div>
-          ) : nextRankTeam.length === 0 ? (
-            <div className="p-4 bg-gray-50 text-center text-xs text-gray-500 italic border border-gray-100 rounded-lg">
-              No Rank {Number(agentProfile?.rank || 1) - 1} agents found in the downline.
-            </div>
-          ) : (
-            <div className="overflow-x-auto border border-gray-200 rounded-lg">
-              <table className="w-full text-left text-xs border-collapse bg-white">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-600 border-b border-gray-200">
-                    <th className="py-2.5 px-3 font-semibold">Agent Code</th>
-                    <th className="py-2.5 px-3 font-semibold">Agent Name</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Rank</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Lifetime Business</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Current Month Business</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Active Policies</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Active Customers</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Lifetime Comm. Earned</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nextRankTeam.map((m, idx) => (
-                    <tr key={m.id || idx} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                      <td className="py-2.5 px-3 font-mono text-gray-600">{m.sponsorCode || '—'}</td>
-                      <td className="py-2.5 px-3 font-bold text-gray-800">{m.name}</td>
-                      <td className="py-2.5 px-3 text-center"><span className="px-1.5 py-0.5 rounded bg-gray-100 font-bold text-gray-700">R{m.rank}</span></td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-gray-700">{formatINR(m.totalBV)}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-blue-700">{formatINR(m.monthlyBV)}</td>
-                      <td className="py-2.5 px-3 text-center font-mono">{m.policyCount}</td>
-                      <td className="py-2.5 px-3 text-center font-mono">{m.customerCount}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-green-700">{formatINR(m.totalCommission)}</td>
-                      <td className="py-2.5 px-3 text-center uppercase text-[9px] font-bold">
-                        <span className={`px-1.5 py-0.5 rounded ${m.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{m.status}</span>
-                      </td>
+        {/* Next Rank Team Summary Section (only applicable for Rank 2+) */}
+        {currentAgentRank > 1 && (
+          <div className="mb-6 print:mb-4 print-avoid-break">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5 border-b border-slate-200 pb-1">
+              Next Rank Team Summary (Rank {targetTeamRank} &mdash; {getRank(targetTeamRank).code})
+            </h3>
+            {nextRankLoading ? (
+              <div className="p-4 bg-slate-50 text-center text-xs text-slate-500 border border-slate-200 rounded-lg">
+                Aggregating team performance...
+              </div>
+            ) : nextRankTeam.length === 0 ? (
+              <div className="p-3 bg-slate-50 text-center text-xs text-slate-500 italic border border-slate-200 rounded-lg">
+                No Rank {targetTeamRank} ({getRank(targetTeamRank).code}) agents found in the downline.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-left text-xs border-collapse bg-white">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <th className="py-2 px-3 font-semibold">Agent Code</th>
+                      <th className="py-2 px-3 font-semibold">Agent Name</th>
+                      <th className="py-2 px-3 font-semibold text-center">Rank</th>
+                      <th className="py-2 px-3 font-semibold text-right">Lifetime Business</th>
+                      <th className="py-2 px-3 font-semibold text-right">Current Month Business</th>
+                      <th className="py-2 px-3 font-semibold text-center">Active Policies</th>
+                      <th className="py-2 px-3 font-semibold text-center">Active Customers</th>
+                      <th className="py-2 px-3 font-semibold text-right">Lifetime Comm. Earned</th>
+                      <th className="py-2 px-3 font-semibold text-center">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-50 border-t-2 border-gray-200 text-gray-800 font-bold">
-                    <td colSpan={3} className="py-3 px-3 text-right uppercase tracking-wider text-[10px]">Team Total</td>
-                    <td className="py-3 px-3 text-right">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalBV, 0))}</td>
-                    <td className="py-3 px-3 text-right text-blue-800">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.monthlyBV, 0))}</td>
-                    <td className="py-3 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.policyCount, 0)}</td>
-                    <td className="py-3 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.customerCount, 0)}</td>
-                    <td className="py-3 px-3 text-right text-green-800">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalCommission, 0))}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody>
+                    {nextRankTeam.map((m, idx) => (
+                      <tr key={m.id || idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                        <td className="py-2 px-3 font-mono text-slate-600">{m.sponsorCode || '—'}</td>
+                        <td className="py-2 px-3 font-bold text-slate-800">{m.name}</td>
+                        <td className="py-2 px-3 text-center"><span className="px-1.5 py-0.5 rounded bg-slate-100 font-bold text-slate-700">R{m.rank}</span></td>
+                        <td className="py-2 px-3 text-right font-semibold text-slate-700 tabular-nums">{formatINR(m.totalBV)}</td>
+                        <td className="py-2 px-3 text-right font-bold text-blue-700 tabular-nums">{formatINR(m.monthlyBV)}</td>
+                        <td className="py-2 px-3 text-center font-mono">{m.policyCount}</td>
+                        <td className="py-2 px-3 text-center font-mono">{m.customerCount}</td>
+                        <td className="py-2 px-3 text-right font-bold text-emerald-700 tabular-nums">{formatINR(m.totalCommission)}</td>
+                        <td className="py-2 px-3 text-center uppercase text-[9px] font-bold">
+                          <span className={`px-1.5 py-0.5 rounded ${m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{m.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 text-slate-800 font-bold">
+                      <td colSpan={3} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px]">Team Total</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalBV, 0))}</td>
+                      <td className="py-2.5 px-3 text-right text-blue-800 tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.monthlyBV, 0))}</td>
+                      <td className="py-2.5 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.policyCount, 0)}</td>
+                      <td className="py-2.5 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.customerCount, 0)}</td>
+                      <td className="py-2.5 px-3 text-right text-emerald-800 tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalCommission, 0))}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Audit footer panel */}
-        <div className="text-xs text-gray-400 mt-12 pt-6 border-t border-gray-200">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6">
-            <div><span className="text-gray-500 block">Generated By:</span><span className="font-semibold text-gray-700">{bill.generatedBy || 'Super Admin'}</span></div>
-            <div><span className="text-gray-500 block">Generated On:</span><span className="font-semibold text-gray-700 font-mono">{bill.createdAt ? fmtDate(bill.createdAt) : '—'}</span></div>
-            <div><span className="text-gray-500 block">Approved By:</span><span className="font-semibold text-gray-700">{bill.approvedBy || 'Super Admin'}</span></div>
-            <div><span className="text-gray-500 block">Approved On:</span><span className="font-semibold text-gray-700 font-mono">{bill.paidDate ? fmtDate(bill.paidDate) : '—'}</span></div>
-            <div><span className="text-gray-500 block">Payout Status:</span><span className="font-bold text-gold uppercase">{bill.status}</span></div>
-            <div><span className="text-gray-500 block">System Generated ID:</span><span className="font-mono text-[10px] text-gray-600">{bill.id}</span></div>
+        <div className="text-xs text-slate-500 mt-6 pt-4 border-t-2 border-slate-200 print:mt-4 print:pt-3 print-avoid-break">
+          <div className="grid grid-cols-2 sm:grid-cols-3 print:grid-cols-3 gap-y-2.5 gap-x-6">
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Generated By:</span><span className="font-semibold text-slate-800">{bill.generatedBy || 'Super Admin'}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Generated On:</span><span className="font-semibold text-slate-800 font-mono">{generatedOnLabel}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Payout Status:</span><span className="font-bold text-amber-800 uppercase">{bill.status}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Approved By:</span><span className="font-semibold text-slate-800">{approvedByLabel}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Approved On:</span><span className="font-semibold text-slate-800 font-mono">{approvedOnLabel}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">System Generated ID:</span><span className="font-mono text-[10px] text-slate-700 break-all">{bill.id}</span></div>
           </div>
-          <div className="mt-8 pt-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
-            <p className="text-[10px]">This is an official computer-generated statement and does not require physical signature under auditing rules.</p>
-            <div className="w-40 border-t border-gray-300 mt-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest pt-1">
+          <div className="mt-6 pt-3 border-t border-slate-100 flex flex-col sm:flex-row print:flex-row justify-between items-center gap-4 text-center sm:text-left print:text-left print:mt-4">
+            <p className="text-[10px] text-slate-500">This is an official computer-generated statement and does not require physical signature under auditing rules.</p>
+            <div className="w-44 border-t border-slate-400 mt-4 sm:mt-2 text-center text-[10px] font-bold text-slate-600 uppercase tracking-widest pt-1 shrink-0">
               Authorised Signature
             </div>
           </div>
@@ -627,72 +696,77 @@ export default function CommissionBill() {
 
       </div>
 
-      {allocationPolicy && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-sm p-4 print:hidden">
-          <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[85vh] flex flex-col">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="text-lg font-serif font-black text-gray-900">Commission Allocation Audit</h3>
-                <p className="text-xs text-gray-500">Policy No: <span className="font-mono font-bold text-gray-700">{allocationPolicy.policyNumber}</span></p>
+      {allocationPolicy && (() => {
+        const modalPolicyKey = allocationPolicy.policyNumber || allocationPolicy.policyId
+        const modalComms = policyCommissionsMap[modalPolicyKey] || []
+        const totalModalComm = modalComms.reduce((sum, x) => sum + (x.amount || 0), 0)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
+            <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-lg font-serif font-black text-gray-900">Commission Allocation Audit</h3>
+                  <p className="text-xs text-gray-500">Policy No: <span className="font-mono font-bold text-gray-700">{allocationPolicy.policyNumber || '—'}</span></p>
+                </div>
+                <button aria-label="Close Modal" onClick={() => setAllocationPolicy(null)} className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1">✕</button>
               </div>
-              <button onClick={() => setAllocationPolicy(null)} className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1">✕</button>
-            </div>
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                <div><span className="text-gray-500 block">Policy Number</span><span className="font-bold text-gray-800 text-sm font-mono">{allocationPolicy.policyNumber}</span></div>
-                <div><span className="text-gray-500 block">Customer</span><span className="font-bold text-gray-800 text-sm">{allocationPolicy.customerName}</span></div>
-                <div><span className="text-gray-500 block">Business Volume</span><span className="font-bold text-gray-800 text-sm">{formatINR(allocationPolicy.businessAmount || 0)}</span></div>
-                <div><span className="text-gray-500 block">Plan Code</span><span className="font-bold text-gray-800 uppercase text-sm font-mono">{allocationPolicy.planCode || allocationPolicy.planType || '—'}</span></div>
-                <div><span className="text-gray-500 block">Total Commission</span><span className="font-bold text-gold text-sm">{formatINR((policyCommissionsMap[allocationPolicy.policyNumber] || []).reduce((sum, x) => sum + (x.amount || 0), 0))}</span></div>
-              </div>
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">All Commission Recipients</h4>
-                <div className="overflow-x-auto border border-gray-100 rounded-lg">
-                  <table className="w-full text-left border-collapse text-[11px]">
-                    <thead>
-                      <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold">
-                        <th className="py-2.5 px-3">Rank</th>
-                        <th className="py-2.5 px-3">Rank Name</th>
-                        <th className="py-2.5 px-3">Agent Name</th>
-                        <th className="py-2.5 px-3">Agent Code</th>
-                        <th className="py-2.5 px-3 text-center">Comm %</th>
-                        <th className="py-2.5 px-3 text-right">Commission</th>
-                        <th className="py-2.5 px-3 text-center">Commission Type</th>
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(policyCommissionsMap[allocationPolicy.policyNumber] || [])
-                        .slice()
-                        .sort((a, b) => Number(a.receivingRank || 1) - Number(b.receivingRank || 1))
-                        .map((lvl, idx) => {
-                          const rInfo = getRank(lvl.receivingRank || 1)
-                          const isReceiver = lvl.agentId === bill.agentId
-                          return (
-                            <tr key={lvl.id || idx} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 ${isReceiver ? 'bg-gold-50 font-bold' : ''}`}>
-                              <td className="py-2.5 px-3 font-mono">R{lvl.receivingRank || 1}</td>
-                              <td className="py-2.5 px-3 font-medium">{rInfo.code} - {rInfo.name}</td>
-                              <td className="py-2.5 px-3">{lvl.agentName}</td>
-                              <td className="py-2.5 px-3 font-mono">{lvl.sponsorCode || lvl.agentCode || '—'}</td>
-                              <td className="py-2.5 px-3 text-center font-mono">{Number(lvl.percentage || 0).toFixed(2)}%</td>
-                              <td className="py-2.5 px-3 text-right font-bold text-gray-800">{formatINR(lvl.amount)}</td>
-                              <td className="py-2.5 px-3 text-center uppercase"><span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{lvl.commissionType === 'Direct' || lvl.commissionType === 'direct' || lvl.commissionType === 'direct_own' ? 'Direct' : 'Upline Commission'}</span></td>
-                              <td className="py-2.5 px-3 text-center uppercase"><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${lvl.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{lvl.status}</span></td>
-                            </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <div><span className="text-gray-500 block">Policy Number</span><span className="font-bold text-gray-800 text-sm font-mono">{allocationPolicy.policyNumber || '—'}</span></div>
+                  <div><span className="text-gray-500 block">Customer</span><span className="font-bold text-gray-800 text-sm">{allocationPolicy.customerName || '—'}</span></div>
+                  <div><span className="text-gray-500 block">Business Volume</span><span className="font-bold text-gray-800 text-sm">{formatINR(allocationPolicy.businessAmount || 0)}</span></div>
+                  <div><span className="text-gray-500 block">Plan Code</span><span className="font-bold text-gray-800 uppercase text-sm font-mono">{allocationPolicy.planCode || allocationPolicy.planType || '—'}</span></div>
+                  <div><span className="text-gray-500 block">Total Commission</span><span className="font-bold text-gold text-sm">{formatINR(totalModalComm)}</span></div>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">All Commission Recipients</h4>
+                  <div className="overflow-x-auto border border-gray-100 rounded-lg">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold">
+                          <th className="py-2.5 px-3">Rank</th>
+                          <th className="py-2.5 px-3">Rank Name</th>
+                          <th className="py-2.5 px-3">Agent Name</th>
+                          <th className="py-2.5 px-3">Agent Code</th>
+                          <th className="py-2.5 px-3 text-center">Comm %</th>
+                          <th className="py-2.5 px-3 text-right">Commission</th>
+                          <th className="py-2.5 px-3 text-center">Commission Type</th>
+                          <th className="py-2.5 px-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {modalComms
+                          .slice()
+                          .sort((a, b) => Number(a.receivingRank || 1) - Number(b.receivingRank || 1))
+                          .map((lvl, idx) => {
+                            const rInfo = getRank(lvl.receivingRank || 1)
+                            const isReceiver = lvl.agentId === bill.agentId
+                            return (
+                              <tr key={lvl.id || idx} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50/50 ${isReceiver ? 'bg-amber-50 font-bold' : ''}`}>
+                                <td className="py-2.5 px-3 font-mono">R{lvl.receivingRank || 1}</td>
+                                <td className="py-2.5 px-3 font-medium">{rInfo.code} - {rInfo.name}</td>
+                                <td className="py-2.5 px-3">{lvl.agentName || usersMap[lvl.agentId]?.name || '—'}</td>
+                                <td className="py-2.5 px-3 font-mono">{lvl.agentCode || lvl.sponsorCode || usersMap[lvl.agentId]?.sponsorCode || '—'}</td>
+                                <td className="py-2.5 px-3 text-center font-mono">{Number(lvl.percentage || 0).toFixed(2)}%</td>
+                                <td className="py-2.5 px-3 text-right font-bold text-gray-800">{formatINR(lvl.amount)}</td>
+                                <td className="py-2.5 px-3 text-center uppercase"><span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{lvl.commissionType === 'Direct' || lvl.commissionType === 'direct' || lvl.commissionType === 'direct_own' ? 'Direct' : 'Upline Commission'}</span></td>
+                                <td className="py-2.5 px-3 text-center uppercase"><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${lvl.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{lvl.status}</span></td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex justify-between items-center px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl text-xs font-bold text-gray-700">
-              <span>Total Commission Distributed:</span>
-              <span className="text-sm font-black text-gold">{formatINR((policyCommissionsMap[allocationPolicy.policyNumber] || []).reduce((sum, x) => sum + (x.amount || 0), 0))}</span>
+              <div className="flex justify-between items-center px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl text-xs font-bold text-gray-700">
+                <span>Total Commission Distributed:</span>
+                <span className="text-sm font-black text-gold">{formatINR(totalModalComm)}</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

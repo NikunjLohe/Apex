@@ -115,7 +115,7 @@ export default function Topbar({ title, onMenu }) {
   }
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-navy-4/50 bg-navy-1/90 px-4 py-3 backdrop-blur-md lg:px-6">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-navy-4/50 bg-navy-1/90 px-4 py-3 backdrop-blur-md lg:px-6 print:hidden">
       <div className="flex items-center gap-3">
         <button type="button" onClick={onMenu} className="rounded-card p-1.5 text-ink-2 hover:text-ink-1 lg:hidden" aria-label="Menu">
           <IMenu size={22} />
