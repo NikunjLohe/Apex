@@ -482,116 +482,206 @@ export default function MonthlyBusiness() {
 
   // Export Excel handler
   const handleExportExcel = () => {
-    if ((activeData?.allDetailItems || []).length === 0) {
+    const activeSummary = activeData?.topSummary
+    const activeDetails = activeData?.allDetailItems || []
+    if (activeDetails.length === 0 || !activeSummary) {
       toast.error(`No business data to export for ${periodLabel}.`)
       return
     }
 
-    const wb = xlsx.utils.book_new()
+    const genDateStr = new Date().toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
 
-    if (reportMode === 'month') {
-      // ── Monthly Export (unchanged) ──
-      const summaryRows = [
-        { Metric: 'Selected Month', Value: selectedMonthLabel },
-        { Metric: 'Total Business', Value: monthlyData.topSummary.totalBusiness },
-        { Metric: 'Total Policies', Value: monthlyData.topSummary.totalPolicies },
-        { Metric: 'RD Business', Value: monthlyData.topSummary.rdBusiness },
-        { Metric: 'RD Policies', Value: monthlyData.topSummary.rdPolicies },
-        { Metric: 'FD Business', Value: monthlyData.topSummary.fdBusiness },
-        { Metric: 'FD Policies', Value: monthlyData.topSummary.fdPolicies },
-        { Metric: 'Pension Business', Value: monthlyData.topSummary.pensBusiness },
-        { Metric: 'Pension Policies', Value: monthlyData.topSummary.pensPolicies },
-      ]
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(summaryRows), 'Monthly Summary')
-
-      const termBreakdownRows = [
-        ...monthlyData.rdTermSummary.map((r) => ({
-          'Business Type': 'RD', Term: r.term, Policies: r.policies, 'Business Amount': r.business,
-        })),
-        ...monthlyData.fdTermSummary.map((f) => ({
-          'Business Type': 'FD', Term: f.term, Policies: f.policies, 'Business Amount': f.business,
-        })),
-        ...monthlyData.pensSummary.map((p) => ({
-          'Business Type': 'Pension', Term: p.product, Policies: p.policies, 'Business Amount': p.business,
-        })),
-      ]
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(termBreakdownRows), 'Term Breakdown')
-
-      const detailRows = monthlyData.allDetailItems.map((item, idx) => ({
-        'Sr. No.': idx + 1,
-        'Policy Number': item.policyNumber,
-        'Customer Name': item.customerName,
-        Plan: item.planCode,
-        Term: item.term,
-        'Selling Agent': item.agentName,
-        'Business Date': fmtDate(item.businessDate),
-        'Business Amount': item.businessAmount,
-        Status: item.status,
-      }))
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(detailRows), 'Policy Details')
-
-      const fileName = `apex-monthly-business-${selectedMonth}.xlsx`
-      xlsx.writeFile(wb, fileName)
-      toast.success(`Exported ${fileName} successfully!`)
-    } else {
-      // ── Yearly Export ──
-      const ts = yearlyData.topSummary
-      const yearlySummaryRows = [
-        { Metric: 'Selected Year', Value: selectedYear },
-        { Metric: 'Total Business', Value: ts.totalBusiness },
-        { Metric: 'Total Policies', Value: ts.totalPolicies },
-        { Metric: 'RD Business', Value: ts.rdBusiness },
-        { Metric: 'RD Policies', Value: ts.rdPolicies },
-        { Metric: 'FD Business', Value: ts.fdBusiness },
-        { Metric: 'FD Policies', Value: ts.fdPolicies },
-        { Metric: 'Pension Business', Value: ts.pensBusiness },
-        { Metric: 'Pension Policies', Value: ts.pensPolicies },
-      ]
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(yearlySummaryRows), 'Yearly Summary')
-
-      const termBreakdownRows = [
-        ...yearlyData.rdTermSummary.map((r) => ({
-          'Business Type': 'RD', Term: r.term, Policies: r.policies, 'Business Amount': r.business,
-        })),
-        ...yearlyData.fdTermSummary.map((f) => ({
-          'Business Type': 'FD', Term: f.term, Policies: f.policies, 'Business Amount': f.business,
-        })),
-        ...(yearlyData.pensSummary || []).map((p) => ({
-          'Business Type': 'Pension', Term: p.product, Policies: p.policies, 'Business Amount': p.business,
-        })),
-      ]
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(termBreakdownRows), 'Term Breakdown')
-
-      const monthBreakdownRows = yearlyData.monthBreakdown.map((row) => ({
-        Month: row.monthLabel,
-        'RD Business': row.rdBusiness,
-        'RD Policies': row.rdPolicies,
-        'FD Business': row.fdBusiness,
-        'FD Policies': row.fdPolicies,
-        'Pension Business': row.pensBusiness,
-        'Pension Policies': row.pensPolicies,
-        'Total Business': row.totalBusiness,
-        'Total Policies': row.totalPolicies,
-      }))
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(monthBreakdownRows), 'Monthly Breakdown')
-
-      const detailRows = yearlyData.allDetailItems.map((item, idx) => ({
-        'Sr. No.': idx + 1,
-        'Policy Number': item.policyNumber,
-        'Customer Name': item.customerName,
-        Plan: item.planCode,
-        Term: item.term,
-        'Selling Agent': item.agentName,
-        'Business Date': fmtDate(item.businessDate),
-        'Business Amount': item.businessAmount,
-        Status: item.status,
-      }))
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(detailRows), 'Policy Details')
-
-      const fileName = `apex-yearly-business-${selectedYear}.xlsx`
-      xlsx.writeFile(wb, fileName)
-      toast.success(`Exported ${fileName} successfully!`)
+    const autoFitSheet = (ws, skipRows = 2, minW = 12, maxW = 42) => {
+      if (!ws['!ref']) return
+      const range = xlsx.utils.decode_range(ws['!ref'])
+      const colWidths = []
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        let maxLen = minW
+        for (let r = range.s.r + skipRows; r <= range.e.r; r++) {
+          const cell = ws[xlsx.utils.encode_cell({ r, c })]
+          if (cell && cell.v !== null && cell.v !== undefined) {
+            const len = String(cell.v).length + (cell.z && cell.z.includes('#') ? 4 : 0)
+            if (len > maxLen) maxLen = len
+          }
+        }
+        colWidths.push({ wch: Math.min(maxLen + 4, maxW) })
+      }
+      ws['!cols'] = colWidths
     }
+
+    const applyCurrencyFormat = (ws, colIndices, startRow, endRow) => {
+      for (let r = startRow; r <= endRow; r++) {
+        colIndices.forEach((c) => {
+          const addr = xlsx.utils.encode_cell({ r, c })
+          const cell = ws[addr]
+          if (cell && typeof cell.v === 'number') {
+            cell.z = '#,##0'
+          }
+        })
+      }
+    }
+
+    const createBannerSheet = (subtitle, colSpan) => {
+      const ws = xlsx.utils.aoa_to_sheet([
+        ['APEX MULTISOLUTIONS'],
+        [subtitle],
+        ['Report Period:', periodLabel, 'Generated On:', genDateStr],
+        [],
+      ])
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: colSpan } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: colSpan } },
+      ]
+      return ws
+    }
+
+    const wb = xlsx.utils.book_new()
+    const isMonth = reportMode === 'month'
+    const periodTitle = isMonth
+      ? `MONTHLY BUSINESS REPORT — ${selectedMonthLabel.toUpperCase()}`
+      : `YEARLY BUSINESS REPORT — ${selectedYear}`
+
+    // ── SHEET 1: Summary ─────────────────────────────────────────────────────
+    const wsSummary = createBannerSheet(periodTitle, 3)
+    const keyMetrics = [
+      { Metric: 'Report Period', Value: isMonth ? selectedMonthLabel : String(selectedYear) },
+      { Metric: 'Total Business (₹)', Value: activeSummary.totalBusiness },
+      { Metric: 'Total Policies', Value: activeSummary.totalPolicies },
+      { Metric: 'RD Business (₹)', Value: activeSummary.rdBusiness },
+      { Metric: 'RD Policies', Value: activeSummary.rdPolicies },
+      { Metric: 'FD Business (₹)', Value: activeSummary.fdBusiness },
+      { Metric: 'FD Policies', Value: activeSummary.fdPolicies },
+      { Metric: 'Pension Business (₹)', Value: activeSummary.pensBusiness },
+      { Metric: 'Pension Policies', Value: activeSummary.pensPolicies },
+    ]
+    xlsx.utils.sheet_add_json(wsSummary, keyMetrics, { origin: 'A5' })
+    applyCurrencyFormat(wsSummary, [1], 5, 13)
+
+    const totalBiz = activeSummary.totalBusiness || 0
+    const categoryRows = [
+      ...(activeData.overallSummary || []).map((row) => ({
+        'Business Type': row.name,
+        Policies: row.policies,
+        'Business Amount (₹)': row.business,
+        'Share (%)': totalBiz > 0 ? Number(((row.business / totalBiz) * 100).toFixed(2)) : 0,
+      })),
+      {
+        'Business Type': 'TOTAL',
+        Policies: activeSummary.totalPolicies,
+        'Business Amount (₹)': activeSummary.totalBusiness,
+        'Share (%)': totalBiz > 0 ? 100 : 0,
+      },
+    ]
+    xlsx.utils.sheet_add_json(wsSummary, categoryRows, { origin: 'A16' })
+    applyCurrencyFormat(wsSummary, [2], 16, 16 + categoryRows.length)
+    autoFitSheet(wsSummary, 2, 16, 42)
+    xlsx.utils.book_append_sheet(wb, wsSummary, isMonth ? 'Monthly Summary' : 'Yearly Summary')
+
+    // ── SHEET 2: Term Breakdown ──────────────────────────────────────────────
+    const termRows = [
+      ...(activeData.rdTermSummary || []).map((r) => ({
+        'Business Type': 'RD',
+        Term: r.term,
+        Policies: r.policies,
+        'Business Amount (₹)': r.business,
+      })),
+      ...(activeData.fdTermSummary || []).map((f) => ({
+        'Business Type': 'FD',
+        Term: f.term,
+        Policies: f.policies,
+        'Business Amount (₹)': f.business,
+      })),
+      ...(activeData.pensSummary || []).map((p) => ({
+        'Business Type': 'Pension',
+        Term: p.product,
+        Policies: p.policies,
+        'Business Amount (₹)': p.business,
+      })),
+      {
+        'Business Type': 'TOTAL',
+        Term: '',
+        Policies: activeSummary.totalPolicies,
+        'Business Amount (₹)': activeSummary.totalBusiness,
+      },
+    ]
+    const wsTerm = createBannerSheet(`${periodTitle} — TERM BREAKDOWN`, 3)
+    xlsx.utils.sheet_add_json(wsTerm, termRows, { origin: 'A5' })
+    applyCurrencyFormat(wsTerm, [3], 5, 5 + termRows.length)
+    autoFitSheet(wsTerm, 2, 14, 36)
+    xlsx.utils.book_append_sheet(wb, wsTerm, 'Term Breakdown')
+
+    // ── SHEET 3 (Year Mode): Monthly Breakdown ───────────────────────────────
+    if (!isMonth && yearlyData?.monthBreakdown) {
+      const monthRows = [
+        ...yearlyData.monthBreakdown.map((row) => ({
+          Month: row.monthLabel,
+          'RD Business (₹)': row.rdBusiness,
+          'RD Policies': row.rdPolicies,
+          'FD Business (₹)': row.fdBusiness,
+          'FD Policies': row.fdPolicies,
+          'Pension Business (₹)': row.pensBusiness,
+          'Pension Policies': row.pensPolicies,
+          'Total Business (₹)': row.totalBusiness,
+          'Total Policies': row.totalPolicies,
+        })),
+        {
+          Month: `TOTAL ${selectedYear}`,
+          'RD Business (₹)': activeSummary.rdBusiness,
+          'RD Policies': activeSummary.rdPolicies,
+          'FD Business (₹)': activeSummary.fdBusiness,
+          'FD Policies': activeSummary.fdPolicies,
+          'Pension Business (₹)': activeSummary.pensBusiness,
+          'Pension Policies': activeSummary.pensPolicies,
+          'Total Business (₹)': activeSummary.totalBusiness,
+          'Total Policies': activeSummary.totalPolicies,
+        },
+      ]
+      const wsMonths = createBannerSheet(`${periodTitle} — MONTHLY BREAKDOWN`, 8)
+      xlsx.utils.sheet_add_json(wsMonths, monthRows, { origin: 'A5' })
+      applyCurrencyFormat(wsMonths, [1, 3, 5, 7], 5, 5 + monthRows.length)
+      autoFitSheet(wsMonths, 2, 14, 28)
+      xlsx.utils.book_append_sheet(wb, wsMonths, 'Monthly Breakdown')
+    }
+
+    // ── SHEET 4: Policy Details ──────────────────────────────────────────────
+    const detailRows = [
+      ...activeDetails.map((item, idx) => ({
+        'Sr. No.': idx + 1,
+        'Policy Number': item.policyNumber,
+        'Customer Name': item.customerName,
+        Plan: item.planCode,
+        Term: item.term,
+        'Selling Agent': item.agentName,
+        'Business Date': fmtDate(item.businessDate),
+        'Business Amount (₹)': item.businessAmount,
+        Status: String(item.status || 'active').toUpperCase(),
+      })),
+      {
+        'Sr. No.': '',
+        'Policy Number': 'TOTAL',
+        'Customer Name': '',
+        Plan: '',
+        Term: '',
+        'Selling Agent': '',
+        'Business Date': `${activeDetails.length} Entries`,
+        'Business Amount (₹)': activeDetails.reduce((s, i) => s + (i.businessAmount || 0), 0),
+        Status: '',
+      },
+    ]
+    const wsDetails = createBannerSheet(`${periodTitle} — POLICY DETAILS`, 8)
+    xlsx.utils.sheet_add_json(wsDetails, detailRows, { origin: 'A5' })
+    applyCurrencyFormat(wsDetails, [7], 5, 5 + detailRows.length)
+    autoFitSheet(wsDetails, 2, 12, 36)
+    xlsx.utils.book_append_sheet(wb, wsDetails, 'Policy Details')
+
+    const fileName = isMonth
+      ? `apex-monthly-business-${selectedMonth}.xlsx`
+      : `apex-yearly-business-${selectedYear}.xlsx`
+    xlsx.writeFile(wb, fileName)
+    toast.success(`Exported ${fileName} successfully!`)
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
