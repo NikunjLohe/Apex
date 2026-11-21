@@ -44,7 +44,14 @@ export async function generateMonthlyPayouts(month, year) {
     throw new Error('READ-ONLY: Payout generation is strictly disabled in View As Agent mode.')
   }
 
-  const { data, error } = await client.rpc('generate_monthly_payouts', {
+  const { data: { session: authSession } } = await supabase.auth.getSession()
+  if (!authSession) {
+    throw new Error('Authentication session not found. Please log out and sign in again.')
+  }
+
+  // Must use `supabase` (not `adminSupabase`) so the signed-in admin's JWT is sent
+  // and `auth.uid()` resolves inside the PostgreSQL RPC.
+  const { data, error } = await supabase.rpc('generate_monthly_payouts', {
     p_month: Number(month),
     p_year: Number(year),
   })
