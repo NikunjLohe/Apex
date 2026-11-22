@@ -128,7 +128,7 @@ export default function CommissionBill() {
     loadData()
   }, [id])
 
-  // Fetch Next Rank Team Aggregates once usersMap and agentProfile are ready
+  // Fetch Downline Team Aggregates (up to 2 ranks below current agent; hidden for Rank 1)
   useEffect(() => {
     if (!agentProfile || !usersMap || !bill) return
     const currentRank = Number(agentProfile.rank || 1)
@@ -137,7 +137,9 @@ export default function CommissionBill() {
       return
     }
 
-    const targetRank = currentRank - 1
+    const allowedRanks = new Set(
+      [currentRank - 1, currentRank - 2].filter(r => r >= 1)
+    )
     const queue = []
     Object.values(usersMap).forEach(u => {
       const spId = u.sponsor_id || u.sponsorId || u.referredBy
@@ -155,7 +157,7 @@ export default function CommissionBill() {
       const child = usersMap[cid]
       if (!child) continue
 
-      if (Number(child.rank) === targetRank) {
+      if (allowedRanks.has(Number(child.rank))) {
         targetAgents.push(child)
       }
 
@@ -214,14 +216,16 @@ export default function CommissionBill() {
           }
         })
 
-        const enriched = targetAgents.map(a => ({
-          ...a,
-          totalBV: planStats[a.id]?.totalBV || 0,
-          monthlyBV: planStats[a.id]?.monthlyBV || 0,
-          policyCount: planStats[a.id]?.policyCount || 0,
-          customerCount: custCounts[a.id] || 0,
-          totalCommission: commStats[a.id] || 0
-        }))
+        const enriched = targetAgents
+          .map(a => ({
+            ...a,
+            totalBV: planStats[a.id]?.totalBV || 0,
+            monthlyBV: planStats[a.id]?.monthlyBV || 0,
+            policyCount: planStats[a.id]?.policyCount || 0,
+            customerCount: custCounts[a.id] || 0,
+            totalCommission: commStats[a.id] || 0
+          }))
+          .sort((a, b) => Number(b.rank) - Number(a.rank) || String(a.name || '').localeCompare(String(b.name || '')))
 
         setNextRankTeam(enriched)
       } catch (err) {
@@ -243,7 +247,10 @@ export default function CommissionBill() {
     })
   }
 
-  const getHierarchyForPolicy = (policyNo, originalAgentId) => {
+  const getHierarchyForPolicy = (policyNo, originalAgentId, billAgentRank = 1) => {
+    const rankNum = Number(billAgentRank || 1)
+    if (rankNum <= 1) return []
+
     const path = []
     let currId = originalAgentId
     const visited = new Set()
@@ -261,9 +268,11 @@ export default function CommissionBill() {
     }
 
     const historicalComms = policyCommissionsMap[policyNo] || []
-    
+    const minRank = Math.max(1, rankNum - 2)
+    const maxRank = rankNum - 1
+
     const levels = []
-    for (let r = 1; r <= 18; r++) {
+    for (let r = minRank; r <= maxRank; r++) {
       const hist = historicalComms.find(x => Number(x.receivingRank) === r)
       if (hist) {
         levels.push({
@@ -314,7 +323,7 @@ export default function CommissionBill() {
   const headOffice = settings?.headOffice || ''
 
   const currentAgentRank = Number(agentProfile?.rank || 1)
-  const targetTeamRank = currentAgentRank - 1
+  const belowRanks = [currentAgentRank - 1, currentAgentRank - 2].filter(r => r >= 1)
   const displayBankName = agentProfile?.bankDetails?.bankName || '—'
   const displayAccountNumber = agentProfile?.bankDetails?.accountNumber
     ? '•••• •••• ' + agentProfile.bankDetails.accountNumber.slice(-4)
@@ -354,13 +363,19 @@ export default function CommissionBill() {
             size: A4 portrait;
             margin: 12mm 14mm;
           }
-          html, body {
+          html, body, #root {
+            height: auto !important;
+            width: 100% !important;
+            overflow: visible !important;
             background: #ffffff !important;
             color: #111827 !important;
             font-size: 10.5px !important;
             line-height: 1.4 !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          aside, header, nav, footer, .print\\:hidden {
+            display: none !important;
           }
           .print-avoid-break {
             break-inside: avoid !important;
@@ -388,7 +403,7 @@ export default function CommissionBill() {
             <Logo size={46} showText={false} />
             <div>
               <h1 className="text-2xl print:text-xl font-serif font-black tracking-tight text-slate-900">{companyName}</h1>
-              <p className="text-[10px] text-amber-800 uppercase tracking-[0.16em] font-bold">Apex Multisolutions Performance Portal</p>
+              <p className="text-[10px] text-amber-800 uppercase tracking-[0.12em] font-bold whitespace-nowrap">Apex Multisolutions Performance Portal</p>
               {headOffice && <p className="text-xs text-slate-500 mt-1 max-w-xs">{headOffice}</p>}
             </div>
           </div>
@@ -430,23 +445,23 @@ export default function CommissionBill() {
             <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">Business Summary (Aggregated Source of Truth)</h3>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 print:grid-cols-5 divide-x divide-y sm:divide-y-0 print:divide-y-0 divide-slate-200 bg-white">
-            <div className="px-2.5 py-3 print:py-2.5 text-center">
+            <div className="px-2.5 py-3 print:py-2.5 text-center flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Lifetime Business</span>
               <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums whitespace-nowrap">{formatINR(agentStats.lifetimeBusiness)}</span>
             </div>
-            <div className="px-2.5 py-3 print:py-2.5 text-center">
+            <div className="px-2.5 py-3 print:py-2.5 text-center flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Current Month Business</span>
               <span className="text-sm print:text-[13px] font-extrabold text-blue-800 tabular-nums whitespace-nowrap">{formatINR(agentStats.currentMonthBusiness)}</span>
             </div>
-            <div className="px-2.5 py-3 print:py-2.5 text-center">
+            <div className="px-2.5 py-3 print:py-2.5 text-center flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Total Policies</span>
               <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums">{agentStats.policyCount}</span>
             </div>
-            <div className="px-2.5 py-3 print:py-2.5 text-center">
+            <div className="px-2.5 py-3 print:py-2.5 text-center flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Total Customers</span>
               <span className="text-sm print:text-[13px] font-extrabold text-slate-900 tabular-nums">{agentStats.customerCount}</span>
             </div>
-            <div className="px-2.5 py-3 print:py-2.5 text-center bg-emerald-50/50 col-span-2 sm:col-span-1 print:col-span-1">
+            <div className="px-2.5 py-3 print:py-2.5 text-center bg-emerald-50/50 col-span-2 sm:col-span-1 print:col-span-1 flex flex-col justify-between">
               <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Lifetime Commission Earned</span>
               <span className="text-sm print:text-[13px] font-black text-emerald-800 tabular-nums whitespace-nowrap">{formatINR(agentStats.commissionEarned)}</span>
             </div>
@@ -504,7 +519,8 @@ export default function CommissionBill() {
                 ) : commissions.map((c, idx) => {
                   const policyKey = c.policyNumber || c.policyId
                   const hasHierarchyExpanded = expandedPolicies.has(policyKey)
-                  const levels = getHierarchyForPolicy(policyKey, c.originalAgentId)
+                  const levels = getHierarchyForPolicy(policyKey, c.originalAgentId, currentAgentRank)
+                  const hasBelowRanks = levels.length > 0
                   const sellingAgentName = c.originalAgentId
                     ? (usersMap[c.originalAgentId]?.name || c.originalAgentName || c.agentName || '—')
                     : (c.agentName || '—')
@@ -533,77 +549,85 @@ export default function CommissionBill() {
                         </td>
                         <td className="py-2.5 px-3 text-center print:hidden">
                           <div className="flex items-center justify-center gap-2 whitespace-nowrap">
-                            <button type="button" onClick={() => toggleExpandPolicy(policyKey)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
-                              {hasHierarchyExpanded ? '▼ Hide Hierarchy' : '▶ View Hierarchy'}
-                            </button>
-                            <span className="text-slate-300">|</span>
+                            {hasBelowRanks && (
+                              <>
+                                <button type="button" onClick={() => toggleExpandPolicy(policyKey)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
+                                  {hasHierarchyExpanded ? '▼ Hide Hierarchy' : '▶ View Hierarchy'}
+                                </button>
+                                <span className="text-slate-300">|</span>
+                              </>
+                            )}
                             <button type="button" onClick={() => setAllocationPolicy(c)} className="text-gold font-semibold hover:underline text-[10px] uppercase tracking-wide">
                               View Allocation
                             </button>
                           </div>
                         </td>
                       </tr>
-                      <tr className={`bg-slate-50/50 ${hasHierarchyExpanded ? '' : 'hidden print:table-row'}`}>
-                        <td colSpan={7} className="p-0 border-b border-slate-200">
-                          <div className="px-4 py-3 print:px-3 print:py-2.5 print-avoid-break">
-                            <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Genealogy Sponsor Path &amp; Differential Split</div>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2.5 text-[10px]">
-                              <span className="font-bold text-slate-600">Customer:</span>
-                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium">{c.customerName || '—'}</span>
-                              <span className="text-slate-400 font-bold">&rarr;</span>
-                              <span className="font-bold text-slate-600">Policy:</span>
-                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-mono font-bold">{c.policyNumber || '—'}</span>
-                              <span className="text-slate-400 font-bold">&rarr;</span>
-                              <span className="font-bold text-slate-600">Product:</span>
-                              <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium uppercase">{c.planCode || c.planType || '—'}</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-1.5">
-                              {levels.map((lvl) => {
-                                const rInfo = getRank(lvl.rank)
-                                return (
-                                  <div
-                                    key={lvl.rank}
-                                    className={`flex items-center justify-between px-2 py-1.5 print:py-1 rounded border text-[10px] print:text-[9px] ${
-                                      lvl.isReceiver
-                                        ? 'bg-amber-50 border-amber-400 font-bold'
-                                        : lvl.isOccupied
-                                          ? 'bg-white border-slate-200 text-slate-800'
-                                          : 'bg-slate-50 border-slate-200/70 text-slate-400'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <span
-                                        className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase shrink-0 ${
-                                          lvl.isReceiver
-                                            ? 'bg-amber-600 text-white'
-                                            : lvl.isOccupied
-                                              ? 'bg-slate-800 text-white'
-                                              : 'bg-slate-200 text-slate-500'
-                                        }`}
-                                      >
-                                        R{lvl.rank}
-                                      </span>
-                                      <span className="truncate font-semibold" title={rInfo.name}>{rInfo.code}</span>
+                      {hasBelowRanks && (
+                        <tr className={`bg-slate-50/50 ${hasHierarchyExpanded ? '' : 'hidden print:table-row'}`}>
+                          <td colSpan={7} className="p-0 border-b border-slate-200">
+                            <div className="px-4 py-3 print:px-3 print:py-2.5 print-avoid-break">
+                              <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                                Downline Sponsor Path (Below {belowRanks.length === 1 ? 'Rank' : `${belowRanks.length} Ranks`})
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2.5 text-[10px]">
+                                <span className="font-bold text-slate-600">Customer:</span>
+                                <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium">{c.customerName || '—'}</span>
+                                <span className="text-slate-400 font-bold">&rarr;</span>
+                                <span className="font-bold text-slate-600">Policy:</span>
+                                <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-mono font-bold">{c.policyNumber || '—'}</span>
+                                <span className="text-slate-400 font-bold">&rarr;</span>
+                                <span className="font-bold text-slate-600">Product:</span>
+                                <span className="bg-white border border-slate-200 text-slate-800 px-2 py-0.5 rounded font-medium uppercase">{c.planCode || c.planType || '—'}</span>
+                              </div>
+                              <div className={`grid grid-cols-1 ${levels.length > 1 ? 'md:grid-cols-2 print:grid-cols-2' : ''} gap-1.5`}>
+                                {levels.map((lvl) => {
+                                  const rInfo = getRank(lvl.rank)
+                                  return (
+                                    <div
+                                      key={lvl.rank}
+                                      className={`flex items-center justify-between px-2.5 py-1.5 print:py-1 rounded border text-[10px] print:text-[9.5px] ${
+                                        lvl.isReceiver
+                                          ? 'bg-amber-50 border-amber-400 font-bold'
+                                          : lvl.isOccupied
+                                            ? 'bg-white border-slate-200 text-slate-800'
+                                            : 'bg-slate-50 border-slate-200/70 text-slate-400'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase shrink-0 ${
+                                            lvl.isReceiver
+                                              ? 'bg-amber-600 text-white'
+                                              : lvl.isOccupied
+                                                ? 'bg-slate-800 text-white'
+                                                : 'bg-slate-200 text-slate-500'
+                                          }`}
+                                        >
+                                          R{lvl.rank}
+                                        </span>
+                                        <span className="truncate font-semibold" title={rInfo.name}>{rInfo.code} &mdash; {rInfo.name}</span>
+                                      </div>
+                                      <div className="truncate text-right pl-2 min-w-0 flex-1">
+                                        {lvl.isOccupied ? (
+                                          <div className="truncate">
+                                            <span className={lvl.isReceiver ? 'text-amber-950 font-black' : 'text-slate-900 font-medium'}>{lvl.agentName}</span>
+                                            {lvl.amount > 0 && (
+                                              <span className="text-[9px] text-emerald-700 font-bold block leading-tight tabular-nums">
+                                                +{formatINR(lvl.amount)} ({Number(lvl.percentage || 0).toFixed(2)}%)
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : <span>—</span>}
+                                      </div>
                                     </div>
-                                    <div className="truncate text-right pl-2 min-w-0 flex-1">
-                                      {lvl.isOccupied ? (
-                                        <div className="truncate">
-                                          <span className={lvl.isReceiver ? 'text-amber-950 font-black' : 'text-slate-900 font-medium'}>{lvl.agentName}</span>
-                                          {lvl.amount > 0 && (
-                                            <span className="text-[9px] text-emerald-700 font-bold block leading-tight tabular-nums">
-                                              +{formatINR(lvl.amount)} ({Number(lvl.percentage || 0).toFixed(2)}%)
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : <span>—</span>}
-                                    </div>
-                                  </div>
-                                )
-                              })}
+                                  )
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   )
                 })}
@@ -612,11 +636,11 @@ export default function CommissionBill() {
           </div>
         </div>
 
-        {/* Next Rank Team Summary Section (only applicable for Rank 2+) */}
+        {/* Downline Team Summary Section (up to 2 ranks below; nothing shown for Rank 1) */}
         {currentAgentRank > 1 && (
           <div className="mb-6 print:mb-4 print-avoid-break">
             <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5 border-b border-slate-200 pb-1">
-              Next Rank Team Summary (Rank {targetTeamRank} &mdash; {getRank(targetTeamRank).code})
+              Downline Team Summary ({belowRanks.length > 1 ? `Ranks ${belowRanks.join(' & ')}` : `Rank ${belowRanks[0]}`} &mdash; {belowRanks.map(r => getRank(r).code).join(', ')})
             </h3>
             {nextRankLoading ? (
               <div className="p-4 bg-slate-50 text-center text-xs text-slate-500 border border-slate-200 rounded-lg">
@@ -624,36 +648,36 @@ export default function CommissionBill() {
               </div>
             ) : nextRankTeam.length === 0 ? (
               <div className="p-3 bg-slate-50 text-center text-xs text-slate-500 italic border border-slate-200 rounded-lg">
-                No Rank {targetTeamRank} ({getRank(targetTeamRank).code}) agents found in the downline.
+                No {belowRanks.map(r => `Rank ${r} (${getRank(r).code})`).join(' or ')} agents found in the downline.
               </div>
             ) : (
               <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                <table className="w-full text-left text-xs border-collapse bg-white">
+                <table className="w-full text-left text-xs print:text-[10px] border-collapse bg-white">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                      <th className="py-2 px-3 font-semibold">Agent Code</th>
-                      <th className="py-2 px-3 font-semibold">Agent Name</th>
-                      <th className="py-2 px-3 font-semibold text-center">Rank</th>
-                      <th className="py-2 px-3 font-semibold text-right">Lifetime Business</th>
-                      <th className="py-2 px-3 font-semibold text-right">Current Month Business</th>
-                      <th className="py-2 px-3 font-semibold text-center">Active Policies</th>
-                      <th className="py-2 px-3 font-semibold text-center">Active Customers</th>
-                      <th className="py-2 px-3 font-semibold text-right">Lifetime Comm. Earned</th>
-                      <th className="py-2 px-3 font-semibold text-center">Status</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold">Agent Code</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold">Agent Name</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-center">Rank</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-right">Lifetime Business</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-right">Current Month Business</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-center">Active Policies</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-center">Active Customers</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-right">Lifetime Comm. Earned</th>
+                      <th className="py-2 px-3 print:px-2 font-semibold text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nextRankTeam.map((m, idx) => (
                       <tr key={m.id || idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                        <td className="py-2 px-3 font-mono text-slate-600">{m.sponsorCode || '—'}</td>
-                        <td className="py-2 px-3 font-bold text-slate-800">{m.name}</td>
-                        <td className="py-2 px-3 text-center"><span className="px-1.5 py-0.5 rounded bg-slate-100 font-bold text-slate-700">R{m.rank}</span></td>
-                        <td className="py-2 px-3 text-right font-semibold text-slate-700 tabular-nums">{formatINR(m.totalBV)}</td>
-                        <td className="py-2 px-3 text-right font-bold text-blue-700 tabular-nums">{formatINR(m.monthlyBV)}</td>
-                        <td className="py-2 px-3 text-center font-mono">{m.policyCount}</td>
-                        <td className="py-2 px-3 text-center font-mono">{m.customerCount}</td>
-                        <td className="py-2 px-3 text-right font-bold text-emerald-700 tabular-nums">{formatINR(m.totalCommission)}</td>
-                        <td className="py-2 px-3 text-center uppercase text-[9px] font-bold">
+                        <td className="py-2 px-3 print:px-2 font-mono text-slate-600 whitespace-nowrap">{m.sponsorCode || '—'}</td>
+                        <td className="py-2 px-3 print:px-2 font-bold text-slate-800">{m.name}</td>
+                        <td className="py-2 px-3 print:px-2 text-center whitespace-nowrap"><span className="px-1.5 py-0.5 rounded bg-slate-100 font-bold text-slate-700">R{m.rank}</span></td>
+                        <td className="py-2 px-3 print:px-2 text-right font-semibold text-slate-700 tabular-nums whitespace-nowrap">{formatINR(m.totalBV)}</td>
+                        <td className="py-2 px-3 print:px-2 text-right font-bold text-blue-700 tabular-nums whitespace-nowrap">{formatINR(m.monthlyBV)}</td>
+                        <td className="py-2 px-3 print:px-2 text-center font-mono">{m.policyCount}</td>
+                        <td className="py-2 px-3 print:px-2 text-center font-mono">{m.customerCount}</td>
+                        <td className="py-2 px-3 print:px-2 text-right font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatINR(m.totalCommission)}</td>
+                        <td className="py-2 px-3 print:px-2 text-center uppercase text-[9px] font-bold whitespace-nowrap">
                           <span className={`px-1.5 py-0.5 rounded ${m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{m.status}</span>
                         </td>
                       </tr>
@@ -661,12 +685,12 @@ export default function CommissionBill() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-50 border-t-2 border-slate-200 text-slate-800 font-bold">
-                      <td colSpan={3} className="py-2.5 px-3 text-right uppercase tracking-wider text-[10px]">Team Total</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalBV, 0))}</td>
-                      <td className="py-2.5 px-3 text-right text-blue-800 tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.monthlyBV, 0))}</td>
-                      <td className="py-2.5 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.policyCount, 0)}</td>
-                      <td className="py-2.5 px-3 text-center">{nextRankTeam.reduce((sum, m) => sum + m.customerCount, 0)}</td>
-                      <td className="py-2.5 px-3 text-right text-emerald-800 tabular-nums">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalCommission, 0))}</td>
+                      <td colSpan={3} className="py-2.5 px-3 print:px-2 text-right uppercase tracking-wider text-[10px]">Team Total</td>
+                      <td className="py-2.5 px-3 print:px-2 text-right tabular-nums whitespace-nowrap">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalBV, 0))}</td>
+                      <td className="py-2.5 px-3 print:px-2 text-right text-blue-800 tabular-nums whitespace-nowrap">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.monthlyBV, 0))}</td>
+                      <td className="py-2.5 px-3 print:px-2 text-center">{nextRankTeam.reduce((sum, m) => sum + m.policyCount, 0)}</td>
+                      <td className="py-2.5 px-3 print:px-2 text-center">{nextRankTeam.reduce((sum, m) => sum + m.customerCount, 0)}</td>
+                      <td className="py-2.5 px-3 print:px-2 text-right text-emerald-800 tabular-nums whitespace-nowrap">{formatINR(nextRankTeam.reduce((sum, m) => sum + m.totalCommission, 0))}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -684,7 +708,7 @@ export default function CommissionBill() {
             <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Payout Status:</span><span className="font-bold text-amber-800 uppercase">{bill.status}</span></div>
             <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Approved By:</span><span className="font-semibold text-slate-800">{approvedByLabel}</span></div>
             <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">Approved On:</span><span className="font-semibold text-slate-800 font-mono">{approvedOnLabel}</span></div>
-            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">System Generated ID:</span><span className="font-mono text-[10px] text-slate-700 break-all">{bill.id}</span></div>
+            <div><span className="text-[10px] uppercase tracking-wide text-slate-500 block">System Generated ID:</span><span className="font-mono text-[9.5px] text-slate-700 whitespace-nowrap">{bill.id}</span></div>
           </div>
           <div className="mt-6 pt-3 border-t border-slate-100 flex flex-col sm:flex-row print:flex-row justify-between items-center gap-4 text-center sm:text-left print:text-left print:mt-4">
             <p className="text-[10px] text-slate-500">This is an official computer-generated statement and does not require physical signature under auditing rules.</p>
