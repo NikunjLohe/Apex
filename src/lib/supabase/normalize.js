@@ -12,6 +12,7 @@ export function normalizeProfile(p) {
     phone: p.phone,
     sponsorCode: p.sponsor_code,
     sponsorId: p.sponsor_id,
+    referredBy: p.sponsor_id,
     rank: p.rank,
     role: p.role,
     isSuperAdmin: p.is_super_admin,

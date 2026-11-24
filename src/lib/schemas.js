@@ -96,7 +96,7 @@ export const paymentSchema = z
 
 export const memberSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Invalid email').or(z.literal('')).optional(),
+  email: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().email('Invalid email').or(z.literal('')).optional()),
   phone,
   panNumber: z.string().trim().regex(/^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/, 'Valid PAN required (e.g. ABCDE1234F)'),
   rank: z.coerce.number().min(1),
@@ -105,7 +105,7 @@ export const memberSchema = z.object({
   sponsorCode: z.string().optional(),
   isSuperAdmin: z.boolean().optional(),
   status: z.enum(['active', 'inactive']),
-  password: z.string().optional(),
+  password: z.string().refine((v) => !v || v.trim().length >= 6, 'Temporary password must be at least 6 characters').optional(),
   address: z.string().optional(),
   dob: z.string().optional(),
   sponsorCodeInput: z.string().optional(),

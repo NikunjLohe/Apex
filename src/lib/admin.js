@@ -1,25 +1,14 @@
 // ============================================================================
 // Admin operations: member + branch management (Supabase Backend)
-// Members are created via a secondary Supabase client without session persistence
-// so the admin's own auth session is not replaced when provisioning a new account.
+// Members are provisioned via adminSupabase (service_role, persistSession: false)
+// so accounts are confirmed immediately without triggering confirmation emails
+// or replacing the signed-in admin's own auth session.
 // ============================================================================
-import { createClient } from '@supabase/supabase-js'
-import { supabase } from './supabase/client'
+import { supabase, adminSupabase } from './supabase/client'
 import { updateProfile } from './supabase/profiles'
 import { createBranch as sbCreateBranch, updateBranch as sbUpdateBranch } from './supabase/masterData'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-function getSecondaryClient() {
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  })
-}
+const dbClient = adminSupabase || supabase
 
 /**
  * Generate sequential, unique, 5-digit zero-padded Agent Code.
@@ -45,7 +34,7 @@ export async function getNextAgentCode(rank = 1) {
   }
 
   // 2. Fetch current counter value from counters table
-  const { data: counterRow } = await supabase
+  const { data: counterRow } = await dbClient
     .from('counters')
     .select('current_value')
     .eq('name', counterName)
@@ -56,7 +45,7 @@ export async function getNextAgentCode(rank = 1) {
     nextVal = Number(counterRow.current_value) + 1
   } else {
     // Determine max from existing profiles with matching prefix
-    const { data: profiles } = await supabase
+    const { data: profiles } = await dbClient
       .from('profiles')
       .select('sponsor_code')
       .ilike('sponsor_code', `${prefix}%`)
@@ -73,7 +62,7 @@ export async function getNextAgentCode(rank = 1) {
   }
 
   // Atomically upsert counter
-  await supabase
+  await dbClient
     .from('counters')
     .upsert({
       name: counterName,
@@ -84,6 +73,16 @@ export async function getNextAgentCode(rank = 1) {
   return `${prefix}${String(nextVal).padStart(5, '0')}`
 }
 
+async function assertUniqueProfileValue(column, value, { caseInsensitive = false, excludeId = null, message }) {
+  let query = dbClient.from('profiles').select('id')
+  query = caseInsensitive ? query.ilike(column, value) : query.eq(column, value)
+  if (excludeId) query = query.neq('id', excludeId)
+
+  const { data: existing, error } = await query.maybeSingle()
+  if (error) throw error
+  if (existing) throw new Error(message)
+}
+
 /**
  * Create a member: Supabase Auth user (temp password) + public.profiles record.
  * Enforces strict uniqueness checks for PAN, Phone, and Email.
@@ -92,40 +91,38 @@ export async function getNextAgentCode(rank = 1) {
 export async function createMember(form, tempPassword) {
   const cleanForm = { ...form }
   const rankNum = Number(cleanForm.rank) || 1
+  const cleanPassword = String(tempPassword || '').trim()
+
+  if (!cleanForm.name || !cleanForm.name.trim()) {
+    throw new Error('Member full name is required.')
+  }
+  cleanForm.name = cleanForm.name.trim()
+
+  if (cleanPassword.length < 6) {
+    throw new Error('Temporary password must be at least 6 characters.')
+  }
 
   // 1. Backend Uniqueness check for PAN Number (if provided)
   if (cleanForm.panNumber && cleanForm.panNumber.trim()) {
     const panClean = cleanForm.panNumber.trim().toUpperCase()
-    const { data: panDup } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('pan_number', panClean)
-      .maybeSingle()
-
-    if (panDup) {
-      throw new Error(`PAN Number "${panClean}" is already registered to another agent.`)
-    }
+    await assertUniqueProfileValue('pan_number', panClean, {
+      message: `PAN Number "${panClean}" is already registered to another agent.`,
+    })
     cleanForm.panNumber = panClean
   }
 
   // 2. Backend Uniqueness check for Phone Number
   const phoneClean = (cleanForm.phone || '').trim()
   if (phoneClean) {
-    const { data: phoneDup } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('phone', phoneClean)
-      .maybeSingle()
-
-    if (phoneDup) {
-      throw new Error(`Phone number "${phoneClean}" is already registered to another agent.`)
-    }
+    await assertUniqueProfileValue('phone', phoneClean, {
+      message: `Phone number "${phoneClean}" is already registered to another agent.`,
+    })
     cleanForm.phone = phoneClean
   }
 
   // 3. Rank restriction checks (Sponsor hierarchy)
   if (cleanForm.referredBy) {
-    const { data: sponsor } = await supabase
+    const { data: sponsor } = await dbClient
       .from('profiles')
       .select('rank')
       .eq('id', cleanForm.referredBy)
@@ -139,59 +136,76 @@ export async function createMember(form, tempPassword) {
     }
   }
 
-  // 4. Resolve Agent ID (manual or concurrency-safe sequential auto-generation)
+  // 4. Validate explicit Email before allocating sequential Agent IDs
+  const providedEmail = (cleanForm.email || '').trim().toLowerCase()
+  if (providedEmail) {
+    await assertUniqueProfileValue('email', providedEmail, {
+      caseInsensitive: true,
+      message: `Email address "${providedEmail}" is already registered.`,
+    })
+  }
+
+  // 5. Resolve Agent ID (manual or concurrency-safe sequential auto-generation)
   let sponsorCode = (cleanForm.sponsorCode || '').trim().toUpperCase()
   if (sponsorCode) {
-    // Backend uniqueness check for Agent ID across all agents
-    const { data: codeDup } = await supabase
-      .from('profiles')
-      .select('id')
-      .ilike('sponsor_code', sponsorCode)
-      .maybeSingle()
-
-    if (codeDup) {
-      throw new Error(`Agent ID "${sponsorCode}" is already assigned to another agent. Please choose a unique Agent ID.`)
-    }
+    await assertUniqueProfileValue('sponsor_code', sponsorCode, {
+      caseInsensitive: true,
+      message: `Agent ID "${sponsorCode}" is already assigned to another agent. Please choose a unique Agent ID.`,
+    })
   } else {
-    // Auto-generate sequential Agent ID based on rank (SM for 11-18, KB for 1-10)
-    sponsorCode = await getNextAgentCode(rankNum)
+    // Auto-generate sequential Agent ID based on rank (SM for 11-18, KB for 1-10),
+    // skipping any code manually claimed earlier
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const candidate = await getNextAgentCode(rankNum)
+      const { data: codeDup, error: codeErr } = await dbClient
+        .from('profiles')
+        .select('id')
+        .ilike('sponsor_code', candidate)
+        .maybeSingle()
+      if (codeErr) throw codeErr
+      if (!codeDup) {
+        sponsorCode = candidate
+        break
+      }
+    }
+    if (!sponsorCode) {
+      throw new Error('Could not allocate a unique Agent ID automatically. Please specify one manually.')
+    }
   }
   cleanForm.sponsorCode = sponsorCode
 
-  // 5. Generate dynamic email if not explicitly provided
-  const domain = 'apex.local'
-  if (!cleanForm.email || !cleanForm.email.trim()) {
-    cleanForm.email = `${sponsorCode.toLowerCase()}@${domain}`
+  // 6. Generate dynamic email if not explicitly provided and verify uniqueness
+  if (providedEmail) {
+    cleanForm.email = providedEmail
   } else {
-    cleanForm.email = cleanForm.email.trim().toLowerCase()
+    cleanForm.email = `${sponsorCode.toLowerCase()}@apex.local`
+    await assertUniqueProfileValue('email', cleanForm.email, {
+      caseInsensitive: true,
+      message: `Email address "${cleanForm.email}" is already registered.`,
+    })
   }
 
-  // 6. Backend Uniqueness check for Email Address
-  const { data: emailDup } = await supabase
-    .from('profiles')
-    .select('id')
-    .ilike('email', cleanForm.email)
-    .maybeSingle()
-
-  if (emailDup) {
-    throw new Error(`Email address "${cleanForm.email}" is already registered.`)
+  // 7. Create confirmed Supabase Auth user via Admin API (bypasses confirmation email rate limits)
+  if (!adminSupabase || adminSupabase === supabase || typeof adminSupabase.auth?.admin?.createUser !== 'function') {
+    throw new Error('Admin member creation is unavailable: Supabase service-role client is not configured.')
   }
 
-  // 7. Create Supabase Auth user via isolated secondary client
-  const secondary = getSecondaryClient()
-  const { data: authData, error: authError } = await secondary.auth.signUp({
+  const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
     email: cleanForm.email,
-    password: tempPassword,
-    options: {
-      data: {
-        name: cleanForm.name,
-        sponsor_code: sponsorCode,
-      },
+    password: cleanPassword,
+    email_confirm: true,
+    user_metadata: {
+      name: cleanForm.name,
+      sponsor_code: sponsorCode,
     },
   })
 
   if (authError || !authData?.user?.id) {
-    throw new Error(authError?.message || 'Failed to create user authentication credentials.')
+    const msg = authError?.message || 'Failed to create user authentication credentials.'
+    if (/already.*registered|already.*exists|duplicate/i.test(msg)) {
+      throw new Error(`Email address "${cleanForm.email}" is already registered in authentication (possibly from an incomplete previous attempt). Please use another email or clear the incomplete auth account.`)
+    }
+    throw new Error(msg)
   }
 
   const uid = authData.user.id
@@ -199,7 +213,7 @@ export async function createMember(form, tempPassword) {
   const isAdmin = isSuper
   const role = isSuper ? 'super_admin' : 'agent'
 
-  // 8. Write the Profile record
+  // 8. Write the Profile record; roll back Auth user if writing fails
   try {
     const profilePayload = {
       id: uid,
@@ -220,15 +234,20 @@ export async function createMember(form, tempPassword) {
       accumulated_volume: 0,
     }
 
-    const { error: insertProfErr } = await supabase
+    const { error: insertProfErr } = await dbClient
       .from('profiles')
       .upsert([profilePayload], { onConflict: 'id' })
 
     if (insertProfErr) throw insertProfErr
 
-    return { uid, sponsorCode }
+    return { uid, sponsorCode, email: cleanForm.email }
   } catch (error) {
     console.error('Failed to create profile row:', error)
+    try {
+      await adminSupabase.auth.admin.deleteUser(uid)
+    } catch (cleanupErr) {
+      console.error('Failed to roll back auth user after profile write error:', cleanupErr)
+    }
     throw error
   }
 }
@@ -250,9 +269,25 @@ export async function updateBranch(id, data) {
 }
 
 export async function changeMemberEmail(targetUid, newEmail) {
-  const { data, error } = await supabase
+  const cleanEmail = newEmail.trim().toLowerCase()
+
+  await assertUniqueProfileValue('email', cleanEmail, {
+    caseInsensitive: true,
+    excludeId: targetUid,
+    message: `Email address "${cleanEmail}" is already registered to another member.`,
+  })
+
+  if (adminSupabase && adminSupabase !== supabase && typeof adminSupabase.auth?.admin?.updateUserById === 'function') {
+    const { error: authErr } = await adminSupabase.auth.admin.updateUserById(targetUid, {
+      email: cleanEmail,
+      email_confirm: true,
+    })
+    if (authErr) throw authErr
+  }
+
+  const { data, error } = await dbClient
     .from('profiles')
-    .update({ email: newEmail.trim().toLowerCase() })
+    .update({ email: cleanEmail })
     .eq('id', targetUid)
     .select()
 

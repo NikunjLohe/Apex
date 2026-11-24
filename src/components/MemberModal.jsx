@@ -50,7 +50,7 @@ export default function MemberModal({ modal, branches, members, settings, onClos
     return 1
   }, [isEdit, m?.rank])
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(memberSchema),
     defaultValues: {
       name: m?.name || '',
@@ -156,7 +156,23 @@ export default function MemberModal({ modal, branches, members, settings, onClos
     return list
   }, [RANKS, m?.rank, selectedSponsor, isEdit, isSuperAdmin])
 
+  const currentRank = watch('rank')
+
+  useEffect(() => {
+    if (isEdit || !activeRanks.length) return
+    const isRankAllowed = activeRanks.some((r) => Number(r.rank) === Number(currentRank))
+    if (!isRankAllowed) {
+      setValue('rank', activeRanks[0].rank)
+    }
+  }, [isEdit, activeRanks, currentRank, setValue])
+
+  const onInvalid = (fieldErrors) => {
+    const firstErr = Object.values(fieldErrors || {}).find((err) => err?.message)
+    toast.error(firstErr?.message || 'Please check the highlighted form fields.')
+  }
+
   const submit = async (form) => {
+    if (saving) return
     setSaving(true)
     try {
       // Enforce PAN uppercase
@@ -255,12 +271,11 @@ export default function MemberModal({ modal, branches, members, settings, onClos
         toast.success('Member updated')
         onClose()
       } else {
-        const tempPassword = form.password || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
-        const { uid: newUid, sponsorCode: newSponsorCode } = await createMember(cleanForm, tempPassword)
+        const trimmedPassword = (form.password || '').trim()
+        const tempPassword = trimmedPassword || `Apex@${Math.floor(1000 + Math.random() * 9000)}`
+        const { uid: newUid, sponsorCode: newSponsorCode, email: createdEmail } = await createMember(cleanForm, tempPassword)
 
-        // Re-read settings or build generated email values for modal view
-        const domain = settings?.agentEmailDomain || 'apex.local'
-        const generatedEmail = cleanForm.email ? cleanForm.email.toLowerCase() : `${newSponsorCode.toLowerCase()}@${domain}`
+        const generatedEmail = createdEmail || (cleanForm.email ? cleanForm.email.trim().toLowerCase() : `${newSponsorCode.toLowerCase()}@apex.local`)
 
         setCreatedAgent({
           id: newUid,
@@ -409,10 +424,10 @@ _Welcome to the Apex Family!_`
         confirmLabel="Create"
         loading={saving}
         confirmDisabled={cannotRecruit || (sponsorCodeInputVal?.trim() && !selectedSponsor)}
-        onConfirm={handleSubmit(submit)}
+        onConfirm={handleSubmit(submit, onInvalid)}
         onClose={onClose}
       >
-        <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit)} autoComplete="off">
+        <form className="mt-3 space-y-2" onSubmit={handleSubmit(submit, onInvalid)} autoComplete="off">
           {/* Fake fields to defeat browser autofill */}
           <div style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden' }}>
             <input type="text" name="chrome-username-dummy" tabIndex="-1" />
