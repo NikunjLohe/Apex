@@ -37,8 +37,8 @@ export default function CommissionBill() {
   const [nextRankLoading, setNextRankLoading] = useState(false)
 
   useEffect(() => {
-    masterDataAPI.getCommissionMaster().then(cfg => {
-      if (cfg) setSettings(prev => ({ ...prev, ...cfg }))
+    masterDataAPI.getSystemSettings().then(cfg => {
+      if (cfg && typeof cfg === 'object') setSettings(prev => ({ ...prev, ...cfg }))
     }).catch(() => {})
   }, [])
 
@@ -531,7 +531,12 @@ export default function CommissionBill() {
                   return (
                     <React.Fragment key={(c.id || idx)}>
                       <tr className="border-b border-slate-100 hover:bg-slate-50/50">
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">{c.policyNumber || '—'}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                          {c.policyNumber || '—'}
+                          <span className="block text-[9.5px] font-normal text-slate-500">
+                            {c.planCode || c.planType || ''} &middot; Y{c.policyYear || 1} &middot; Inst #{c.installmentNumber || 1}
+                          </span>
+                        </td>
                         <td className="py-2.5 px-3">
                           <span className="block font-semibold text-slate-900">{c.customerName || '—'}</span>
                           {c.customerAccount && <span className="text-[10px] text-slate-500 font-mono block">{c.customerAccount}</span>}

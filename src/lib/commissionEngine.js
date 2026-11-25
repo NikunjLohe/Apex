@@ -1,6 +1,5 @@
-import { serverTimestamp } from 'firebase/firestore'
 import { RANKS as DEFAULT_RANKS } from '../data/ranks.js'
-import { isPension, isRD } from '../data/compensation.js'
+import { isPension, isRD, getActivePolicyYear } from '../data/compensation.js'
 
 /**
  * calculateCommissions
@@ -32,25 +31,36 @@ export function calculateCommissions({
   monthNum,
   yearNum,
   installmentNumber = 1,
+  paidDate = null,
 }) {
-  const code = String(plan.planCode).toUpperCase()
-  const isPensionPlan = isPension(plan.planCode, plan.planType)
-  const isRDPlan = isRD(plan.planCode, plan.planType)
+  const code = String(plan.planCode || plan.type || '').toUpperCase()
+  const isPensionPlan = isPension(code, plan.planType)
+  const isRDPlan = isRD(code, plan.planType)
   const lookupCode = isPensionPlan ? 'PENS' : code
-  
-  const rawYr = plan.policyYear
-  const yr = rawYr !== undefined && rawYr !== null && rawYr !== '' ? Number(rawYr) : null
-  
+
+  const yr = plan.activePolicyYear
+    ? Number(plan.activePolicyYear)
+    : getActivePolicyYear(
+        {
+          planCode: code,
+          planType: plan.planType,
+          policyYear: plan.policyYear,
+          totalInstallments: plan.totalInstallments,
+        },
+        installmentNumber
+      )
+
   if (!yr || isNaN(yr)) {
-    throw new Error(`Missing or invalid policyYear for plan ${code} (Policy: ${policyInfo.number}). Cannot calculate commission safely.`)
+    throw new Error(`Missing or invalid policyYear for plan ${code} (Policy: ${policyInfo?.number || ''}). Cannot calculate commission safely.`)
   }
 
-  // Helper to get commission rate from Master config
+  // Helper to get commission rate from Master config (supports explicit code e.g. PENS2Y/FD5Y or group key e.g. PENS)
   const getRate = (rankCode) => {
     const rankCodeStr = String(rankCode || 'AO').toUpperCase()
-    if (commissionMaster && commissionMaster[lookupCode]?.[yr]?.[rankCodeStr] !== undefined) {
-      return Number(commissionMaster[lookupCode][yr][rankCodeStr]) / 100
-    }
+    const explicitRate = commissionMaster?.[code]?.[yr]?.[rankCodeStr]
+    if (explicitRate !== undefined) return Number(explicitRate) / 100
+    const familyRate = commissionMaster?.[lookupCode]?.[yr]?.[rankCodeStr]
+    if (familyRate !== undefined) return Number(familyRate) / 100
     return 0
   }
 
@@ -81,9 +91,10 @@ export function calculateCommissions({
 
     // Duplicate / Lower Rank Prevention
     // If the current agent's rank has already been covered, skip paying them.
+    const nextParentId = currentAgent.sponsorId || currentAgent.sponsor_id || currentAgent.referredBy
     if (currentRankNum <= highestRankPaid) {
-      if (currentAgent.referredBy && usersMap[currentAgent.referredBy]) {
-        currentAgent = usersMap[currentAgent.referredBy]
+      if (nextParentId && usersMap[nextParentId]) {
+        currentAgent = usersMap[nextParentId]
         continue
       } else {
         break
@@ -129,13 +140,13 @@ export function calculateCommissions({
         } else {
           compressionReason = hasCompression
               ? `${rankCode} Commission (Upline + ${uplineVacantRanksAbsorbed.map(v => v.code).join('+')} Vacant Upline Ranks)`
-              : `${rankCode} Commission (Upline Commission)`
+              : `${rankCode} Commission (Upline)`
         }
 
         entries.push({
           agentId: currentAgent.id,
           agentName: currentAgent.name,
-          sponsorCode: currentAgent.sponsorCode || '',
+          sponsorCode: currentAgent.sponsorCode || currentAgent.sponsor_code || '',
           receivingRank: currentRankNum,
           receivingRankCode: rankCode,
           
@@ -153,17 +164,17 @@ export function calculateCommissions({
           percentage: effectivePercentage,
           amount: effectiveAmount,
           
-          originalRank: baseAgent.rank,
+          originalRank: Number(baseAgent.rank) || 1,
           originalAgentId: baseAgent.id,
           
           commissionType: isSeller ? 'direct' : 'upline', 
           compression: hasCompression,
           compressionReason: compressionReason,
-          compressedFromRank: hasCompression ? uplineVacantRanksAbsorbed.map(v => v.rank) : null,
+          compressedFromRank: hasCompression ? uplineVacantRanksAbsorbed.map(v => v.rank) : [],
           
           month: monthNum,
           year: yearNum,
-          calculationDate: serverTimestamp(),
+          calculationDate: paidDate ? new Date(paidDate).toISOString() : new Date().toISOString(),
           status: 'unpaid',
         })
       }
@@ -172,8 +183,8 @@ export function calculateCommissions({
     // Advance highestRankPaid
     highestRankPaid = currentRankNum
 
-    if (currentAgent.referredBy && usersMap[currentAgent.referredBy]) {
-      currentAgent = usersMap[currentAgent.referredBy]
+    if (nextParentId && usersMap[nextParentId]) {
+      currentAgent = usersMap[nextParentId]
     } else {
       break
     }

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { supabase, profilesAPI, masterDataAPI, auditAPI } from '../../lib/supabase'
+import { supabase, profilesAPI, policiesAPI, masterDataAPI, auditAPI } from '../../lib/supabase'
+import { evaluatePromotionEligibility } from '../../lib/mfa'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR, fmtDate } from '../../utils/format'
@@ -13,7 +14,7 @@ import { ITrophy, ICheck, IAlert, IClock, IUsers, IDoc, IPlus } from '../../comp
 
 export default function Promotions() {
   const { profile } = useAuth()
-  const { config: ranksConfig, getRank, nextRank } = useRanks()
+  const { config: ranksConfig, getRank } = useRanks()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || (searchParams.get('status') === 'approved' ? 'history' : 'dashboard'))
@@ -63,30 +64,45 @@ export default function Promotions() {
     setEvaluating(true)
     const toastId = toast.loading(`Starting promotion evaluation for ${selectedCycle}...`)
     try {
-      // 1. Fetch active profiles
-      const profiles = await profilesAPI.listProfiles()
-
-      // Helper to fetch all children recursively to find downline
-      const getDownline = (parentId, list) => {
-        const children = list.filter(u => u.referredBy === parentId || u.sponsor_id === parentId)
-        let subtree = [...children]
-        children.forEach(c => {
-          subtree = [...subtree, ...getDownline(c.id, list)]
-        })
-        return subtree
-      }
+      // 1. Fetch active profiles, policies & official promotion rules
+      const [profiles, allPolicies, promoRules] = await Promise.all([
+        profilesAPI.listProfiles(),
+        policiesAPI.listPolicies(),
+        masterDataAPI.getPromotionRules(),
+      ])
 
       const recsList = []
 
       for (const agent of profiles) {
+        const evalResult = evaluatePromotionEligibility({
+          agent,
+          policies: allPolicies,
+          allProfiles: profiles,
+          promotionRules: promoRules,
+          ranksList: ranksConfig?.RANKS,
+        })
+
+        if (!evalResult?.nextRank) continue
+
         const currentRankNum = Number(agent.rank) || 1
-        const nextRankObj = nextRank(currentRankNum)
+        const nextRankObj = evalResult.nextRank
 
-        if (!nextRankObj) continue
-
-        const bizAchieved = Number(agent.businessVolume || agent.business_volume || 0)
-        const agentDownline = getDownline(agent.id, profiles)
-        const satisfiesAll = bizAchieved > 0
+        const promoNoteParts = []
+        promoNoteParts.push(
+          evalResult.businessMet
+            ? `Personal BV met (${formatINR(evalResult.businessAchieved)})`
+            : `Personal BV short (${formatINR(evalResult.businessAchieved)} / ${formatINR(evalResult.businessTarget)})`
+        )
+        if (evalResult.reqCount > 0 && evalResult.reqRank) {
+          const teamLabel = evalResult.altCount > 0 && evalResult.altRank
+            ? `${evalResult.reqCount} pro ${evalResult.reqRank} or ${evalResult.altCount} pro ${evalResult.altRank}`
+            : `${evalResult.reqCount} pro ${evalResult.reqRank}`
+          promoNoteParts.push(
+            evalResult.promoteeMet
+              ? `Promotees met (${teamLabel})`
+              : `Promotees pending (${evalResult.primaryAchievedCount}/${evalResult.reqCount} ${evalResult.reqRank}${evalResult.altCount ? `, ${evalResult.altAchievedCount}/${evalResult.altCount} ${evalResult.altRank}` : ''})`
+          )
+        }
 
         recsList.push({
           id: `rec_${agent.id}_${Date.now()}`,
@@ -98,10 +114,17 @@ export default function Promotions() {
           targetRank: nextRankObj.rank,
           targetRankCode: nextRankObj.code,
           cycle: selectedCycle,
-          businessAchieved: bizAchieved,
+          businessAchieved: evalResult.businessAchieved,
+          businessTarget: evalResult.businessTarget,
+          promotedDownlineRank: evalResult.reqRank,
+          promotedDownlineCount: evalResult.primaryAchievedCount,
+          promotedDownlineTarget: evalResult.reqCount,
+          altPromotedDownlineRank: evalResult.altRank,
+          altPromotedDownlineCount: evalResult.altAchievedCount,
+          altPromotedDownlineTarget: evalResult.altCount,
           status: 'recommended',
-          eligible: satisfiesAll,
-          remarks: satisfiesAll ? 'Meets volume criteria' : 'Target requirements pending',
+          eligible: evalResult.eligible,
+          remarks: promoNoteParts.join(' · '),
         })
       }
 
@@ -313,9 +336,15 @@ export default function Promotions() {
                         {rec.promotedDownlineRank ? (
                           <>
                             <span className="block font-semibold text-ink-1">
-                              {rec.promotedDownlineCount} / {rec.promotedDownlineTarget} Members
+                              {rec.promotedDownlineCount} / {rec.promotedDownlineTarget} {rec.promotedDownlineRank}
                             </span>
-                            <span className="block text-[10px] text-ink-2">Rank &ge; {rec.promotedDownlineRank}</span>
+                            {rec.altPromotedDownlineRank && rec.altPromotedDownlineTarget > 0 ? (
+                              <span className="block text-[10px] text-ink-2">
+                                or {rec.altPromotedDownlineCount} / {rec.altPromotedDownlineTarget} {rec.altPromotedDownlineRank}
+                              </span>
+                            ) : (
+                              <span className="block text-[10px] text-ink-2">Promoted &ge; {rec.promotedDownlineRank}</span>
+                            )}
                           </>
                         ) : '—'}
                       </td>

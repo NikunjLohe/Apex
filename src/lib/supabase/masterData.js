@@ -1,10 +1,15 @@
 // ============================================================================
 // APEX Supabase Data Access Layer — Master Data Module (Plans, Commissions & Branches)
 // ============================================================================
-import { supabase } from './client'
+import { supabase, adminSupabase } from './client'
+import { mergePromotionRules } from '../mfa'
+
+const client = adminSupabase || supabase
+const SYSTEM_SETTINGS_SUMMARY_KEY = 'system_settings'
+const PROMOTION_RULES_SUMMARY_KEY = 'promotion_rules'
 
 export async function getPlansMaster() {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('plans_master')
     .select('*')
     .order('code', { ascending: true })
@@ -21,7 +26,7 @@ export async function getPlansMaster() {
 }
 
 export async function listBranches() {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('branches')
     .select('*')
     .order('name', { ascending: true })
@@ -36,7 +41,7 @@ export async function createBranch(payload) {
   // Generate branch code if not provided
   let branchCode = payload.branchCode
   if (!branchCode) {
-    const { data: existing } = await supabase.from('branches').select('code')
+    const { data: existing } = await client.from('branches').select('code')
     let maxId = 0
     ;(existing || []).forEach(b => {
       if (b.code) {
@@ -56,7 +61,7 @@ export async function createBranch(payload) {
     is_active: payload.status !== 'inactive',
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('branches')
     .insert([insertData])
     .select()
@@ -72,7 +77,7 @@ export async function updateBranch(id, updates) {
   if (updates.state !== undefined) patch.state = updates.state
   if (updates.status !== undefined) patch.is_active = updates.status === 'active'
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('branches')
     .update(patch)
     .eq('id', id)
@@ -83,16 +88,35 @@ export async function updateBranch(id, updates) {
 }
 
 export async function getCommissionMaster() {
-  const { data, error } = await supabase
-    .from('commission_master')
-    .select('*')
+  const pageSize = 1000
+  const allRows = []
+  let from = 0
+  let hasMore = true
 
-  if (error) throw error
-  
+  while (hasMore) {
+    const { data, error } = await client
+      .from('commission_master')
+      .select('*')
+      .order('plan_code', { ascending: true })
+      .order('policy_year', { ascending: true })
+      .order('rank_code', { ascending: true })
+      .range(from, from + pageSize - 1)
+
+    if (error) throw error
+    if (data && data.length > 0) {
+      allRows.push(...data)
+    }
+    if (!data || data.length < pageSize) {
+      hasMore = false
+    } else {
+      from += pageSize
+    }
+  }
+
   // Transform to lookup map matching frontend expected format:
   // { [planCode]: { [year]: { [rankCode]: percentageNumber } } }
   const masterMap = {}
-  ;(data || []).forEach(row => {
+  allRows.forEach(row => {
     const code = row.plan_code.toUpperCase()
     const yr = row.policy_year
     const rankCode = row.rank_code.toUpperCase()
@@ -125,7 +149,7 @@ export async function saveCommissionMaster(matrix) {
 
   if (rows.length === 0) return []
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('commission_master')
     .upsert(rows, { onConflict: 'plan_code,policy_year,rank_code' })
     .select()
@@ -135,35 +159,60 @@ export async function saveCommissionMaster(matrix) {
 }
 
 export async function getSystemSettings() {
-  const { data, error } = await supabase
-    .from('system_settings')
-    .select('*')
+  const { data, error } = await client
+    .from('system_summaries')
+    .select('data')
+    .eq('key', SYSTEM_SETTINGS_SUMMARY_KEY)
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return {}
-    return {}
+  if (!error && data?.data && typeof data.data === 'object') {
+    return data.data
   }
-  const settings = {}
-  ;(data || []).forEach(row => {
-    settings[row.key] = row.value
-  })
-  return settings
+  return {}
 }
 
 export async function saveSystemSettings(settingsObj) {
-  const rows = Object.entries(settingsObj).map(([key, value]) => ({
-    key,
-    value,
-    updated_at: new Date().toISOString()
-  }))
+  const existing = await getSystemSettings().catch(() => ({}))
+  const merged = { ...existing, ...(settingsObj || {}) }
 
-  const { data, error } = await supabase
-    .from('system_settings')
-    .upsert(rows, { onConflict: 'key' })
+  const { data, error } = await client
+    .from('system_summaries')
+    .upsert([{
+      key: SYSTEM_SETTINGS_SUMMARY_KEY,
+      data: merged,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'key' })
     .select()
 
   if (error) throw error
-  return data
+  return data?.[0]?.data || merged
+}
+
+export async function getPromotionRules() {
+  const { data, error } = await client
+    .from('system_summaries')
+    .select('data')
+    .eq('key', PROMOTION_RULES_SUMMARY_KEY)
+    .maybeSingle()
+
+  if (!error && data?.data && typeof data.data === 'object') {
+    return mergePromotionRules(data.data)
+  }
+  return mergePromotionRules({})
+}
+
+export async function savePromotionRules(rulesObj) {
+  const merged = mergePromotionRules(rulesObj || {})
+  const { error } = await client
+    .from('system_summaries')
+    .upsert([{
+      key: PROMOTION_RULES_SUMMARY_KEY,
+      data: merged,
+      updated_at: new Date().toISOString(),
+    }], { onConflict: 'key' })
+
+  if (error) throw error
+  return merged
 }
 
 export async function savePlanMaster(plan) {
@@ -180,7 +229,7 @@ export async function savePlanMaster(plan) {
   }
 
   if (plan.id) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('plans_master')
       .update(payload)
       .eq('id', plan.id)
@@ -188,7 +237,7 @@ export async function savePlanMaster(plan) {
     if (error) throw error
     return data && data[0]
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('plans_master')
       .insert([payload])
       .select()

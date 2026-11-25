@@ -182,7 +182,7 @@ export default function MyEarnings() {
     const totalBusiness = rdBusiness + fdBusiness + pensionBusiness
 
     // 2. Commission Summary reading ALREADY-CALCULATED ledger docs (no recalculation)
-    const monthComms = commissions.filter(c => c.month === perfMonth && c.year === perfYear)
+    const monthComms = commissions.filter(c => c.month === perfMonth && c.year === perfYear && c.status !== 'reversed')
 
     let directComm = 0, gapComm = 0, uplineComm = 0, grossComm = 0
 
@@ -810,7 +810,12 @@ export default function MyEarnings() {
                     <td className="font-mono text-ink-2">{log.calculationDate ? fmtDate(log.calculationDate) : log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
                     <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || log.policyId || '—'}</td>
                     <td className="font-semibold text-ink-1">{log.customerName || '—'}</td>
-                    <td className="text-ink-2 font-semibold uppercase">{log.planCode || log.planType || '—'}</td>
+                    <td className="text-ink-2 font-semibold uppercase">
+                      <span>{log.planCode || log.planType || '—'}</span>
+                      <span className="block text-[10px] font-mono text-gold-tan font-normal">
+                        Y{log.policyYear || 1} &middot; Inst #{log.installmentNumber || 1}
+                      </span>
+                    </td>
                     <td>
                       <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block text-center">
                         {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}

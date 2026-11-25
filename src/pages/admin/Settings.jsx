@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { masterDataAPI } from '../../lib/supabase'
+import { DEFAULT_PROMOTION_RULES } from '../../data/compensation'
 import { useAuth } from '../../contexts/AuthContext'
 import { useRanks } from '../../contexts/RanksContext'
 import { formatINR } from '../../utils/format'
@@ -25,7 +26,7 @@ export default function Settings() {
   const { isSuperAdmin } = useAuth()
   const [settingsData, setSettingsData] = useState({})
   const [settingsLoading, setSettingsLoading] = useState(true)
-  const { ranksList, config, saveRanks, loading: ranksLoading } = useRanks()
+  const { ranksList, config, saveRanks, refreshPromotionRules, loading: ranksLoading } = useRanks()
   const [plansMasterData, setPlansMasterData] = useState([])
   const [plansLoading, setPlansLoading] = useState(true)
   const [commissionsData, setCommissionsData] = useState({})
@@ -67,14 +68,16 @@ export default function Settings() {
 
   const loadAllSettings = async () => {
     try {
-      const [sObj, pList, cMap] = await Promise.all([
+      const [sObj, pList, cMap, promoRules] = await Promise.all([
         masterDataAPI.getSystemSettings().catch(() => ({})),
         masterDataAPI.getPlansMaster().catch(() => []),
         masterDataAPI.getCommissionMaster().catch(() => ({})),
+        masterDataAPI.getPromotionRules().catch(() => DEFAULT_PROMOTION_RULES),
       ])
       setSettingsData(sObj || {})
       setPlansMasterData(pList || [])
       setCommissionsData({ commissions: cMap || {} })
+      setPromotionsData({ rules: promoRules || DEFAULT_PROMOTION_RULES })
     } catch (err) {
       console.error('[Settings] Error loading master data:', err)
     } finally {
@@ -117,29 +120,8 @@ export default function Settings() {
   // Load initial promotion rules
   useEffect(() => {
     if (promotionsLoading) return
-    const DEFAULT_PROMOTION_RULES = {
-      AO: { businessTarget: 0, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 400, mfaTarget: 20000, pb: 0, pbTarget: 0, cmd: 3000, cmdTarget: 300000 },
-      AM: { businessTarget: 50000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 500, mfaTarget: 40000, pb: 0, pbTarget: 0, cmd: 9000, cmdTarget: 900000 },
-      ADM: { businessTarget: 150000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 600, mfaTarget: 60000, pb: 0, pbTarget: 0, cmd: 15000, cmdTarget: 1500000 },
-      DM: { businessTarget: 300000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 750, mfaTarget: 80000, pb: 3000, pbTarget: 200000, cmd: 25000, cmdTarget: 2500000 },
-      SDM: { businessTarget: 500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1000, mfaTarget: 200000, pb: 4000, pbTarget: 500000, cmd: 40000, cmdTarget: 4000000 },
-      CM: { businessTarget: 750000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 1500, mfaTarget: 300000, pb: 6000, pbTarget: 800000, cmd: 60000, cmdTarget: 6000000 },
-      AGM: { businessTarget: 1500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2000, mfaTarget: 400000, pb: 7000, pbTarget: 1000000, cmd: 80000, cmdTarget: 8000000 },
-      GM: { businessTarget: 2000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 2500, mfaTarget: 600000, pb: 8000, pbTarget: 1500000, cmd: 100000, cmdTarget: 10000000 },
-      ZM: { businessTarget: 3000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3000, mfaTarget: 800000, pb: 9000, pbTarget: 2000000, cmd: 150000, cmdTarget: 15000000 },
-      ED: { businessTarget: 4500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 3500, mfaTarget: 1000000, pb: 10000, pbTarget: 3000000, cmd: 200000, cmdTarget: 20000000 },
-      SED: { businessTarget: 6000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 4000, mfaTarget: 1200000, pb: 15000, pbTarget: 4000000, cmd: 225000, cmdTarget: 30000000 },
-      MD: { businessTarget: 7500000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 5000, mfaTarget: 1500000, pb: 20000, pbTarget: 5000000, cmd: 300000, cmdTarget: 40000000 },
-      CMD: { businessTarget: 9000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 6000, mfaTarget: 1800000, pb: 25000, pbTarget: 6000000, cmd: 412500, cmdTarget: 55000000 },
-      AVP: { businessTarget: 12000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 7500, mfaTarget: 2100000, pb: 32500, pbTarget: 7500000, cmd: 525000, cmdTarget: 70000000 },
-      VP: { businessTarget: 15000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 9000, mfaTarget: 2500000, pb: 40000, pbTarget: 9000000, cmd: 675000, cmdTarget: 90000000 },
-      SVP: { businessTarget: 18000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 12000, mfaTarget: 3000000, pb: 50000, pbTarget: 10500000, cmd: 550000, cmdTarget: 110000000 },
-      EVP: { businessTarget: 21000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 15000, mfaTarget: 3500000, pb: 60000, pbTarget: 12000000, cmd: 750000, cmdTarget: 150000000 },
-      MGD: { businessTarget: 25000000, requiredPromotedRank: '', requiredPromotedCount: 0, mfa: 20000, mfaTarget: 4000000, pb: 75000, pbTarget: 13500000, cmd: 1000000, cmdTarget: 200000000 },
-    }
-
     if (promotionsData?.rules && Object.keys(promotionsData.rules).length > 0) {
-      setPromotionsState(promotionsData.rules)
+      setPromotionsState({ ...DEFAULT_PROMOTION_RULES, ...promotionsData.rules })
     } else {
       setPromotionsState(DEFAULT_PROMOTION_RULES)
     }
@@ -357,13 +339,31 @@ export default function Settings() {
     }
   }
 
+  // Update individual promotion/MFA rule field
+  const handlePromoRuleChange = (rankCode, field, val) => {
+    const stringFields = new Set(['requiredPromotedRank', 'altRequiredPromotedRank'])
+    const parsedVal = stringFields.has(field) ? val : (val === '' ? 0 : Number(val) || 0)
+    setPromotionsState(prev => ({
+      ...prev,
+      [rankCode]: {
+        ...(prev[rankCode] || {}),
+        [field]: parsedVal,
+      },
+    }))
+  }
+
   // Save Promotions
   const handleSavePromotions = async () => {
     setSavingPromotions(true)
     try {
-      toast.success('Promotion configurations saved')
-    } catch {
-      toast.error('Could not save promotion configurations')
+      const saved = await masterDataAPI.savePromotionRules(promotionsState)
+      setPromotionsState(saved)
+      setPromotionsData({ rules: saved })
+      if (refreshPromotionRules) await refreshPromotionRules()
+      toast.success('Promotion & MFA configurations saved')
+    } catch (err) {
+      console.error('Error saving promotions:', err)
+      toast.error('Could not save promotion configurations: ' + (err.message || 'Unknown error'))
     } finally {
       setSavingPromotions(false)
     }
@@ -864,6 +864,16 @@ export default function Settings() {
               </button>
             </div>
 
+            <div className="rounded-card border border-sky-500/30 bg-sky-500/5 px-4 py-2.5 text-[11px] text-ink-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <strong className="text-ink-1">Standalone Monthly MFA Conditions (Ranks 1–10 AO–ED):</strong>{' '}
+                1-Year Plans = <span className="font-bold text-gold-1">25%</span> &middot;{' '}
+                2-Year Plans = <span className="font-bold text-gold-1">50%</span> &middot;{' '}
+                3+ Year Plans = <span className="font-bold text-gold-1">100%</span>{' '}
+                <span className="text-ink-2/80">(Initial/monthly RD or FD deposit credited once per policy; full reward earned at 100% achievement; resets monthly)</span>
+              </div>
+            </div>
+
             <div className="border border-navy-4 rounded-card overflow-x-auto">
               <table className="tbl text-xs whitespace-nowrap min-w-[1200px]">
                 <thead>
@@ -904,17 +914,13 @@ export default function Settings() {
                           )}
                         </td>
                         <td className="p-1">
-                          {isRank1 ? (
-                            <span className="text-[10px] text-ink-2/50 block text-center">—</span>
-                          ) : (
-                            <input 
-                              type="number" 
-                              className="field font-mono py-1 px-2 max-w-[100px]" 
-                              value={rule.businessTarget || ''} 
-                              placeholder="e.g. 50000" 
-                              onChange={(e) => handlePromoRuleChange(r.code, 'businessTarget', e.target.value)} 
-                            />
-                          )}
+                          <input 
+                            type="number" 
+                            className="field font-mono py-1 px-2 max-w-[100px]" 
+                            value={rule.businessTarget || ''} 
+                            placeholder="e.g. 50000" 
+                            onChange={(e) => handlePromoRuleChange(r.code, 'businessTarget', e.target.value)} 
+                          />
                         </td>
                         <td className="p-1">
                           {isRank1 ? (
@@ -946,22 +952,30 @@ export default function Settings() {
                           )}
                         </td>
                         <td className="p-1">
-                          <input 
-                            type="number" 
-                            className="field font-mono py-1 px-2 max-w-[100px]" 
-                            value={rule.mfaTarget || ''} 
-                            placeholder="0" 
-                            onChange={(e) => handlePromoRuleChange(r.code, 'mfaTarget', e.target.value)} 
-                          />
+                          {Number(r.rank) <= 10 ? (
+                            <input 
+                              type="number" 
+                              className="field font-mono py-1 px-2 max-w-[100px]" 
+                              value={rule.mfaTarget || ''} 
+                              placeholder="0" 
+                              onChange={(e) => handlePromoRuleChange(r.code, 'mfaTarget', e.target.value)} 
+                            />
+                          ) : (
+                            <span className="text-[10px] text-ink-2/50 block text-center">N/A</span>
+                          )}
                         </td>
                         <td className="p-1">
-                          <input 
-                            type="number" 
-                            className="field font-mono py-1 px-2 max-w-[80px]" 
-                            value={rule.mfa || ''} 
-                            placeholder="0" 
-                            onChange={(e) => handlePromoRuleChange(r.code, 'mfa', e.target.value)} 
-                          />
+                          {Number(r.rank) <= 10 ? (
+                            <input 
+                              type="number" 
+                              className="field font-mono py-1 px-2 max-w-[80px]" 
+                              value={rule.mfa || ''} 
+                              placeholder="0" 
+                              onChange={(e) => handlePromoRuleChange(r.code, 'mfa', e.target.value)} 
+                            />
+                          ) : (
+                            <span className="text-[10px] text-ink-2/50 block text-center">—</span>
+                          )}
                         </td>
                         <td className="p-1">
                           <input 

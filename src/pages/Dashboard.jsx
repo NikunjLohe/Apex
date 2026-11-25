@@ -2,24 +2,24 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { startOfMonth, subMonths, format } from 'date-fns'
-import { where, orderBy, limit } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermission, CAP } from '../hooks/usePermission'
-import { useCollection, useDoc } from '../hooks/useFirestore'
 import { formatINR, formatCompactINR, fmtDate, toDate } from '../utils/format'
 import RankBadge from '../components/ui/RankBadge'
 import StatusBadge from '../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../components/ui/LoadingSkeleton'
 import {
   IUsers, ICash, IAlert, ICalendar, IPlus, IDoc, IDashboard,
-  IBuilding, INetwork, IClock, ITrophy, ISettings
+  IBuilding, INetwork, IClock, ITrophy, ISettings, IShield
 } from '../components/ui/icons'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar
 } from 'recharts'
 import { useRanks } from '../contexts/RanksContext'
-import { policiesAPI, paymentsAPI, commissionsAPI, profilesAPI, masterDataAPI } from '../lib/supabase'
+import { policiesAPI, paymentsAPI, commissionsAPI, profilesAPI, masterDataAPI, customersAPI, payoutsAPI, mfaAPI } from '../lib/supabase'
+import { evaluatePromotionEligibility, getMfaStatusMessage, calculateMonthlyMfaForAgent } from '../lib/mfa'
+import { getPayoutNet } from '../utils/payoutHelpers'
 
 // ─── Super Admin Dashboard ───────────────────────────────────────────────────
 function SuperAdminDashboard() {
@@ -151,6 +151,7 @@ function SuperAdminDashboard() {
         </div>
         <div className="flex gap-2.5">
           <Link to="/admin/import" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><IDoc size={14} /> Import Center</Link>
+          <Link to="/admin/mfa" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><IShield size={14} /> MFA Management</Link>
           <Link to="/admin/payouts" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><ICash size={14} /> Payouts Engine</Link>
         </div>
       </div>
@@ -284,44 +285,108 @@ function AgentDashboard() {
   const { profile } = useAuth()
   const { can } = usePermission()
   const { config, getRank, nextRank } = useRanks()
-  const { data: promotionsConfig } = useDoc('config/promotions')
 
-  const myId = profile?.uid || profile?.id || ''
+  const myId = profile?.id || profile?.uid || ''
   const myRank = Number(profile?.rank) || 1
   const rankObj = getRank(myRank)
   const nextRankObj = nextRank(myRank)
-
-  // Sponsor data
-  const sponsorId = profile?.referredBy || ''
-  const { data: sponsorData } = useDoc(sponsorId ? `users/${sponsorId}` : null)
-
-  // My customers and policies (keyed by agentCode or agentId)
+  const sponsorId = profile?.sponsorId || profile?.referredBy || ''
   const agentCode = profile?.sponsorCode || ''
-  const myPolicies  = useCollection('plans',    [where('agentCode', '==', agentCode), orderBy('createdAt', 'desc'), limit(5)],   'my-plans')
-  const myCustomers = useCollection('customers', [where('agentCode', '==', agentCode), orderBy('createdAt', 'desc'), limit(5)],  'my-customers')
-  const myCommissions = useCollection('commission_ledger', [where('agentId', '==', myId), orderBy('calculationDate', 'desc'), limit(5)], 'my-comm')
 
-  // All my policies (for counts)
-  const allMyPolicies  = useCollection('plans',     [where('agentCode', '==', agentCode)], 'all-my-plans')
-  const allMyCustomers = useCollection('customers',  [where('agentCode', '==', agentCode)], 'all-my-customers')
+  const [agentData, setAgentData] = useState({
+    loading: true,
+    policies: [],
+    customers: [],
+    commissions: [],
+    profiles: [],
+    payouts: [],
+    promotionRules: null,
+    mfaRecord: null,
+  })
 
-  // All policies keyed by agent (for team business)
-  const allMyCommissions = useCollection('commission_ledger', [where('agentId', '==', myId)], 'all-my-comm')
+  useEffect(() => {
+    if (!myId) return
+    let active = true
+    const curDate = new Date()
+    Promise.all([
+      policiesAPI.listPolicies({ agentId: myId }).catch(() => []),
+      customersAPI.listCustomers({ enrolledBy: myId }).catch(() => []),
+      commissionsAPI.listCommissionLedger({ agentId: myId }).catch(() => []),
+      profilesAPI.listProfiles().catch(() => []),
+      payoutsAPI.listPayouts({ agentId: myId }).catch(() => []),
+      masterDataAPI.getPromotionRules().catch(() => null),
+      mfaAPI.getAgentMfaDashboardData({
+        agentProfile: profile,
+        month: curDate.getMonth() + 1,
+        year: curDate.getFullYear(),
+        autoSync: true,
+      }).catch(() => null),
+    ]).then(([policies, customers, commissions, profiles, payouts, promotionRules, mfaRes]) => {
+      if (!active) return
+      setAgentData({
+        loading: false,
+        policies: policies || [],
+        customers: customers || [],
+        commissions: (commissions || []).filter(c => c.status !== 'reversed'),
+        profiles: profiles || [],
+        payouts: payouts || [],
+        promotionRules,
+        mfaRecord: mfaRes?.currentRecord || null,
+      })
+    })
+    return () => { active = false }
+  }, [myId, profile])
 
-  // Downline — all users where referredBy == myId
-  const directTeam = useCollection('users', [where('referredBy', '==', myId)], 'direct-team')
-  const totalTeam  = useCollection('users', [where('uplineIds', 'array-contains', myId)], 'total-team')
+  const sponsorData = useMemo(() => (
+    sponsorId ? agentData.profiles.find(p => p.id === sponsorId || p.sponsorCode === sponsorId) || null : null
+  ), [agentData.profiles, sponsorId])
 
-  // Payouts
-  const myPayouts = useCollection('payouts', [where('agentId', '==', myId), orderBy('generatedDate', 'desc'), limit(5)], 'my-payouts')
-  const pendingPayouts = useCollection('payouts', [where('agentId', '==', myId), where('status', '==', 'pending')], 'pending-payouts')
+  const directTeamList = useMemo(() => (
+    agentData.profiles.filter(u => (u.sponsorId || u.referredBy) === myId)
+  ), [agentData.profiles, myId])
+
+  const totalTeamList = useMemo(() => {
+    const descendants = []
+    const visited = new Set([myId])
+    const queue = [myId]
+    while (queue.length) {
+      const curr = queue.shift()
+      for (const u of agentData.profiles) {
+        if (!visited.has(u.id) && (u.sponsorId || u.referredBy) === curr) {
+          visited.add(u.id)
+          descendants.push(u)
+          queue.push(u.id)
+        }
+      }
+    }
+    return descendants
+  }, [agentData.profiles, myId])
+
+  const myPolicies = useMemo(() => ({
+    data: [...agentData.policies].sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt)).slice(0, 5),
+  }), [agentData.policies])
+  const myCommissions = useMemo(() => ({
+    data: [...agentData.commissions].sort((a, b) => toDate(b.calculationDate) - toDate(a.calculationDate)).slice(0, 5),
+  }), [agentData.commissions])
+
+  const allMyPolicies = useMemo(() => ({ data: agentData.policies }), [agentData.policies])
+  const allMyCustomers = useMemo(() => ({ data: agentData.customers }), [agentData.customers])
+  const allMyCommissions = useMemo(() => ({ data: agentData.commissions }), [agentData.commissions])
+  const directTeam = useMemo(() => ({ data: directTeamList }), [directTeamList])
+  const totalTeam = useMemo(() => ({ data: totalTeamList }), [totalTeamList])
+  const myPayouts = useMemo(() => ({
+    data: [...agentData.payouts].sort((a, b) => toDate(b.generatedDate || b.createdAt) - toDate(a.generatedDate || a.createdAt)).slice(0, 5),
+  }), [agentData.payouts])
+  const pendingPayouts = useMemo(() => ({
+    data: agentData.payouts.filter(p => p.status === 'pending' || p.status === 'generated' || p.status === 'approved'),
+  }), [agentData.payouts])
 
   const now = new Date()
   const monthStart  = startOfMonth(now)
   const lastMonthStart = startOfMonth(subMonths(now, 1))
   const lastMonthEnd   = new Date(monthStart.getTime() - 1)
 
-  const loading = allMyPolicies.loading || allMyCommissions.loading
+  const loading = agentData.loading
 
   // ── Computed Metrics ──────────────────────────────────────────────────────
   const metrics = useMemo(() => {
@@ -358,9 +423,9 @@ function AgentDashboard() {
         return s + vol
       }, 0)
 
-    const pendingPayout = (pendingPayouts.data || []).reduce((s, p) => s + (p.totalPayable || 0), 0)
+    const pendingPayout = (pendingPayouts.data || []).reduce((s, p) => s + getPayoutNet(p), 0)
     const lastPaidPayout = (myPayouts.data || []).find(p => p.status === 'paid')
-    const totalPaid = (myPayouts.data || []).filter(p => p.status === 'paid').reduce((s, p) => s + (p.totalPayable || 0), 0)
+    const totalPaid = (myPayouts.data || []).filter(p => p.status === 'paid').reduce((s, p) => s + getPayoutNet(p), 0)
 
     // Monthly chart data — last 6 months
     const months = Array.from({ length: 6 }, (_, i) => {
@@ -390,37 +455,50 @@ function AgentDashboard() {
     }
   }, [allMyCommissions.data, allMyPolicies.data, allMyCustomers.data, pendingPayouts.data, myPayouts.data])
 
+  // ── Monthly Field Allowance (MFA) Progress (Standalone System) ────────────
+  const mfaProgress = useMemo(() => {
+    if (!profile) return null
+    if (agentData.mfaRecord) return agentData.mfaRecord
+    const currNow = new Date()
+    return calculateMonthlyMfaForAgent({
+      agent: profile,
+      policies: agentData.policies,
+      month: currNow.getMonth() + 1,
+      year: currNow.getFullYear(),
+      ranksList: config?.RANKS,
+    })
+  }, [profile, agentData.mfaRecord, agentData.policies, config])
+
   // ── Promotion Progress ────────────────────────────────────────────────────
   const promoProgress = useMemo(() => {
-    if (!nextRankObj || !promotionsConfig?.rules) return null
-    const rule = promotionsConfig.rules[nextRankObj.code]
-    if (!rule) return null
-
-    // Find rank-level config for MFA, PB
-    const ranks = config?.RANKS || []
-    const myRankIdx = myRank - 1
-    const nextRankIdx = (nextRankObj.rank || 2) - 1
-
-    const bizTarget   = rule.businessTarget || 0
-    const mfaTarget   = rule.mfaTarget || 0
-    const pbTarget    = rule.pbTarget || 0
-    const mfaAmt      = rule.mfa || 0
-    const pbAmt       = rule.pb || 0
-
-    const bizCurrent  = metrics.personalBusiness
-    const mfaCurrent  = metrics.monthBusiness
-    const pbCurrent   = metrics.monthBusiness
-
-    const bizPct = bizTarget > 0 ? Math.min(100, (bizCurrent / bizTarget) * 100) : 0
-    const eligible = bizPct >= 100
+    if (!nextRankObj || !profile) return null
+    const evalRes = evaluatePromotionEligibility({
+      agent: { ...profile, businessVolume: metrics.personalBusiness },
+      policies: agentData.policies,
+      allProfiles: agentData.profiles,
+      promotionRules: agentData.promotionRules,
+      ranksList: config?.RANKS,
+    })
+    if (!evalRes) return null
+    const bizTarget = evalRes.businessTarget || 0
+    const bizCurrent = Math.max(metrics.personalBusiness, evalRes.businessAchieved)
+    const bizPct = bizTarget > 0 ? Math.min(100, (bizCurrent / bizTarget) * 100) : 100
 
     return {
-      rule, bizTarget, bizCurrent, bizPct,
-      mfaTarget, mfaAmt, mfaCurrent,
-      pbTarget, pbAmt, pbCurrent,
-      eligible,
+      rule: evalRes.rule,
+      bizTarget,
+      bizCurrent,
+      bizPct,
+      reqRank: evalRes.reqRank,
+      reqCount: evalRes.reqCount,
+      primaryAchievedCount: evalRes.primaryAchievedCount,
+      altRank: evalRes.altRank,
+      altCount: evalRes.altCount,
+      altAchievedCount: evalRes.altAchievedCount,
+      promoteeMet: evalRes.promoteeMet,
+      eligible: bizCurrent >= bizTarget && evalRes.promoteeMet,
     }
-  }, [promotionsConfig, metrics, nextRankObj, myRank, config])
+  }, [profile, metrics.personalBusiness, agentData.policies, agentData.profiles, agentData.promotionRules, nextRankObj, config])
 
   // Construct unified recent activity
   const recentActivity = useMemo(() => {
@@ -584,6 +662,9 @@ function AgentDashboard() {
           <Link to="/my-earnings" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
             <ITrophy size={14} /> My Earnings
           </Link>
+          <Link to="/my-mfa" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <IShield size={14} /> Monthly MFA
+          </Link>
           <Link to="/my-downline" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
             <IUsers size={14} /> Genealogy Tree
           </Link>
@@ -592,6 +673,54 @@ function AgentDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* ── Monthly Field Allowance (MFA) ───────────────────────────── */}
+      {mfaProgress && mfaProgress.applicable && (
+        <div className="card p-5 space-y-4 border-l-4 border-gold-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-navy-4/50">
+            <div className="flex items-center gap-2">
+              <IShield size={16} className="text-gold" />
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-gold">
+                  Monthly MFA &ndash; {format(new Date(), 'MMMM yyyy')}
+                </h3>
+                <p className="text-[11px] text-ink-2">
+                  Rank: <strong className="text-ink-1">{mfaProgress.rankCodeSnapshot || rankObj?.code}</strong> &middot; Target: <strong className="text-ink-1">{formatINR(mfaProgress.mfaTarget)}</strong> &middot; Reward: <strong className="text-gold">{formatINR(mfaProgress.mfaReward)}</strong>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className={`px-2.5 py-1 rounded-full font-bold border ${
+                mfaProgress.status === 'achieved'
+                  ? 'bg-ok/15 border-ok/30 text-ok'
+                  : 'bg-gold-1/15 border-gold-1/30 text-gold-tan'
+              }`}>
+                {mfaProgress.status === 'achieved' ? 'Achieved' : 'In Progress'}
+              </span>
+              <Link to="/my-mfa" className="text-xs font-bold text-gold hover:underline">
+                Breakdown &amp; History &rarr;
+              </Link>
+            </div>
+          </div>
+
+          <ProgressBar
+            label={`MFA Credit (${Number(mfaProgress.achievementPct || 0).toFixed(0)}% Achieved)`}
+            value={mfaProgress.totalMfaCredit}
+            max={mfaProgress.mfaTarget}
+            color={mfaProgress.isQualified ? '#10B981' : '#A3906B'}
+            current={mfaProgress.totalMfaCredit}
+            target={mfaProgress.mfaTarget}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
+            <span>{getMfaStatusMessage({
+              status: mfaProgress.status,
+              remainingAmount: mfaProgress.remainingAmount,
+              rewardAmount: mfaProgress.mfaReward,
+              mfaTarget: mfaProgress.mfaTarget,
+            })}</span>
+          </div>
+        </div>
+      )}
 
       {/* ── My Next Promotion ────────────────────────────────────────── */}
       {nextRankObj && (
@@ -609,13 +738,17 @@ function AgentDashboard() {
           </div>
 
           {promoProgress ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <ProgressBar label="Business Target" value={promoProgress.bizCurrent} max={promoProgress.bizTarget} color="#A3906B" current={promoProgress.bizCurrent} target={promoProgress.bizTarget} />
-              {promoProgress.mfaTarget > 0 && (
-                <ProgressBar label="MFA Target" value={promoProgress.mfaCurrent} max={promoProgress.mfaTarget} color="#60A5FA" current={promoProgress.mfaCurrent} target={promoProgress.mfaTarget} />
-              )}
-              {promoProgress.pbTarget > 0 && (
-                <ProgressBar label="PB Target" value={promoProgress.pbCurrent} max={promoProgress.pbTarget} color="#10B981" current={promoProgress.pbCurrent} target={promoProgress.pbTarget} />
+              {promoProgress.reqCount > 0 && (
+                <ProgressBar
+                  label={`Promotees (${promoProgress.reqRank}${promoProgress.altCount > 0 && promoProgress.altRank ? ` or ${promoProgress.altCount} ${promoProgress.altRank}` : ''})`}
+                  value={promoProgress.primaryAchievedCount}
+                  max={promoProgress.reqCount}
+                  color="#60A5FA"
+                  current={promoProgress.primaryAchievedCount}
+                  target={promoProgress.reqCount}
+                />
               )}
             </div>
           ) : (

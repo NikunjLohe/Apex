@@ -4,8 +4,9 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermission, CAP } from '../../hooks/usePermission'
-import { customersAPI, policiesAPI, paymentsAPI, profilesAPI } from '../../lib/supabase'
-import { isRD } from '../../data/compensation'
+import { customersAPI, policiesAPI, paymentsAPI, profilesAPI, masterDataAPI } from '../../lib/supabase'
+import { isRD, getActivePolicyYear, getPolicyTermYears } from '../../data/compensation'
+import { RANKS as DEFAULT_RANKS } from '../../data/ranks'
 import { formatINR, fmtDate, toDate, daysBetween } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import RankBadge from '../../components/ui/RankBadge'
@@ -36,6 +37,7 @@ export default function CollectPayment() {
   // Master Lists
   const [allAgents, setAllAgents] = useState([])
   const [allCustomers, setAllCustomers] = useState([])
+  const [commissionMaster, setCommissionMaster] = useState({})
   const [loadingInitial, setLoadingInitial] = useState(true)
 
   // Step 1: Agent State
@@ -74,11 +76,13 @@ export default function CollectPayment() {
 
     Promise.all([
       profilesAPI.listProfiles().catch(() => []),
-      customersAPI.listCustomers().catch(() => [])
-    ]).then(([agentsRes, custsRes]) => {
+      customersAPI.listCustomers().catch(() => []),
+      masterDataAPI.getCommissionMaster().catch(() => ({})),
+    ]).then(([agentsRes, custsRes, cmRes]) => {
       if (!mounted) return
       setAllAgents(agentsRes || [])
       setAllCustomers(custsRes || [])
+      setCommissionMaster(cmRes || {})
 
       // Auto-preselect agent if logged-in user is an agent (not super admin)
       if (profile?.rank && profile?.id && !isSuperAdmin) {
@@ -237,6 +241,18 @@ export default function CollectPayment() {
   const totalInstallmentsCount = Number(selectedPolicy?.totalInstallments ?? selectedPolicy?.total_installments ?? 1)
   const nextInstallmentNumber = currentPaidCount + 1
   const remainingAfterPayment = Math.max(0, totalInstallmentsCount - nextInstallmentNumber)
+  const policyTermYears = selectedPolicy ? getPolicyTermYears(selectedPolicy) : 1
+  const activeCommissionYear = selectedPolicy ? getActivePolicyYear(selectedPolicy, nextInstallmentNumber) : 1
+  const servicingAgentRankCode = useMemo(() => {
+    const rankNum = Number(selectedAgent?.rank || 1)
+    return (DEFAULT_RANKS.find((r) => Number(r.rank) === rankNum)?.code || 'AO').toUpperCase()
+  }, [selectedAgent])
+  const expectedDirectRatePct = useMemo(() => {
+    if (!selectedPolicy) return null
+    const code = String(selectedPolicy.planCode || selectedPolicy.type || '').toUpperCase()
+    const rate = commissionMaster?.[code]?.[activeCommissionYear]?.[servicingAgentRankCode]
+    return rate !== undefined ? Number(rate) : null
+  }, [selectedPolicy, commissionMaster, activeCommissionYear, servicingAgentRankCode])
 
   // ───────────────────────────────────────────────────────────────────────────
   // STEP 4: Validate Installment Details Form
@@ -436,7 +452,15 @@ export default function CollectPayment() {
               </div>
               <div className="flex justify-between border-b border-navy-4/50 pb-1">
                 <span className="text-ink-2">Collected Installment:</span>
-                <span className="font-bold text-gold-1">#{completedPayment.installmentNumber}</span>
+                <span className="font-bold text-gold-1">
+                  #{completedPayment.installmentNumber} (Year {completedPayment.activePolicyYear || 1})
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-navy-4/50 pb-1">
+                <span className="text-ink-2">Commissions Generated:</span>
+                <span className="font-bold text-emerald-400">
+                  {completedPayment.commissionsGenerated || 0} Ledger Entries
+                </span>
               </div>
               <div className="flex justify-between border-b border-navy-4/50 pb-1">
                 <span className="text-ink-2">Installments Remaining:</span>
@@ -890,7 +914,10 @@ export default function CollectPayment() {
             <div>
               <span className="text-[10px] text-ink-2 uppercase block">Policy / Plan</span>
               <span className="font-mono font-bold text-gold-1">{selectedPolicy.policyNumber}</span>
-              <span className="block text-[10px] text-ink-2">{selectedPolicy.planCode || selectedPolicy.type}</span>
+              <span className="block text-[10px] text-ink-2">
+                {selectedPolicy.planCode || selectedPolicy.type} &middot; Year {activeCommissionYear} of {policyTermYears}
+                {expectedDirectRatePct !== null ? ` (${expectedDirectRatePct.toFixed(2)}% ${servicingAgentRankCode})` : ''}
+              </span>
             </div>
             <div>
               <span className="text-[10px] text-ink-2 uppercase block">Installment Progress</span>
@@ -1083,7 +1110,12 @@ export default function CollectPayment() {
                 <tr className="border-b border-navy-4/50">
                   <td className="text-ink-2 font-semibold">Current Installment Being Collected:</td>
                   <td className="font-mono font-bold text-emerald-400 text-sm">
-                    Installment #{nextInstallmentNumber}
+                    Installment #{nextInstallmentNumber} &middot; Policy Year {activeCommissionYear} of {policyTermYears}
+                    {expectedDirectRatePct !== null && (
+                      <span className="ml-2 text-xs font-normal text-gold-1">
+                        ({servicingAgentRankCode} Commission Rate: {expectedDirectRatePct.toFixed(2)}%)
+                      </span>
+                    )}
                   </td>
                 </tr>
                 <tr className="border-b border-navy-4/50">

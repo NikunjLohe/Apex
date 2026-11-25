@@ -23,6 +23,7 @@ const Collections = lazy(() => import('./pages/reports/Collections'))
 const Defaulters = lazy(() => import('./pages/reports/Defaulters'))
 const Maturities = lazy(() => import('./pages/reports/Maturities'))
 const MyEarnings = lazy(() => import('./pages/earnings/MyEarnings'))
+const MyMfa = lazy(() => import('./pages/earnings/MyMfa'))
 const MyDownline = lazy(() => import('./pages/earnings/MyDownline'))
 const CmdAwards = lazy(() => import('./pages/earnings/CmdAwards'))
 const MyProfile = lazy(() => import('./pages/MyProfile'))
@@ -34,6 +35,7 @@ const ImportData = lazy(() => import('./pages/admin/ImportData'))
 const PaymentImport = lazy(() => import('./pages/admin/PaymentImport'))
 const ImportHistory = lazy(() => import('./pages/admin/ImportHistory'))
 const Payouts = lazy(() => import('./pages/admin/Payouts'))
+const MfaManagement = lazy(() => import('./pages/admin/MfaManagement'))
 const CommissionBill = lazy(() => import('./pages/admin/CommissionBill'))
 const Promotions = lazy(() => import('./pages/admin/Promotions'))
 const Customers = lazy(() => import('./pages/admin/Customers'))
@@ -184,6 +186,7 @@ export default function App() {
 
               {/* My Earnings — agent accounts only (rank 1–18, not pure super admin) */}
               <Route path="/my-earnings" element={<Protected capability={CAP.AGENT_ONLY}><MyEarnings /></Protected>} />
+              <Route path="/my-mfa" element={<Protected capability={CAP.AGENT_ONLY}><MyMfa /></Protected>} />
               <Route path="/my-downline" element={<Protected capability={CAP.AGENT_ONLY}><MyDownline /></Protected>} />
               <Route path="/portal/downline" element={<Protected capability={CAP.AGENT_ONLY}><MyDownline /></Protected>} />
               <Route path="/cmd-awards"  element={<Protected capability={CAP.AGENT_ONLY}><CmdAwards /></Protected>} />
@@ -196,6 +199,7 @@ export default function App() {
               <Route path="/admin/payment-import" element={<Protected capability={CAP.ADMIN}><PaymentImport /></Protected>} />
               <Route path="/admin/import/history" element={<Protected capability={CAP.ADMIN}><ImportHistory /></Protected>} />
               <Route path="/admin/payouts" element={<Protected capability={CAP.ADMIN}><Payouts /></Protected>} />
+              <Route path="/admin/mfa" element={<Protected capability={CAP.ADMIN}><MfaManagement /></Protected>} />
               <Route path="/admin/commission-bill/:id" element={<Protected capability={CAP.ADMIN}><CommissionBill /></Protected>} />
               <Route path="/admin/promotions" element={<Protected capability={CAP.ADMIN}><Promotions /></Protected>} />
               <Route path="/admin/customers" element={<Protected capability={CAP.ADMIN}><Customers /></Protected>} />

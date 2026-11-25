@@ -4,8 +4,174 @@
 import { addMonths } from 'date-fns'
 import { supabase, adminSupabase } from './client'
 import { normalizePayment } from './normalize'
+import { getCommissionMaster } from './masterData'
+import { calculateCommissions } from '../commissionEngine'
+import { getActivePolicyYear, isRD } from '../../data/compensation'
+import { RANKS as DEFAULT_RANKS } from '../../data/ranks'
 
 const client = adminSupabase || supabase
+
+function toLedgerInsertRow(entry, paymentId) {
+  return {
+    agent_id: entry.agentId,
+    customer_id: entry.customerId,
+    policy_id: entry.policyId,
+    payment_id: paymentId || null,
+    payout_id: null,
+    receiving_rank: entry.receivingRank,
+    receiving_rank_code: entry.receivingRankCode,
+    plan_code: entry.planCode,
+    plan_type: entry.planType,
+    policy_year: entry.policyYear,
+    installment_number: entry.installment || 1,
+    business_amount: entry.businessAmount,
+    percentage: entry.percentage,
+    amount: entry.amount,
+    original_rank: entry.originalRank,
+    original_agent_id: entry.originalAgentId,
+    commission_type: entry.commissionType,
+    compression: Boolean(entry.compression),
+    compression_reason: entry.compressionReason || null,
+    compressed_from_ranks: Array.isArray(entry.compressedFromRank) ? entry.compressedFromRank : [],
+    month: entry.month,
+    year: entry.year,
+    status: 'unpaid',
+    calculation_date: entry.calculationDate || new Date().toISOString(),
+  }
+}
+
+/**
+ * Generates or reconciles commission_ledger rows for a given payment.
+ * Handles multi-year RD progression automatically (Installments 1-12 -> Y1, 13-24 -> Y2, etc.).
+ */
+async function syncCommissionsForPayment({
+  paymentId,
+  policy,
+  installmentNumber = 1,
+  paymentAmount,
+  paidDate,
+  forceReconcile = false,
+}) {
+  if (!paymentId || !policy) return 0
+
+  const activePolicyYear = getActivePolicyYear(
+    {
+      planCode: policy.plan_code,
+      planType: policy.plan_type,
+      policyYear: policy.policy_year,
+      totalInstallments: policy.total_installments,
+    },
+    installmentNumber
+  )
+
+  // Check existing ledger rows for this payment
+  const { data: existingRows, error: exErr } = await client
+    .from('commission_ledger')
+    .select('id, policy_year, status, payout_id')
+    .eq('payment_id', paymentId)
+
+  if (exErr) throw exErr
+
+  if (existingRows && existingRows.length > 0) {
+    if (!forceReconcile) return existingRows.length
+
+    const hasLockedRows = existingRows.some((r) => r.payout_id || r.status === 'paid' || r.status === 'allocated')
+    const yearAlreadySynced = existingRows.every((r) => Number(r.policy_year) === Number(activePolicyYear))
+    if (hasLockedRows || yearAlreadySynced) {
+      return existingRows.length
+    }
+  }
+
+  // Also ensure no duplicate installment rows exist on this policy (outside a forceReconcile replacement)
+  if (!existingRows?.length) {
+    const { data: instRows } = await client
+      .from('commission_ledger')
+      .select('id, status')
+      .eq('policy_id', policy.id)
+      .eq('installment_number', installmentNumber)
+
+    const activeInstRows = (instRows || []).filter((r) => r.status !== 'reversed')
+    if (activeInstRows.length > 0) return activeInstRows.length
+  }
+
+  const [commissionMaster, profilesRes, customerRes] = await Promise.all([
+    getCommissionMaster(),
+    client.from('profiles').select('id, name, rank, sponsor_code, sponsor_id'),
+    policy.customers
+      ? Promise.resolve({ data: policy.customers })
+      : client.from('customers').select('id, name, customer_id').eq('id', policy.customer_id).maybeSingle(),
+  ])
+
+  if (profilesRes.error) throw profilesRes.error
+
+  const usersMap = {}
+  ;(profilesRes.data || []).forEach((p) => {
+    usersMap[p.id] = {
+      id: p.id,
+      name: p.name,
+      rank: p.rank,
+      sponsorCode: p.sponsor_code,
+      sponsorId: p.sponsor_id,
+      referredBy: p.sponsor_id,
+    }
+  })
+
+  const baseAgent = usersMap[policy.agent_id]
+  if (!baseAgent) return 0
+
+  const customerRow = customerRes?.data || {}
+  const dt = paidDate ? new Date(paidDate) : new Date()
+  const safeDt = isNaN(dt.getTime()) ? new Date() : dt
+
+  const entries = calculateCommissions({
+    businessAmount: Number(paymentAmount) || 0,
+    plan: {
+      planCode: policy.plan_code,
+      planType: policy.plan_type,
+      policyYear: policy.policy_year,
+      totalInstallments: policy.total_installments,
+      activePolicyYear,
+    },
+    baseAgent,
+    usersMap,
+    commissionMaster,
+    ranksList: DEFAULT_RANKS,
+    customer: {
+      id: policy.customer_id,
+      name: customerRow.name || '',
+      account: customerRow.customer_id || '',
+    },
+    policyInfo: {
+      id: policy.id,
+      number: policy.policy_number || '',
+    },
+    monthNum: safeDt.getMonth() + 1,
+    yearNum: safeDt.getFullYear(),
+    installmentNumber,
+    paidDate: safeDt.toISOString(),
+  })
+
+  if (existingRows && existingRows.length > 0) {
+    const { error: delErr } = await client
+      .from('commission_ledger')
+      .delete()
+      .eq('payment_id', paymentId)
+    if (delErr) throw delErr
+  }
+
+  if (entries.length === 0) return 0
+
+  const insertRows = entries.map((entry) => toLedgerInsertRow(entry, paymentId))
+  const { error: insErr } = await client.from('commission_ledger').insert(insertRows)
+  if (insErr) throw insErr
+
+  await client
+    .from('policies')
+    .update({ commission_calculated: true })
+    .eq('id', policy.id)
+
+  return insertRows.length
+}
 
 function generateReceiptNumber() {
   const d = new Date()
@@ -88,12 +254,41 @@ export async function recordPayment(payload) {
     throw new Error(data.error || 'Payment recording failed')
   }
 
+  let commissionsGenerated = data?.commissions_generated
+  const paymentId = data?.payment_id
+  const installmentNumber = Number(data?.installment_number || 1)
+
+  // Verify RD installment policy_year & commissions against Commission Master
+  // (e.g. prevents RD5Y Installment #1 from using Year 5 instead of Year 1)
+  if (paymentId && rpcParams.p_policy_id) {
+    try {
+      const { data: pol } = await client
+        .from('policies')
+        .select('*, customers(*), profiles(*)')
+        .eq('id', rpcParams.p_policy_id)
+        .maybeSingle()
+
+      if (pol && isRD(pol.plan_code, pol.plan_type)) {
+        commissionsGenerated = await syncCommissionsForPayment({
+          paymentId,
+          policy: pol,
+          installmentNumber,
+          paymentAmount: rpcParams.p_amount,
+          paidDate: rpcParams.p_paid_date,
+          forceReconcile: true,
+        })
+      }
+    } catch (syncErr) {
+      console.warn('[Payments] Post-RPC commission year reconciliation warning:', syncErr)
+    }
+  }
+
   return {
-    paymentId: data?.payment_id,
+    paymentId,
     receiptId: data?.receipt_id,
     receiptNumber: data?.receipt_number,
-    installmentNumber: data?.installment_number,
-    commissionsGenerated: data?.commissions_generated,
+    installmentNumber,
+    commissionsGenerated,
   }
 }
 
@@ -231,11 +426,38 @@ export async function recordInstallmentPayment(payload) {
     throw new Error(`Payment saved, but policy update failed: ${updErr.message}`)
   }
 
+  // 9. Generate commissions for this installment (switches automatically at Year 2+, i.e. inst 13+)
+  const activePolicyYear = getActivePolicyYear(
+    {
+      planCode: policy.plan_code,
+      planType: policy.plan_type,
+      policyYear: policy.policy_year,
+      totalInstallments: policy.total_installments,
+    },
+    nextInstallmentNumber
+  )
+
+  let commissionsGenerated = 0
+  try {
+    commissionsGenerated = await syncCommissionsForPayment({
+      paymentId: newPayment.id,
+      policy,
+      installmentNumber: nextInstallmentNumber,
+      paymentAmount: amount,
+      paidDate,
+      forceReconcile: false,
+    })
+  } catch (commErr) {
+    console.warn('[Payments] Commission generation warning on installment:', commErr)
+  }
+
   return {
     success: true,
     paymentId: newPayment.id,
     receiptNumber: receiptNumber,
     installmentNumber: nextInstallmentNumber,
+    activePolicyYear,
+    commissionsGenerated,
     isMatured,
     totalPaid: newTotalPaid,
     remainingInstallments: Math.max(0, totalInstallments - nextInstallmentNumber)
@@ -291,6 +513,14 @@ export async function reversePayment(paymentId, reason = 'Administrative Reversa
       updated_at: new Date().toISOString()
     })
     .eq('id', policy.id)
+
+  // 3. Remove any unallocated commission rows linked to this reversed payment
+  await client
+    .from('commission_ledger')
+    .delete()
+    .eq('payment_id', paymentId)
+    .eq('status', 'unpaid')
+    .is('payout_id', null)
 
   return { success: true, reversedPaymentId: paymentId }
 }

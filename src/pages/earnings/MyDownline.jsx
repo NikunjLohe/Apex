@@ -191,17 +191,27 @@ export default function MyDownline() {
     const targetBv = nextRankObj.promoTarget || 0
     const personalAchieved = metrics?.personalBusiness || 0
 
-    // Downline requirements
+    // Downline requirements (including alternate paths like ADM: 2 pro AM or 6 pro AO)
     const reqCode = nextRankObj.requiredPromotedRank || ''
     const reqCount = nextRankObj.requiredPromotedCount || 0
     const reqRankNum = ranksConfig?.RANKS?.find(r => r.code === reqCode)?.rank || 0
+
+    const altReqCode = nextRankObj.altRequiredPromotedRank || ''
+    const altReqCount = nextRankObj.altRequiredPromotedCount || 0
+    const altReqRankNum = ranksConfig?.RANKS?.find(r => r.code === altReqCode)?.rank || 0
 
     const qualifiedDownlineCount = reqRankNum > 0
       ? directDownlineAgents.filter(a => (Number(a.rank) || 0) >= reqRankNum).length
       : 0
 
+    const altQualifiedDownlineCount = altReqRankNum > 0
+      ? directDownlineAgents.filter(a => (Number(a.rank) || 0) >= altReqRankNum).length
+      : 0
+
     const businessQualified = personalAchieved >= targetBv
-    const downlineQualified = reqCount > 0 ? (qualifiedDownlineCount >= reqCount) : true
+    const primaryDownlineMet = reqCount > 0 ? qualifiedDownlineCount >= reqCount : true
+    const altDownlineMet = altReqCount > 0 ? altQualifiedDownlineCount >= altReqCount : false
+    const downlineQualified = reqCount > 0 ? (primaryDownlineMet || altDownlineMet) : true
 
     return {
       nextRankObj,
@@ -211,6 +221,9 @@ export default function MyDownline() {
       reqCode,
       reqCount,
       qualifiedDownlineCount,
+      altReqCode,
+      altReqCount,
+      altQualifiedDownlineCount,
       downlineQualified,
       isFullyQualified: businessQualified && downlineQualified
     }
@@ -664,10 +677,11 @@ export default function MyDownline() {
                         <div className="space-y-1.5 pt-2 border-t border-navy-4/50">
                           <div className="flex justify-between font-semibold">
                             <span className="text-ink-2">
-                              2. Direct Downline Promotion ({promoProgress.reqCode})
+                              2. Direct Downline Promotion ({promoProgress.reqCode}{promoProgress.altReqCount > 0 && promoProgress.altReqCode ? ` or ${promoProgress.altReqCount} ${promoProgress.altReqCode}` : ''})
                             </span>
                             <span className="text-ink-1 font-mono">
-                              {promoProgress.qualifiedDownlineCount} / {promoProgress.reqCount} Agents
+                              {promoProgress.qualifiedDownlineCount} / {promoProgress.reqCount} {promoProgress.reqCode}
+                              {promoProgress.altReqCount > 0 && promoProgress.altReqCode ? ` · ${promoProgress.altQualifiedDownlineCount} / ${promoProgress.altReqCount} ${promoProgress.altReqCode}` : ''}
                             </span>
                           </div>
                           <div className="w-full bg-navy-2 rounded-full h-2.5 overflow-hidden border border-navy-4">
@@ -676,13 +690,17 @@ export default function MyDownline() {
                                 promoProgress.downlineQualified ? 'bg-emerald-500' : 'bg-gold'
                               }`}
                               style={{
-                                width: `${Math.min(100, Math.round((promoProgress.qualifiedDownlineCount / promoProgress.reqCount) * 100))}%`
+                                width: `${Math.min(100, Math.round(Math.max(
+                                  promoProgress.qualifiedDownlineCount / promoProgress.reqCount,
+                                  promoProgress.altReqCount > 0 ? promoProgress.altQualifiedDownlineCount / promoProgress.altReqCount : 0
+                                ) * 100))}%`
                               }}
                             />
                           </div>
                           <div className="flex justify-between text-[10px]">
                             <span className="text-ink-2">
-                              Required: {promoProgress.reqCount} agents at Rank &ge; {promoProgress.reqCode}
+                              Required: {promoProgress.reqCount} {promoProgress.reqCode}
+                              {promoProgress.altReqCount > 0 && promoProgress.altReqCode ? ` or ${promoProgress.altReqCount} ${promoProgress.altReqCode}` : ''}
                             </span>
                             <span className={promoProgress.downlineQualified ? 'text-emerald-400 font-bold' : 'text-gold font-bold'}>
                               {promoProgress.downlineQualified ? 'Requirement Met' : 'Pending'}

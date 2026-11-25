@@ -300,7 +300,8 @@ export default function Payouts() {
 
           'Payment Date': c.calculationDate ? (c.calculationDate.toDate ? c.calculationDate.toDate().toISOString().split('T')[0] : String(c.calculationDate).split('T')[0]) : '—',
           'Payment / Business Amount (₹)': Number((c.businessAmount || 0).toFixed(2)),
-          'Installment Number': c.installment || 1,
+          'Policy Year': c.policyYear || 1,
+          'Installment Number': c.installmentNumber || c.installment || 1,
 
           'Commission Type': String(c.commissionType || 'direct'),
           'Commission Rate (%)': Number((c.percentage || 0).toFixed(2)),
@@ -332,6 +333,8 @@ export default function Payouts() {
           'Customer Name': String(c.customerName || '—'),
           'Plan Code': String(c.planCode || '—'),
           'Plan Type': String(c.planType || '—'),
+          'Policy Year': c.policyYear || 1,
+          'Installment #': c.installmentNumber || c.installment || 1,
           'Business Amount (₹)': Number((c.businessAmount || 0).toFixed(2)),
           'Commission Rate (%)': Number((c.percentage || 0).toFixed(2)),
           'Commission Amount (₹)': Number((c.amount || 0).toFixed(2)),

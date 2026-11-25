@@ -162,3 +162,57 @@ export function normalizeCommissionLedger(c) {
     calculationDate: c.calculation_date,
   }
 }
+
+export function normalizeMfaRecord(r) {
+  if (!r) return null
+  return {
+    id: r.id,
+    agentId: r.agent_id,
+    agentName: r.profiles?.name || r.agentName || null,
+    sponsorCode: r.profiles?.sponsor_code || r.sponsorCode || null,
+    email: r.profiles?.email || r.email || null,
+    phone: r.profiles?.phone || r.phone || null,
+    currentRank: r.profiles?.rank ?? r.rank_snapshot,
+    month: Number(r.month),
+    year: Number(r.year),
+    rankSnapshot: Number(r.rank_snapshot),
+    rankCodeSnapshot: r.rank_code_snapshot,
+    mfaTarget: Number(r.mfa_target_snapshot || 0),
+    mfaReward: Number(r.mfa_reward_snapshot || 0),
+    applicable: Number(r.mfa_target_snapshot || 0) > 0 && Number(r.mfa_reward_snapshot || 0) > 0,
+    rawBusinessTotal: Number(r.raw_business_total || 0),
+    totalMfaCredit: Number(r.total_mfa_credit || 0),
+    remainingAmount: Number(r.remaining_amount || 0),
+    achievementPct: Number(r.achievement_pct || 0),
+    isQualified: Boolean(r.is_qualified),
+    rewardEarned: Number(r.reward_earned || 0),
+    status: r.status || 'in_progress',
+    contributionsCount: Number(r.contributions_count || 0),
+    lastCalculatedAt: r.last_calculated_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }
+}
+
+export function normalizeMfaContribution(c) {
+  if (!c) return null
+  return {
+    id: c.id,
+    mfaRecordId: c.mfa_record_id,
+    agentId: c.agent_id,
+    policyId: c.policy_id,
+    policyNumber: c.policy_number,
+    customerId: c.customer_id,
+    customerName: c.customer_name || '—',
+    planCode: c.plan_code,
+    planType: c.plan_type,
+    durationYears: Number(c.duration_years || 1),
+    businessDate: c.business_date,
+    month: Number(c.month),
+    year: Number(c.year),
+    businessAmount: Number(c.business_amount || 0),
+    mfaPercentage: Number(c.mfa_percentage || 0),
+    mfaCredit: Number(c.mfa_credit || 0),
+    createdAt: c.created_at,
+  }
+}

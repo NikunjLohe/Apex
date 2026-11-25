@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useState, useMemo } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, useMemo } from 'react'
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { RANKS as DEFAULT_RANKS } from '../data/ranks'
+import { DEFAULT_PROMOTION_RULES } from '../data/compensation'
+import { getPromotionRules } from '../lib/supabase/masterData'
 
 
 const RanksContext = createContext(null)
@@ -18,6 +20,13 @@ function buildConfigFromRanksList(ranksList) {
     recruitPermission: r.recruitPermission !== undefined ? Boolean(r.recruitPermission) : (Number(r.rank) > 1),
     promoDesc: r.promoDesc || '',
     status: r.status || 'active',
+    requiredPromotedRank: r.requiredPromotedRank || '',
+    requiredPromotedCount: Number(r.requiredPromotedCount) || 0,
+    altRequiredPromotedRank: r.altRequiredPromotedRank || '',
+    altRequiredPromotedCount: Number(r.altRequiredPromotedCount) || 0,
+    mfa: Number(r.mfa) || 0,
+    mfaTarget: Number(r.mfaTarget) || 0,
+    promoTarget: Number(r.promoTarget) || 0,
   }))
 
   // Build legacy flat arrays expected by Settings.jsx, CmdAwards.jsx, earnings.js, etc.
@@ -53,6 +62,22 @@ function buildConfigFromRanksList(ranksList) {
 export function RanksProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [ranksList, setRanksList] = useState([])
+  const [promotionRules, setPromotionRules] = useState(DEFAULT_PROMOTION_RULES)
+
+  const refreshPromotionRules = useCallback(async () => {
+    try {
+      const rules = await getPromotionRules()
+      if (rules && Object.keys(rules).length > 0) {
+        setPromotionRules(rules)
+      }
+    } catch {
+      // Fallback to DEFAULT_PROMOTION_RULES
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshPromotionRules()
+  }, [refreshPromotionRules])
 
   useEffect(() => {
     const ref = doc(db, 'config', 'ranks')
@@ -73,37 +98,32 @@ export function RanksProvider({ children }) {
   }, [])
 
   const config = useMemo(() => {
-    const EMPTY_ARR = DEFAULT_RANKS.map(() => 0)
-    const EMPTY_MDA = DEFAULT_RANKS.map(() => ({ y1: [0, 0, 0, 0, 0], y2: [null, 0, 0, 0, 0] }))
-    const EMPTY_FD = DEFAULT_RANKS.map(() => [0, 0, 0, 0, 0])
+    const baseSource = ranksList.length > 0 ? ranksList : DEFAULT_RANKS
+    const sorted = [...baseSource].sort((a, b) => a.rank - b.rank)
 
-    if (ranksList.length === 0) {
-      // Fallback configuration — safe empty arrays prevent crashes before Firestore loads
+    const enrichedRanks = sorted.map((r) => {
+      const rule = promotionRules?.[r.code] || DEFAULT_PROMOTION_RULES[r.code] || {}
       return {
-        RANKS: DEFAULT_RANKS.map(r => ({
-          ...r,
-          recruitPermission: Number(r.rank) > 1,
-          promoDesc: '',
-          status: 'active',
-        })),
-        MFA: EMPTY_ARR,
-        MFA_TARGET: EMPTY_ARR,
-        PB_TARGET: EMPTY_ARR,
-        PB_AMOUNT: EMPTY_ARR,
-        PROMO_TARGET: EMPTY_ARR,
-        CMD_AWARD_TARGET: EMPTY_ARR,
-        CMD_AWARD_AMOUNT: EMPTY_ARR,
-        MDA: DEFAULT_RANKS.map(r => ({
-          y1: Array.isArray(r.mdaY1) ? r.mdaY1.map(v => Number(v) / 100) : [0, 0, 0, 0, 0],
-          y2: Array.isArray(r.mdaY2) ? r.mdaY2.map(v => v === null ? null : Number(v) / 100) : [null, 0, 0, 0, 0],
-        })),
-        FD_PENSION: DEFAULT_RANKS.map(r =>
-          Array.isArray(r.fdPension) ? r.fdPension.map(v => Number(v) / 100) : [0, 0, 0, 0, 0]
-        ),
+        ...r,
+        recruitPermission: r.recruitPermission !== undefined ? Boolean(r.recruitPermission) : (Number(r.rank) > 1),
+        promoDesc: r.promoDesc || '',
+        status: r.status || 'active',
+        mfa: Number(r.rank) <= 10 ? (rule.mfa ?? Number(r.mfa || 0)) : 0,
+        mfaTarget: Number(r.rank) <= 10 ? (rule.mfaTarget ?? Number(r.mfaTarget || 0)) : 0,
+        pbTarget: rule.pbTarget ?? Number(r.pbTarget || 0),
+        pbAmount: rule.pb ?? Number(r.pbAmount || 0),
+        promoTarget: rule.businessTarget ?? Number(r.promoTarget || 0),
+        cmdTarget: rule.cmdTarget ?? Number(r.cmdTarget || 0),
+        cmdAmount: rule.cmd ?? Number(r.cmdAmount || 0),
+        requiredPromotedRank: rule.requiredPromotedRank || '',
+        requiredPromotedCount: Number(rule.requiredPromotedCount || 0),
+        altRequiredPromotedRank: rule.altRequiredPromotedRank || '',
+        altRequiredPromotedCount: Number(rule.altRequiredPromotedCount || 0),
       }
-    }
-    return buildConfigFromRanksList(ranksList)
-  }, [ranksList])
+    })
+
+    return buildConfigFromRanksList(enrichedRanks)
+  }, [ranksList, promotionRules])
 
 
   const getRank = (rankNum) => {
@@ -114,7 +134,10 @@ export function RanksProvider({ children }) {
 
   const rankCode = (rankNum) => getRank(rankNum).code
   const rankName = (rankNum) => getRank(rankNum).name
-  const nextRank = (rankNum) => config.RANKS[Number(rankNum)] || null
+  const nextRank = (rankNum) => {
+    const nextNum = Number(rankNum) + 1
+    return config.RANKS.find((r) => Number(r.rank) === nextNum) || config.RANKS[Number(rankNum)] || null
+  }
 
   const saveRanks = async (updatedList) => {
     const ref = doc(db, 'config', 'ranks')
@@ -144,13 +167,15 @@ export function RanksProvider({ children }) {
   const value = useMemo(() => ({
     ranksList: ranksList.length > 0 ? ranksList : DEFAULT_RANKS,
     config,
+    promotionRules,
+    refreshPromotionRules,
     getRank,
     rankCode,
     rankName,
     nextRank,
     loading,
     saveRanks,
-  }), [ranksList, config, loading])
+  }), [ranksList, config, promotionRules, refreshPromotionRules, loading])
 
   return (
     <RanksContext.Provider value={value}>

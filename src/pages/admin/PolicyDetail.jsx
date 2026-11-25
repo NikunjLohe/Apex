@@ -12,7 +12,7 @@ import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
 import { IDoc, IUsers, ICash, ISettings, IAlert } from '../../components/ui/icons'
 import { addYears } from 'date-fns'
-import { isPension, getPensionPolicyYear, planYears } from '../../data/compensation'
+import { isPension, getPensionPolicyYear, planYears, getActivePolicyYear, getPolicyTermYears } from '../../data/compensation'
 import { useRanks } from '../../contexts/RanksContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermission } from '../../hooks/usePermission'
@@ -30,6 +30,8 @@ export default function PolicyDetail() {
   const [usersList, setUsersList] = useState([])
   const [branchesList, setBranchesList] = useState([])
   const [ledgerData, setLedgerData] = useState([])
+  const [commissionMaster, setCommissionMaster] = useState({})
+  const [selectedLedgerInst, setSelectedLedgerInst] = useState('latest')
 
   const { ranksList } = useRanks()
   const [explainOpen, setExplainOpen] = useState(false)
@@ -56,10 +58,11 @@ export default function PolicyDetail() {
       setLoading(true)
 
       try {
-        const [policyObj, uList, bList] = await Promise.all([
+        const [policyObj, uList, bList, cmMap] = await Promise.all([
           policiesAPI.getPolicy(id).catch(() => null),
           profilesAPI.listProfiles().catch(() => []),
-          masterDataAPI.listBranches().catch(() => [])
+          masterDataAPI.listBranches().catch(() => []),
+          masterDataAPI.getCommissionMaster().catch(() => ({})),
         ])
 
         if (cancelled) return
@@ -73,6 +76,7 @@ export default function PolicyDetail() {
         setP(policyObj)
         setUsersList(uList || [])
         setBranchesList(bList || [])
+        setCommissionMaster(cmMap || {})
 
         // Fetch commissions from ledger
         const comms = await commissionsAPI.listCommissionLedger({ policyId: policyObj.id }).catch(() => [])
@@ -372,23 +376,54 @@ export default function PolicyDetail() {
     MGD: { '1Y_RD_Y1': 0.10, '2Y_RD_Y1': 0.10, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.30, 'FD_Y2': 0.30, 'FD_Y3': 0.30, 'FD_Y4': 0.30, 'FD_Y5': 0.30 }
   }
 
+  const availableInstallments = useMemo(() => {
+    const instSet = new Set(
+      (ledgerData || [])
+        .map((c) => Number(c.installmentNumber || c.installment || 1))
+        .filter((n) => !isNaN(n) && n > 0)
+    )
+    return Array.from(instSet).sort((a, b) => a - b)
+  }, [ledgerData])
+
+  const activeLedgerInst = useMemo(() => {
+    if (selectedLedgerInst !== 'latest') return Number(selectedLedgerInst) || 1
+    if (availableInstallments.length > 0) return availableInstallments[availableInstallments.length - 1]
+    return Math.max(1, Number(p?.paidInstallments) || 1)
+  }, [selectedLedgerInst, availableInstallments, p?.paidInstallments])
+
+  const activeBreakdownYear = useMemo(() => {
+    if (!p) return 1
+    return getActivePolicyYear(p, activeLedgerInst)
+  }, [p, activeLedgerInst])
+
+  const scopedLedgerData = useMemo(() => {
+    if (!ledgerData || ledgerData.length === 0) return []
+    const exact = ledgerData.filter((c) => Number(c.installmentNumber || c.installment || 1) === activeLedgerInst)
+    return exact.length > 0 ? exact : ledgerData
+  }, [ledgerData, activeLedgerInst])
+
   const getExpectedMdaRate = (rankCode, planCode, policyYear = 1) => {
     const code = String(rankCode || '').toUpperCase()
+    const rawPlan = String(planCode || 'RD1Y').toUpperCase().replace('-', '')
+    const yr = Number(policyYear) || 1
+
+    const familyCode = isPension(rawPlan, p?.planType) ? 'PENS' : rawPlan
+    const dynamicRate = commissionMaster?.[rawPlan]?.[yr]?.[code] ?? commissionMaster?.[familyCode]?.[yr]?.[code]
+    if (dynamicRate !== undefined) return Number(dynamicRate)
+
     if (typeof MDA_COMMISSION_RATES[code] === 'number') {
       return MDA_COMMISSION_RATES[code]
     }
     const table = MDA_COMMISSION_RATES[code]
     if (!table) return 0
 
-    const p = String(planCode || 'RD1Y').toUpperCase().replace('-', '')
-    const yr = Number(policyYear) || 1
-
-    if (p === 'RD1Y') return table['1Y_RD_Y1'] || 0
-    if (p === 'RD2Y') return yr === 1 ? table['2Y_RD_Y1'] : table['2Y_RD_Y2']
-    if (p === 'RD3Y') return yr === 1 ? table['3Y_RD_Y1'] : table['3Y_RD_Y2_3']
-    if (p === 'RD4Y') return yr === 1 ? table['4Y_RD_Y1'] : table['4Y_RD_Y2_4']
-    if (p === 'RD5Y') return yr === 1 ? table['5Y_RD_Y1'] : table['5Y_RD_Y2_5']
-    if (p.startsWith('FD') || p.startsWith('PENS')) {
+    const pCode = rawPlan
+    if (pCode === 'RD1Y') return table['1Y_RD_Y1'] || 0
+    if (pCode === 'RD2Y') return yr === 1 ? table['2Y_RD_Y1'] : table['2Y_RD_Y2']
+    if (pCode === 'RD3Y') return yr === 1 ? table['3Y_RD_Y1'] : table['3Y_RD_Y2_3']
+    if (pCode === 'RD4Y') return yr === 1 ? table['4Y_RD_Y1'] : table['4Y_RD_Y2_4']
+    if (pCode === 'RD5Y') return yr === 1 ? table['5Y_RD_Y1'] : table['5Y_RD_Y2_5']
+    if (pCode.startsWith('FD') || pCode.startsWith('PENS')) {
       const yKey = `FD_Y${Math.min(Math.max(yr, 1), 5)}`
       return table[yKey] || table['FD_Y1'] || 0
     }
@@ -406,8 +441,8 @@ export default function PolicyDetail() {
 
     return sortedRanks.map(r => {
       const rankNum = Number(r.rank)
-      // Find matching ledger entry for this rank
-      const entry = (ledgerData || []).find(c => {
+      // Find matching ledger entry for this rank (for selected installment)
+      const entry = (scopedLedgerData || []).find(c => {
         if (Number(c.receivingRank) === rankNum) return true
         const ag = usersMap[c.agentId]
         return ag && Number(ag.rank) === rankNum
@@ -438,7 +473,7 @@ export default function PolicyDetail() {
         // Fallback when ledger rows are protected by database RLS: calculate exact MDA commission for agent in hierarchy
         const ag = isSeller ? agent : agentInChain
         const bAmt = Number(p?.monthlyAmount) || Number(p?.totalPaid) || Number(p?.fdAmount) || 0
-        const rate = getExpectedMdaRate(r.code, p?.planCode || p?.type, p?.policyYear || 1)
+        const rate = getExpectedMdaRate(r.code, p?.planCode || p?.type, activeBreakdownYear)
         pct = rate
         amt = Number(((bAmt * rate) / 100).toFixed(2))
         type = isSeller ? 'Direct' : 'Upline Commission'
@@ -469,7 +504,7 @@ export default function PolicyDetail() {
         docId
       }
     })
-  }, [ranksList, ledgerData, usersMap, traversedChain, agent, p])
+  }, [ranksList, scopedLedgerData, usersMap, traversedChain, agent, p, commissionMaster, activeBreakdownYear])
 
   // Summary card metrics
   const paidRanks = useMemo(() => breakdownRows.filter(r => !r.skipped), [breakdownRows])
@@ -561,11 +596,11 @@ export default function PolicyDetail() {
                   </span>
                 </div>
                 <div>
-                  <span className="block text-[10px] text-ink-2">Policy Year</span>
+                  <span className="block text-[10px] text-ink-2">Active Policy Year</span>
                   <span className="font-semibold text-ink-1 font-mono">
                     {isPension(p.type, p.planType)
-                      ? (getPensionPolicyYear(p.type, p.policyYear || p.duration) ? `${getPensionPolicyYear(p.type, p.policyYear || p.duration)}` : 'Not Specified')
-                      : (p.policyYear || planYears(p.type) || 1)}
+                      ? (getPensionPolicyYear(p.type, p.policyYear || p.duration) ? `Year ${getPensionPolicyYear(p.type, p.policyYear || p.duration)}` : 'Not Specified')
+                      : `Year ${getActivePolicyYear(p, Math.max(1, Number(p.paidInstallments) || 1))} of ${getPolicyTermYears(p)}`}
                   </span>
                 </div>
                 <div>
@@ -614,13 +649,29 @@ export default function PolicyDetail() {
 
           {/* Commission Allocation Breakdown */}
           <div className="card p-5 space-y-6">
-            <div className="border-b border-navy-4/50 pb-3 flex items-center justify-between">
+            <div className="border-b border-navy-4/50 pb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
                   <ISettings size={16} /> Commission Allocation Breakdown
                 </h3>
-                <p className="text-[11px] text-ink-2 mt-0.5">Real-time sponsor hierarchy calculations from the live ledger database.</p>
+                <p className="text-[11px] text-ink-2 mt-0.5">
+                  Showing Policy Year {activeBreakdownYear} (Installment #{activeLedgerInst}) calculations from the live ledger database.
+                </p>
               </div>
+              {availableInstallments.length > 1 && (
+                <select
+                  className="field text-xs w-48 py-1"
+                  value={selectedLedgerInst}
+                  onChange={(e) => setSelectedLedgerInst(e.target.value)}
+                >
+                  <option value="latest">Latest (Inst #{availableInstallments[availableInstallments.length - 1]})</option>
+                  {availableInstallments.map((instNo) => (
+                    <option key={instNo} value={instNo}>
+                      Inst #{instNo} (Year {getActivePolicyYear(p, instNo)})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Matrix table */}
