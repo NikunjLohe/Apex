@@ -1,518 +1,571 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  INetwork, 
-  IShield, 
-  IReport, 
-  IUsers, 
-  ITrophy, 
-  IAlert, 
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
+import Logo from '../components/ui/Logo';
+import HeroPlatformPreview from '../components/landing/HeroPlatformPreview';
+import PlatformCapabilitiesSection from '../components/landing/PlatformCapabilitiesSection';
+import {
+  OrganizationalStructureSection,
+  CommissionVisibilitySection,
+  PerformanceTargetsSection,
+} from '../components/landing/HierarchyAndPreviewsSection';
+import {
   IChevron,
   IMenu,
   IClose,
+  IDashboard,
+  INetwork,
+  IDoc,
+  ICash,
+  ITrophy,
+  IReport,
+  IShield,
+  IUsers,
   ICheck,
-  ISearch
 } from '../components/ui/icons';
-import Logo from '../components/ui/Logo';
 
-const Landing = () => {
+const NAV_LINKS = [
+  { name: 'Platform', id: 'about' },
+  { name: 'Capabilities', id: 'capabilities' },
+  { name: 'Hierarchy', id: 'hierarchy' },
+  { name: 'Commissions', id: 'commissions' },
+  { name: 'Targets & MFA', id: 'performance' },
+];
+
+const WHY_APEX = [
+  {
+    icon: IDashboard,
+    title: 'Centralized Business Operations',
+    desc: 'Bring customer CIF records, policies, collections, agent accounts, and administrative logs into one structured system.',
+  },
+  {
+    icon: IReport,
+    title: 'Organizational Performance Visibility',
+    desc: 'Monitor personal, direct team, and full network business volume with monthly and cumulative views scoped by role.',
+  },
+  {
+    icon: INetwork,
+    title: 'Structured Agent Management',
+    desc: 'Manage an 18-level sponsor hierarchy with clear recruitment permissions, profile verification, and downline inspection.',
+  },
+  {
+    icon: ICash,
+    title: 'Clear Commission Reconciliation',
+    desc: 'Trace every direct and upline commission share per policy and installment back to configurable rank-wise rate tables.',
+  },
+  {
+    icon: IShield,
+    title: 'Structured Monthly Target Monitoring',
+    desc: 'Track duration-weighted Monthly Field Allowance targets with strict calendar-month resets and reward qualification clarity.',
+  },
+  {
+    icon: IDoc,
+    title: 'Reduced Spreadsheet Dependency',
+    desc: 'Validate bulk imports cleanly, inspect diagnostics row by row, and export standardized Excel reports directly from live records.',
+  },
+];
+
+const UNIFIED_NODES = [
+  { label: 'Management Oversight', sub: 'Approvals, master configs & audit trail', icon: IShield },
+  { label: 'Agent Network', sub: '18-rank hierarchy & genealogy explorer', icon: INetwork },
+  { label: 'Business Records', sub: 'Customer CIF, RD/FD/Pension & receipts', icon: IDoc },
+  { label: 'Commission Ledger', sub: 'Direct & upline reconciliation bills', icon: ICash },
+  { label: 'Monthly Targets', sub: 'MFA duration credits & promotions', icon: ITrophy },
+  { label: 'Reporting Suite', sub: 'Collections, maturities & .xlsx exports', icon: IReport },
+];
+
+export default function Landing() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const onScroll = () => setIsScrolled(window.scrollY > 24);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileMenuOpen]);
 
   const scrollTo = (id) => {
     setMobileMenuOpen(false);
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth' });
   };
 
-  const navLinks = [
-    { name: 'Platform', href: '#home' },
-    { name: 'Solutions', href: '#why-us' },
-    { name: 'Infrastructure', href: '#services' },
-    { name: 'Enterprise', href: '#opportunity' }
-  ];
-
   return (
-    <div className="min-h-screen bg-[#04120E] text-white font-sans selection:bg-[#BFA256] selection:text-[#04120E] overflow-x-hidden">
-      
-      {/* FLOATING GLASS NAVBAR */}
-      <nav 
-        className={`fixed top-0 w-full z-50 transition-all duration-700 ease-in-out px-3 sm:px-6 lg:px-8 ${
-          isScrolled ? 'py-3 sm:py-4' : 'py-5 sm:py-8'
-        }`}
-      >
-        <div 
-          className={`max-w-7xl mx-auto rounded-full transition-all duration-700 ${
-            isScrolled 
-              ? 'bg-[#081C16]/80 backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] px-4 sm:px-8' 
-              : 'bg-transparent px-2 sm:px-4'
+    <div className="min-h-screen overflow-x-clip bg-[#04120E] font-sans text-white selection:bg-[#BFA256] selection:text-[#04120E]">
+      {/* ── STICKY ENTERPRISE HEADER ──────────────────────────────────── */}
+      <header className="fixed inset-x-0 top-0 z-50 px-3 py-3 sm:px-6 lg:px-8">
+        <div
+          className={`mx-auto max-w-7xl rounded-2xl border transition-all duration-300 ${
+            isScrolled || mobileMenuOpen
+              ? 'border-white/12 bg-[#061813]/95 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.75)] backdrop-blur-xl'
+              : 'border-white/8 bg-[#04120E]/65 backdrop-blur-md'
           }`}
         >
-          <div className="flex justify-between items-center h-16">
-            
-            {/* Logo area */}
-            <div className="flex-shrink-0 cursor-pointer flex items-center gap-4 transition-transform duration-500 hover:scale-[1.02]" onClick={() => scrollTo('home')}>
-              <Logo size={44} showText={false} />
-              <div className="hidden sm:block mt-1">
-                <div className="text-white font-extrabold text-2xl leading-none tracking-tight">Apex Multisolutions</div>
-                <div className="text-[#BFA256] text-[0.7rem] font-bold uppercase tracking-[0.2em] mt-1.5">Performance Portal</div>
+          <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
+            {/* Brand Identity */}
+            <button
+              type="button"
+              onClick={() => scrollTo('home')}
+              className="flex min-w-0 items-center gap-3 text-left"
+              aria-label="Apex Multisolutions Home"
+            >
+              <Logo size={38} showText={false} />
+              <div className="min-w-0">
+                <span className="block truncate font-serif text-lg font-bold tracking-tight text-white sm:text-xl">
+                  Apex Multisolutions
+                </span>
+                <span className="block truncate text-[10px] font-bold uppercase tracking-[0.2em] text-[#BFA256]">
+                  Branch Operations Portal
+                </span>
               </div>
-            </div>
+            </button>
 
-            {/* Nav links */}
-            <div className="hidden lg:flex items-center space-x-2">
-              {navLinks.map((link) => (
-                <button 
-                  key={link.name} 
-                  onClick={() => scrollTo(link.href.substring(1))}
-                  className="px-5 py-2 text-sm font-medium tracking-wide text-[#9AA8A2] hover:text-white rounded-full hover:bg-white/[0.03] transition-all duration-300"
+            {/* Desktop Links */}
+            <nav aria-label="Primary sections" className="hidden items-center gap-1 lg:flex">
+              {NAV_LINKS.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  onClick={() => scrollTo(link.id)}
+                  className="rounded-lg px-3.5 py-2 text-xs font-semibold tracking-wide text-[#B4C2BC] transition-colors hover:bg-white/[0.05] hover:text-white"
                 >
                   {link.name}
                 </button>
               ))}
-            </div>
-            
-            {/* CTA */}
-            <div className="hidden lg:block">
-              <Link 
-                to="/login"
-                className="group relative inline-flex items-center justify-center bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#8C7335] text-[#04120E] px-8 py-3 rounded-full font-bold text-sm transition-all duration-500 hover:-translate-y-0.5"
-              >
-                <span className="relative z-10">Sign In</span>
-                <div className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute -inset-1 rounded-full bg-[#BFA256]/30 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              </Link>
-            </div>
+            </nav>
 
-            {/* Mobile Nav Toggle */}
-            <div className="lg:hidden flex items-center">
-              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-[#9AA8A2] hover:text-white p-2">
-                {mobileMenuOpen ? <IClose size={28} /> : <IMenu size={28} />}
+            {/* Right Actions */}
+            <div className="flex items-center gap-2">
+              <Link
+                to="/login"
+                className="hidden items-center gap-2 rounded-xl bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#9B7F3D] px-4 py-2 text-xs font-bold uppercase tracking-wider text-[#04120E] shadow-sm transition-transform hover:-translate-y-0.5 sm:inline-flex"
+              >
+                Login to Dashboard
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((v) => !v)}
+                aria-expanded={mobileMenuOpen}
+                aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-[#C5D1CC] hover:text-white lg:hidden"
+              >
+                {mobileMenuOpen ? <IClose size={20} /> : <IMenu size={20} />}
               </button>
             </div>
           </div>
-        </div>
-      </nav>
 
-      {/* CINEMATIC HERO SECTION */}
-      <section id="home" className="relative pt-28 pb-20 sm:pt-40 sm:pb-32 lg:pt-64 lg:pb-56 overflow-hidden min-h-screen flex items-center">
-        
-        {/* Background Textures & Lighting */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-          {/* Abstract map texture */}
-          <div className="absolute inset-0 bg-map-pattern mix-blend-overlay" />
-          
-          {/* Cinematic Spotlights */}
-          <div className="absolute -top-[10%] left-[20%] w-[50%] h-[50%] rounded-full bg-[#BFA256]/10 blur-[180px]" />
-          <div className="absolute top-[20%] right-[10%] w-[40%] h-[60%] rounded-full bg-[#081C16] blur-[150px]" />
-          <div className="absolute bottom-[-20%] left-[30%] w-[40%] h-[50%] rounded-full bg-emerald-900/20 blur-[150px]" />
-          
-          {/* Light Rays */}
-          <div className="absolute -top-[30%] left-[10%] w-[100%] h-[30%] bg-white/[0.01] blur-[80px] rotate-[35deg] transform origin-top-left" />
-          
-          {/* Floating Particles */}
-          <div className="absolute top-[20%] left-[15%] w-2 h-2 rounded-full bg-[#BFA256]/40 blur-[1px] animate-particle-1" />
-          <div className="absolute top-[60%] left-[5%] w-3 h-3 rounded-full bg-emerald-500/30 blur-[2px] animate-particle-2" />
-          <div className="absolute top-[30%] right-[20%] w-1.5 h-1.5 rounded-full bg-white/30 blur-[1px] animate-particle-3" />
-          <div className="absolute bottom-[20%] right-[10%] w-2 h-2 rounded-full bg-[#BFA256]/20 blur-[1px] animate-particle-1" style={{ animationDelay: '2s' }} />
-        </div>
-
-        <div className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-16 relative z-10 w-full">
-          <div className="grid lg:grid-cols-2 gap-20 lg:gap-16 items-center">
-            
-            {/* LEFT TYPOGRAPHY */}
-            <motion.div 
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} // smooth apple-like ease
-              className="max-w-2xl"
+          {/* Mobile Collapsible Nav */}
+          {mobileMenuOpen && (
+            <nav
+              aria-label="Mobile navigation"
+              className="space-y-1 border-t border-white/10 px-4 py-3 lg:hidden"
             >
-              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/[0.02] border border-white/5 text-[#BFA256] text-[0.7rem] font-bold uppercase tracking-[0.2em] mb-10 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#BFA256] animate-pulse" />
-                Trusted Performance Management Platform
-              </div>
-              
-              <h1 className="text-4xl sm:text-6xl lg:text-[5rem] font-bold tracking-[-0.03em] text-white mb-6 sm:mb-8 leading-[1.08] sm:leading-[1.05]">
-                Elevating Performance. <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#8C7335]">
-                  Expanding Horizons.
-                </span>
-              </h1>
-              
-              <p className="text-base sm:text-xl text-[#9AA8A2] mb-8 sm:mb-12 leading-[1.7] sm:leading-[1.8] font-medium max-w-lg tracking-wide">
-                Partner with Apex Multisolutions for transparent commission management, actionable analytics, and the institutional infrastructure required to scale your business network.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mb-10 sm:mb-16">
-                <Link 
-                  to="/login" 
-                  className="group relative inline-flex justify-center items-center gap-3 bg-gradient-to-r from-[#E6C97A] to-[#BFA256] text-[#04120E] px-8 sm:px-10 py-3.5 sm:py-4.5 rounded-2xl font-bold text-base sm:text-lg transition-all duration-500 hover:-translate-y-1 shadow-[0_10px_30px_rgba(191,162,86,0.15)]"
+              {NAV_LINKS.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  onClick={() => scrollTo(link.id)}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#D6DFDB] hover:bg-white/[0.05] hover:text-white"
                 >
-                  <span className="relative z-10">Access Portal</span>
-                  <IChevron size={20} className="relative z-10 ml-1 transition-transform duration-300 group-hover:translate-x-1" />
-                  <div className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </Link>
-                <button 
-                  onClick={() => scrollTo('contact')}
-                  className="inline-flex justify-center items-center gap-2 bg-white/[0.02] backdrop-blur-md border border-white/10 text-white px-8 sm:px-10 py-3.5 sm:py-4.5 rounded-2xl font-bold text-base sm:text-lg transition-all duration-500 hover:bg-white/[0.05] hover:border-white/20"
-                >
-                  Contact Sales
+                  <span>{link.name}</span>
+                  <IChevron size={15} className="text-[#BFA256]" />
                 </button>
-              </div>
-
-              {/* Minimal Trust Indicators */}
-              <div className="flex flex-wrap items-center gap-4 sm:gap-8 border-t border-white/5 pt-6 sm:pt-8">
-                <div className="flex flex-col">
-                  <span className="text-white font-bold text-xl sm:text-2xl">99.9%</span>
-                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Uptime SLA</span>
-                </div>
-                <div className="hidden sm:block w-px h-10 bg-white/5" />
-                <div className="flex flex-col">
-                  <span className="text-white font-bold text-xl sm:text-2xl">SOC 2</span>
-                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Certified</span>
-                </div>
-                <div className="hidden sm:block w-px h-10 bg-white/5" />
-                <div className="flex flex-col">
-                  <span className="text-white font-bold text-xl sm:text-2xl">256-bit</span>
-                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Encryption</span>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* RIGHT: HIGH-FIDELITY SaaS DASHBOARD MOCKUP */}
-            <motion.div 
-              initial={{ opacity: 0, x: 50, rotateY: -10 }}
-              animate={{ opacity: 1, x: 0, rotateY: 0 }}
-              transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="relative hidden lg:block perspective-1000 w-full h-[700px] mt-10"
-            >
-              <div className="rotate-dashboard transition-transform duration-1000 hover:rotate-dashboard-hover relative w-[130%] -ml-[15%] h-full">
-                
-                {/* Dashboard Frame Container */}
-                <div className="absolute inset-0 bg-[#081C16]/80 backdrop-blur-3xl rounded-[2rem] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.8),inset_0_0_0_1px_rgba(255,255,255,0.05)] flex overflow-hidden">
-                  
-                  {/* SIDEBAR */}
-                  <div className="w-64 bg-black/20 border-r border-white/5 p-6 flex flex-col gap-8">
-                    {/* Fake Logo */}
-                    <div className="flex items-center gap-3 px-2">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#E6C97A] to-[#8C7335] p-[1px]">
-                        <div className="w-full h-full bg-[#04120E] rounded-md" />
-                      </div>
-                      <div className="h-4 w-24 bg-white/20 rounded-md" />
-                    </div>
-
-                    {/* Nav Items */}
-                    <div className="flex flex-col gap-2">
-                      <div className="h-10 rounded-xl bg-white/10 border border-white/5 flex items-center px-4 gap-4 shadow-inner">
-                        <div className="w-4 h-4 rounded-md bg-[#BFA256]" />
-                        <div className="h-2.5 w-20 bg-white/80 rounded-md" />
-                      </div>
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="h-10 rounded-xl flex items-center px-4 gap-4 hover:bg-white/5 transition-colors">
-                          <div className="w-4 h-4 rounded-md bg-white/20" />
-                          <div className="h-2 w-24 bg-white/30 rounded-md" />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Profile */}
-                    <div className="mt-auto h-16 rounded-2xl bg-white/5 border border-white/5 p-3 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#BFA256] to-emerald-700 p-[2px]">
-                        <div className="w-full h-full rounded-full bg-[#081C16] border-2 border-[#081C16]" />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="h-2 w-20 bg-white/80 rounded-md" />
-                        <div className="h-1.5 w-12 bg-white/30 rounded-md" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* MAIN CONTENT AREA */}
-                  <div className="flex-1 p-8 flex flex-col gap-8 overflow-hidden bg-gradient-to-br from-transparent to-black/10">
-                    
-                    {/* Top Bar */}
-                    <div className="flex justify-between items-center">
-                      <div className="h-8 w-48 bg-white/10 rounded-lg" />
-                      <div className="flex gap-4">
-                        <div className="h-10 w-64 bg-black/20 border border-white/5 rounded-xl flex items-center px-4 gap-3">
-                          <ISearch size={16} className="text-white/30" />
-                          <div className="h-2 w-20 bg-white/20 rounded-md" />
-                        </div>
-                        <div className="h-10 w-10 bg-white/5 border border-white/5 rounded-xl flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-[#BFA256] absolute top-2 right-2" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-3 gap-6">
-                      {[
-                        { trend: '+12.5%', color: 'text-emerald-400' },
-                        { trend: '+4.2%', color: 'text-emerald-400' },
-                        { trend: '-1.8%', color: 'text-red-400' }
-                      ].map((kpi, i) => (
-                        <div key={i} className="bg-white/5 border border-white/5 p-6 rounded-3xl relative overflow-hidden backdrop-blur-md">
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="h-2.5 w-24 bg-white/30 rounded-md" />
-                            <div className={`text-[10px] font-bold px-2 py-1 rounded-md bg-black/30 ${kpi.color}`}>
-                              {kpi.trend}
-                            </div>
-                          </div>
-                          <div className="h-8 w-32 bg-white/90 rounded-lg mb-2" />
-                          <div className="h-2 w-16 bg-white/20 rounded-md" />
-                          
-                          {/* Subtle background glow per card */}
-                          {i === 0 && <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-[#BFA256]/10 rounded-full blur-2xl" />}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Charts & Graphs Row */}
-                    <div className="flex gap-6 h-64">
-                      {/* Main Chart */}
-                      <div className="flex-[2] bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col justify-between">
-                        <div className="flex justify-between">
-                          <div className="h-3 w-32 bg-white/40 rounded-md" />
-                          <div className="h-6 w-20 bg-white/10 rounded-lg" />
-                        </div>
-                        <div className="flex items-end gap-3 h-32 mt-6">
-                          {[30, 45, 20, 60, 80, 50, 95, 75, 40, 85].map((h, i) => (
-                            <div key={i} className="flex-1 rounded-t-sm bg-gradient-to-t from-[#BFA256]/20 to-[#BFA256]" style={{ height: `${h}%` }} />
-                          ))}
-                        </div>
-                        <div className="flex justify-between mt-4 px-2">
-                          {[...Array(10)].map((_, i) => (
-                            <div key={i} className="h-1.5 w-4 bg-white/20 rounded-sm" />
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Side Widget */}
-                      <div className="flex-1 bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col">
-                        <div className="h-3 w-24 bg-white/40 rounded-md mb-8" />
-                        <div className="relative w-32 h-32 mx-auto">
-                          <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
-                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#BFA256" strokeWidth="3" strokeDasharray="75, 100" />
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <div className="h-4 w-12 bg-white/90 rounded-md mb-1" />
-                            <div className="h-1.5 w-6 bg-white/30 rounded-sm" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Data Table */}
-                    <div className="flex-1 bg-white/5 border border-white/5 p-6 rounded-3xl flex flex-col">
-                      <div className="h-3 w-32 bg-white/40 rounded-md mb-6" />
-                      
-                      <div className="flex justify-between border-b border-white/5 pb-3 mb-3">
-                        <div className="h-2 w-16 bg-white/20 rounded-md" />
-                        <div className="h-2 w-16 bg-white/20 rounded-md" />
-                        <div className="h-2 w-16 bg-white/20 rounded-md" />
-                        <div className="h-2 w-16 bg-white/20 rounded-md" />
-                      </div>
-
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex justify-between items-center py-3 border-b border-white/5 last:border-0">
-                          <div className="flex items-center gap-4 w-1/4">
-                            <div className="w-8 h-8 rounded-full bg-white/10" />
-                            <div className="flex flex-col gap-1.5">
-                              <div className="h-2 w-20 bg-white/80 rounded-md" />
-                              <div className="h-1.5 w-12 bg-white/30 rounded-md" />
-                            </div>
-                          </div>
-                          <div className="w-1/4 flex justify-center">
-                            <div className="h-2 w-16 bg-white/60 rounded-md" />
-                          </div>
-                          <div className="w-1/4 flex justify-center">
-                            <div className={`h-5 w-16 rounded-full flex items-center justify-center bg-white/5 border border-white/10`}>
-                              <div className="h-1 w-8 bg-[#BFA256] rounded-full" />
-                            </div>
-                          </div>
-                          <div className="w-1/4 flex justify-end">
-                            <div className="h-2 w-16 bg-white/90 rounded-md" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* Floating Notification Glass */}
-                <motion.div 
-                  animate={{ y: [0, -15, 0] }}
-                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute -right-12 top-20 bg-[#081C16]/90 backdrop-blur-2xl p-4 rounded-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)] flex items-center gap-4 z-20"
+              ))}
+              <div className="pt-2">
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#E6C97A] to-[#BFA256] px-4 py-3 text-sm font-bold text-[#04120E]"
                 >
-                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-inner">
-                    <IShield size={20} className="text-white" />
+                  Login to Your Dashboard
+                </Link>
+              </div>
+            </nav>
+          )}
+        </div>
+      </header>
+
+      <main>
+        {/* ── 1. HERO SECTION ───────────────────────────────────────────── */}
+        <section
+          id="home"
+          className="relative overflow-hidden bg-[#04120E] pt-28 pb-16 sm:pt-32 sm:pb-24 lg:pt-36 lg:pb-28"
+        >
+          {/* Architectural Background Grid & Radial Accent */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 18% 15%, rgba(191, 162, 86, 0.14), transparent 42%), radial-gradient(circle at 82% 30%, rgba(29, 70, 52, 0.35), transparent 48%)',
+            }}
+          />
+
+          <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+            <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-10">
+              {/* Left Narrative Column */}
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, ease: 'easeOut' }}
+                className="lg:col-span-5"
+              >
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#BFA256]/30 bg-[#BFA256]/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#E6C97A]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#E6C97A]" />
+                  Agency &amp; Financial Network Operations
+                </div>
+
+                <h1 className="mt-5 font-serif text-3xl font-bold leading-[1.12] tracking-tight text-white sm:text-5xl lg:text-[3.35rem]">
+                  Your Entire Business Network.{' '}
+                  <span className="text-[#E6C97A]">One Intelligent Platform.</span>
+                </h1>
+
+                <p className="mt-5 max-w-xl text-base leading-relaxed text-[#A6B5AF] sm:text-lg">
+                  Manage agents, 18-level sponsor hierarchies, RD/FD/Pension policy lifecycles, reconciled commission ledgers, monthly MFA targets, and branch reporting from one centralized operations portal.
+                </p>
+
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => scrollTo('capabilities')}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#E6C97A] to-[#BFA256] px-6 py-3.5 text-sm font-bold text-[#04120E] shadow-lg transition-transform hover:-translate-y-0.5"
+                  >
+                    Explore the Platform
+                    <IChevron size={17} />
+                  </button>
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-6 py-3.5 text-sm font-bold text-white transition-colors hover:border-[#BFA256]/50 hover:bg-white/[0.08]"
+                  >
+                    Login to Your Dashboard
+                  </Link>
+                </div>
+
+                {/* Factual System Architecture Highlights */}
+                <div className="mt-10 grid grid-cols-3 gap-3 border-t border-white/10 pt-6">
+                  <div>
+                    <p className="font-serif text-lg font-bold text-white sm:text-xl">18 Ranks</p>
+                    <p className="mt-0.5 text-[11px] text-[#9AA8A2]">AO through MGD hierarchy</p>
                   </div>
                   <div>
-                    <div className="h-1.5 w-16 bg-white/40 rounded-sm mb-2" />
-                    <div className="h-2.5 w-24 bg-white rounded-md" />
+                    <p className="font-serif text-lg font-bold text-white sm:text-xl">3 Portfolios</p>
+                    <p className="mt-0.5 text-[11px] text-[#9AA8A2]">RD, FD &amp; Pension tracking</p>
                   </div>
-                </motion.div>
-
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION DIVIDER: Soft Gradient & Blur */}
-      <div className="relative h-48 bg-gradient-to-b from-[#04120E] via-[#04120E] to-white z-20">
-        <div className="absolute inset-0 bg-[#04120E] [mask-image:linear-gradient(to_bottom,black,transparent)]" />
-      </div>
-
-      {/* SECOND SECTION: The "White" Section */}
-      <section id="why-us" className="relative bg-white pt-10 pb-20 sm:pb-40">
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
-          <motion.div 
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-14 sm:mb-24 md:mb-32 max-w-4xl"
-          >
-            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-4 sm:mb-6">Why Choose Apex</h2>
-            <h3 className="text-3xl sm:text-5xl md:text-6xl font-bold text-[#04120E] leading-[1.15] sm:leading-[1.1] tracking-tight">
-              A transparent ecosystem designed for <span className="text-[#8C7335]">sustainable</span> network growth.
-            </h3>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10 lg:gap-12">
-            {[
-              { title: 'Secure & Reliable', icon: IShield, desc: 'Bank-level encryption protecting your personal data, network hierarchy, and financial earnings with zero compromise.' },
-              { title: 'Transparent Operations', icon: IReport, desc: 'Every policy, commission, and payout is completely traceable and clearly reported in real-time.' },
-              { title: 'Growth Opportunities', icon: INetwork, desc: 'A structured promotion system designed to intelligently reward your hard work and consistent network expansion.' },
-              { title: 'Fast Payouts', icon: IAlert, desc: 'Automated processing ensures your commissions and allowances are calculated accurately and distributed on time.' },
-              { title: 'Dedicated Support', icon: IUsers, desc: 'Professional management support ready to help you navigate the platform and maximize your earning potential.' },
-              { title: 'Performance Driven', icon: ITrophy, desc: 'Clear metrics, intuitive dashboards, and actionable insights to help you track business volume and achieve leadership ranks.' },
-            ].map((feature, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.8, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
-                className="bg-white p-10 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] hover:-translate-y-2 transition-all duration-500 group"
-              >
-                <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-8 border border-gray-100 group-hover:bg-[#04120E] transition-colors duration-500 shadow-sm">
-                  <feature.icon className="text-[#081C16] group-hover:text-[#BFA256] transition-colors duration-500" size={28} />
+                  <div>
+                    <p className="font-serif text-lg font-bold text-[#E6C97A] sm:text-xl">MFA + Bills</p>
+                    <p className="mt-0.5 text-[11px] text-[#9AA8A2]">Targets &amp; commission audit</p>
+                  </div>
                 </div>
-                <h4 className="font-bold text-[#04120E] text-2xl mb-4 tracking-tight">{feature.title}</h4>
-                <p className="text-gray-500 text-lg leading-relaxed font-medium">{feature.desc}</p>
               </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* TRANSITION BACK TO DARK */}
-      <div className="w-full h-40 bg-gradient-to-b from-white to-[#04120E]" />
-
-      {/* SERVICES SECTION */}
-      <section id="services" className="py-16 sm:py-32 bg-[#04120E] relative overflow-hidden">
-        
-        {/* Subtle background glow */}
-        <div className="absolute top-0 right-0 w-[50%] h-[50%] bg-[#BFA256]/5 blur-[200px] pointer-events-none" />
-
-        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 relative z-10">
-          <motion.div 
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-12 sm:mb-24"
-          >
-            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-4 sm:mb-6">Infrastructure</h2>
-            <h3 className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-tight max-w-2xl">
-              Professional tools designed for network leaders.
-            </h3>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-6 lg:gap-8">
-            {[
-              'Network & Hierarchy Management',
-              'Real-time Performance Dashboard',
-              'Automated Commission Tracking',
-              'Detailed Earnings Reports',
-              'Rank & Promotion Pathways',
-              'Secure Document Management'
-            ].map((service, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
-                className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-3xl border border-white/5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 flex items-center gap-6 group"
+              {/* Right Interactive Software Preview */}
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.65, delay: 0.1, ease: 'easeOut' }}
+                className="lg:col-span-7"
               >
-                <div className="w-1.5 h-10 bg-gradient-to-b from-[#E6C97A] to-[#8C7335] rounded-full scale-y-50 group-hover:scale-y-100 transition-transform duration-500 origin-top" />
-                <h4 className="font-bold text-white text-xl tracking-tight">{service}</h4>
+                <HeroPlatformPreview />
               </motion.div>
-            ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* FOOTER */}
-      <footer className="bg-[#04120E] pt-32 pb-12 border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16">
-          <div className="grid md:grid-cols-12 gap-12 lg:gap-16 mb-24">
-            <div className="col-span-12 md:col-span-5">
-              <div className="mb-8 flex items-center gap-4">
-                <Logo size={40} showText={false} />
-                <span className="text-white font-extrabold text-2xl tracking-tight">Apex</span>
+        {/* ── 2. ABOUT THE PLATFORM ────────────────────────────────────── */}
+        <section id="about" className="bg-[#FAF8F5] py-20 text-[#16221F] sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+            <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12">
+              <div className="space-y-5 lg:col-span-6">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8D7952]">
+                  About Apex Multisolutions
+                </p>
+                <h2 className="font-serif text-3xl font-bold tracking-tight text-[#132E22] sm:text-4xl lg:text-5xl">
+                  Built to Manage Growth. Designed to Simplify Operations.
+                </h2>
+                <p className="text-base leading-relaxed text-[#4E5F5A] sm:text-lg">
+                  Growing field-agent networks often struggle with disconnected spreadsheets, manual commission reconciliations, and unclear target progress. Apex Multisolutions replaces fragmented workflows with a unified system of record for both executives and field advisors.
+                </p>
+                <p className="text-sm leading-relaxed text-[#5F716B] sm:text-base">
+                  Branch administrators maintain structured customer CIF folders, onboard multi-year policies, and audit payouts across every sponsor tier — while individual agents log in to see their real-time team volume, earnings statements, and monthly incentive standing.
+                </p>
               </div>
-              <p className="text-[#9AA8A2] text-lg max-w-sm leading-[1.8] font-medium">
-                Providing network leaders and partners with robust performance tracking, secure operations, and a clear foundation for financial success.
+
+              <div className="lg:col-span-6">
+                <div className="rounded-2xl border border-[#EBE6DC] bg-white p-5 shadow-sm sm:p-7">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8D7952]">
+                    End-to-End Operational Flow
+                  </p>
+                  <div className="mt-5 space-y-3">
+                    {[
+                      {
+                        step: '01',
+                        title: 'Customer CIF & Policy Enrollment',
+                        desc: 'Onboard KYC profiles and start RD (1Y–5Y), FD (1Y–5Y), or Pension plans manually or via validated Excel imports.',
+                      },
+                      {
+                        step: '02',
+                        title: 'Sponsor Chain & Commission Allocation',
+                        desc: 'Credit direct sellers and eligible upline sponsors per policy year and installment in a reconciled commission ledger.',
+                      },
+                      {
+                        step: '03',
+                        title: 'Monthly MFA & Target Monitoring',
+                        desc: 'Apply 25% / 50% / 100% duration rules cleanly each calendar month across Ranks 1–10 without carry-forward ambiguity.',
+                      },
+                      {
+                        step: '04',
+                        title: 'Payout Bills & Executive Reporting',
+                        desc: 'Generate monthly payout bills (TDS 5% + Admin 5%), analyze collections, and export multi-sheet workbooks.',
+                      },
+                    ].map((flow) => (
+                      <div
+                        key={flow.step}
+                        className="flex items-start gap-4 rounded-xl border border-[#EBE6DC] bg-[#FAF8F5] p-3.5"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#132E22] font-mono text-xs font-bold text-[#E6C97A]">
+                          {flow.step}
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-bold text-[#132E22]">{flow.title}</h3>
+                          <p className="mt-0.5 text-xs leading-relaxed text-[#5F716B]">
+                            {flow.desc}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 3. PLATFORM CAPABILITIES (INTERACTIVE EXPLORER) ──────────── */}
+        <PlatformCapabilitiesSection />
+
+        {/* ── 4. ORGANIZATIONAL STRUCTURE (REAL 18-RANK HIERARCHY) ─────── */}
+        <OrganizationalStructureSection />
+
+        {/* ── 5. COMMISSION VISIBILITY ───────────────────────────────────── */}
+        <CommissionVisibilitySection />
+
+        {/* ── 6. PERFORMANCE & MFA TARGET TRACKING ─────────────────────── */}
+        <PerformanceTargetsSection />
+
+        {/* ── 7. WHY ORGANIZATIONS USE APEX ────────────────────────────── */}
+        <section id="why-apex" className="bg-white py-20 text-[#16221F] sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8D7952]">
+                Why Organizations Choose Apex
+              </p>
+              <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight text-[#132E22] sm:text-4xl">
+                Practical discipline across every operational layer.
+              </h2>
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {WHY_APEX.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.title}
+                    className="rounded-2xl border border-[#EBE6DC] bg-[#FAF8F5] p-6 transition-colors hover:border-[#8D7952]/60"
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#132E22] text-[#E6C97A]">
+                      <Icon size={20} />
+                    </span>
+                    <h3 className="mt-4 font-serif text-xl font-bold text-[#132E22]">
+                      {item.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#546560]">{item.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ── 8. UNIFIED PLATFORM EXPERIENCE ───────────────────────────── */}
+        <section id="experience" className="bg-[#F4EFEA] py-20 text-[#16221F] sm:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+            <div className="rounded-3xl border border-[#E2DACB] bg-white p-6 shadow-sm sm:p-10">
+              <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
+                <div className="space-y-4 lg:col-span-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8D7952]">
+                    Unified Operations Architecture
+                  </p>
+                  <h2 className="font-serif text-2xl font-bold tracking-tight text-[#132E22] sm:text-3xl lg:text-4xl">
+                    One connected platform for leadership and field teams.
+                  </h2>
+                  <p className="text-sm leading-relaxed text-[#546560] sm:text-base">
+                    Instead of reconciling policies, commissions, agent rosters, and incentives across separate tools, every module shares verified data inside a single permission-governed architecture.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-2 text-xs font-semibold text-[#132E22]">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#EBE6DC] bg-[#FAF8F5] px-3 py-1">
+                      <IUsers size={13} className="text-[#8D7952]" /> Super Admin Workspace
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#EBE6DC] bg-[#FAF8F5] px-3 py-1">
+                      <ICheck size={13} className="text-[#8D7952]" /> Field Agent Self-Service Portal
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-7 lg:grid-cols-3">
+                  {UNIFIED_NODES.map((node) => {
+                    const Icon = node.icon;
+                    return (
+                      <div
+                        key={node.label}
+                        className="rounded-xl border border-[#EBE6DC] bg-[#FAF8F5] p-4"
+                      >
+                        <div className="flex items-center gap-2 text-[#132E22]">
+                          <Icon size={17} className="shrink-0 text-[#8D7952]" />
+                          <span className="text-xs font-bold uppercase tracking-wide">
+                            {node.label}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-xs leading-relaxed text-[#667873]">
+                          {node.sub}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 9. FINAL CALL TO ACTION ──────────────────────────────────── */}
+        <section id="cta" className="bg-[#04120E] py-20 text-white sm:py-28">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#BFA256]">
+              Authorized Portal Access
+            </p>
+            <h2 className="mt-4 font-serif text-3xl font-bold tracking-tight text-white sm:text-5xl">
+              Bring Your Business Operations Together.
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-[#9AA8A2] sm:text-lg">
+              Sign in with your administrator credentials or assigned Agent ID to access policy records, commission ledgers, downline analytics, and monthly target dashboards.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                to="/login"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#E6C97A] to-[#BFA256] px-8 py-4 text-sm font-bold uppercase tracking-wider text-[#04120E] shadow-xl transition-transform hover:-translate-y-0.5 sm:w-auto"
+              >
+                Access Your Dashboard
+                <IChevron size={17} />
+              </Link>
+              <button
+                type="button"
+                onClick={() => scrollTo('home')}
+                className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-6 py-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] sm:w-auto"
+              >
+                Back to Top
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ── 10. ENTERPRISE FOOTER ─────────────────────────────────────── */}
+      <footer className="border-t border-white/10 bg-[#030D0A] py-12 text-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-12">
+            <div className="md:col-span-5">
+              <div className="flex items-center gap-3">
+                <Logo size={36} showText={false} />
+                <div>
+                  <span className="block font-serif text-lg font-bold text-white">
+                    Apex Multisolutions
+                  </span>
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#BFA256]">
+                    Performance &amp; Reward Operations
+                  </span>
+                </div>
+              </div>
+              <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#9AA8A2]">
+                A centralized platform for managing field-agent hierarchies, RD/FD/Pension policy lifecycles, commission visibility, and monthly target tracking.
               </p>
             </div>
-            
-            <div className="col-span-6 md:col-span-3 md:col-start-7">
-              <h5 className="text-white font-bold mb-6 uppercase tracking-[0.15em] text-xs">Platform</h5>
-              <ul className="space-y-4">
-                <li><button onClick={() => scrollTo('home')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Home</button></li>
-                <li><button onClick={() => scrollTo('why-us')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Solutions</button></li>
-                <li><button onClick={() => scrollTo('services')} className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Infrastructure</button></li>
-              </ul>
-            </div>
 
-            <div className="col-span-6 md:col-span-3">
-              <h5 className="text-white font-bold mb-6 uppercase tracking-[0.15em] text-xs">Resources</h5>
-              <ul className="space-y-4">
-                <li><Link to="/login" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Sign In</Link></li>
-                <li><a href="#" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="text-[#9AA8A2] hover:text-white text-sm font-medium transition-colors">Terms of Service</a></li>
-              </ul>
+            <div className="grid grid-cols-2 gap-8 md:col-span-7 md:grid-cols-2">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-white">
+                  Platform Sections
+                </h3>
+                <ul className="mt-3.5 space-y-2.5 text-sm text-[#9AA8A2]">
+                  <li>
+                    <button type="button" onClick={() => scrollTo('about')} className="hover:text-white">
+                      About Platform
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('capabilities')} className="hover:text-white">
+                      Capabilities
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('hierarchy')} className="hover:text-white">
+                      18-Rank Hierarchy
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('commissions')} className="hover:text-white">
+                      Commission Visibility
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('performance')} className="hover:text-white">
+                      Targets &amp; MFA
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-white">
+                  System Access
+                </h3>
+                <ul className="mt-3.5 space-y-2.5 text-sm text-[#9AA8A2]">
+                  <li>
+                    <Link to="/login" className="font-semibold text-[#E6C97A] hover:underline">
+                      Login to Your Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('why-apex')} className="hover:text-white">
+                      Why Apex
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" onClick={() => scrollTo('experience')} className="hover:text-white">
+                      Unified Architecture
+                    </button>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
-          
-          <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-6">
-            <p className="text-[#9AA8A2] text-sm font-medium tracking-wide">
-              &copy; {new Date().getFullYear()} Apex Multisolutions. All rights reserved.
-            </p>
-            <p className="text-[#9AA8A2] text-sm font-medium tracking-wide">
-              Designed & Developed by <a href="https://fyndevs.com" target="_blank" rel="noopener noreferrer" className="text-white hover:text-[#BFA256] transition-colors font-semibold">Fyndevs</a>
-            </p>
+
+          <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-center text-xs text-[#7D8F89] sm:flex-row sm:text-left">
+            <p>&copy; {new Date().getFullYear()} Apex Multisolutions. All rights reserved.</p>
+            <p>Internal Role-Governed Operations Portal</p>
           </div>
         </div>
       </footer>
     </div>
   );
-};
-
-export default Landing;
+}
