@@ -337,14 +337,14 @@ _Welcome to the Apex Family!_`
     }
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-1/80 backdrop-blur-sm animate-fade-in">
-        <div className="card relative z-10 w-full max-w-md p-6 border border-navy-4 space-y-4 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-navy-4/50 pb-3">
-            <h3 className="text-lg font-bold text-ink-1 flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-bold">✓</span>
+      <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 bg-navy-1/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+        <div className="card relative z-10 w-full max-w-md p-4 sm:p-6 border border-navy-4 space-y-4 shadow-2xl my-auto max-h-[92dvh] overflow-y-auto">
+          <div className="flex items-center justify-between gap-2 border-b border-navy-4/50 pb-3">
+            <h3 className="text-base sm:text-lg font-bold text-ink-1 flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-sm font-bold">✓</span>
               Agent Onboarded Successfully
             </h3>
-            <button type="button" onClick={handleFinish} className="text-ink-2 hover:text-ink-1">
+            <button type="button" onClick={handleFinish} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-ink-2 hover:text-ink-1">
               ✕
             </button>
           </div>
@@ -358,7 +358,7 @@ _Welcome to the Apex Family!_`
               <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Agent Name</span>
               <span className="text-ink-1 font-semibold text-sm">{createdAgent.name}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-navy-4/40">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-navy-4/40">
               <div>
                 <span className="block text-[10px] text-ink-2 font-mono uppercase tracking-wider">Agent ID (Login Code)</span>
                 <span className="text-gold font-bold font-mono text-sm">{createdAgent.sponsorCode}</span>
@@ -393,7 +393,7 @@ _Welcome to the Apex Family!_`
               <span>Send Credentials on WhatsApp</span>
             </button>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
                 onClick={handleCopy}
@@ -433,8 +433,8 @@ _Welcome to the Apex Family!_`
             <input type="text" name="chrome-username-dummy" tabIndex="-1" />
             <input type="password" name="chrome-password-dummy" tabIndex="-1" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="sm:col-span-2">
               <label className="label">Full name</label>
               <input className="field" autoComplete="off" {...register('name')} />
               {errors.name && <p className="err">{errors.name.message}</p>}
@@ -470,8 +470,8 @@ _Welcome to the Apex Family!_`
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="sm:col-span-2">
               <label className="label">Address</label>
               <textarea className="field h-12 resize-none" autoComplete="off" {...register('address')} />
               {errors.address && <p className="err">{errors.address.message}</p>}
@@ -573,24 +573,24 @@ _Welcome to the Apex Family!_`
 
   // Editing a member: render the large tabbed Master-Detail modal
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/85 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="card relative z-10 w-full max-w-3xl bg-navy-3 border border-navy-4 p-6 shadow-xl max-h-[92vh] overflow-y-auto flex flex-col space-y-4">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-navy-1/85 p-2.5 sm:p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="card relative z-10 w-full max-w-3xl bg-navy-3 border border-navy-4 p-4 sm:p-6 shadow-xl my-auto max-h-[92dvh] overflow-y-auto flex flex-col space-y-4">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-navy-4 pb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-serif text-xl font-bold text-ink-1 tracking-tight">{m?.name}</h3>
+        <div className="flex items-start justify-between gap-2 border-b border-navy-4 pb-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-serif text-lg sm:text-xl font-bold text-ink-1 tracking-tight truncate">{m?.name}</h3>
               <RankBadge rank={m?.rank} size="sm" />
             </div>
             <p className="text-xs text-ink-2 mt-0.5">Agent Details & Performance Profiling</p>
           </div>
-          <button type="button" onClick={onClose} className="text-ink-2 hover:text-ink-1">
+          <button type="button" onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-ink-2 hover:text-ink-1">
             <IClose size={19} />
           </button>
         </div>
 
         {/* Tab Selection */}
-        <div className="flex gap-1.5 border-b border-navy-4/50 pb-2">
+        <div className="flex gap-1.5 border-b border-navy-4/50 pb-2 overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             onClick={() => setActiveTab('performance')}
@@ -838,16 +838,16 @@ _Welcome to the Apex Family!_`
                 <input type="password" name="chrome-password-dummy" tabIndex="-1" />
               </div>
               <div><label className="label">Full name</label><input className="field" {...register('name')} />{errors.name && <p className="err">{errors.name.message}</p>}</div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="label">Email</label><input className="field bg-navy-2/60 text-ink-2" type="email" disabled {...register('email')} />{errors.email && <p className="err">{errors.email.message}</p>}</div>
                 <div><label className="label">Phone</label><input className="field" maxLength={10} {...register('phone')} />{errors.phone && <p className="err">{errors.phone.message}</p>}</div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="label">Date of Birth</label><input className="field" type="date" {...register('dob')} />{errors.dob && <p className="err">{errors.dob.message}</p>}</div>
                 <div><label className="label">PAN Number</label><input className="field font-mono uppercase" maxLength={10} placeholder="ABCDE1234F" {...register('panNumber')} />{errors.panNumber && <p className="err">{errors.panNumber.message}</p>}</div>
               </div>
               <div><label className="label">Address</label><textarea className="field h-16 resize-none" {...register('address')} />{errors.address && <p className="err">{errors.address.message}</p>}</div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">Rank</label>
                   <select
@@ -890,7 +890,7 @@ _Welcome to the Apex Family!_`
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="label">Agent Code (Sponsor Code)</label><input className="field font-mono" disabled {...register('sponsorCode')} /></div>
                 <div>
                   <label className="label">Status</label>
@@ -911,8 +911,8 @@ _Welcome to the Apex Family!_`
         </div>
 
         {/* Footer Actions */}
-        <div className="flex justify-end gap-2 pt-3 border-t border-navy-4/50">
-          <button type="button" onClick={onClose} className="btn-ghost">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-navy-4/50">
+          <button type="button" onClick={onClose} className="btn-ghost w-full sm:w-auto justify-center">
             Close
           </button>
           {activeTab === 'edit' && isSuperAdmin && (
@@ -920,7 +920,7 @@ _Welcome to the Apex Family!_`
               type="submit"
               form="edit-member-form"
               disabled={saving || cannotRecruit || !selectedSponsor}
-              className="btn-gold px-6"
+              className="btn-gold px-6 w-full sm:w-auto justify-center"
             >
               {saving ? 'Saving...' : 'Save Settings'}
             </button>

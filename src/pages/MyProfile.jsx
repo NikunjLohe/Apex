@@ -155,7 +155,7 @@ export default function MyProfile() {
         </div>
 
         <div className="flex justify-end">
-          <button type="submit" disabled={submitting} className="btn-gold py-2.5 px-6 min-w-[150px] shadow-sm disabled:opacity-50 font-bold text-sm">
+          <button type="submit" disabled={submitting} className="btn-gold py-2.5 px-6 w-full sm:w-auto sm:min-w-[150px] shadow-sm disabled:opacity-50 font-bold text-sm justify-center">
             {submitting ? 'Saving...' : 'Save Profile'}
           </button>
         </div>

@@ -144,22 +144,22 @@ function SuperAdminDashboard() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-navy-4/50">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 py-2 border-b border-navy-4/50">
+        <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wider text-ink-2">Branch Operations Portal Summary</p>
-          <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-ink-1 mt-0.5 tracking-tight">{profile?.name || 'Super Admin'}</h2>
+          <h2 className="font-serif text-xl sm:text-3xl font-extrabold text-ink-1 mt-0.5 tracking-tight truncate">{profile?.name || 'Super Admin'}</h2>
         </div>
-        <div className="flex gap-2.5">
-          <Link to="/admin/import" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><IDoc size={14} /> Import Center</Link>
-          <Link to="/admin/mfa" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><IShield size={14} /> MFA Management</Link>
-          <Link to="/admin/payouts" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-4 flex items-center gap-1.5"><ICash size={14} /> Payouts Engine</Link>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Link to="/admin/import" className="btn-gold py-2 text-xs uppercase font-bold tracking-wider px-3.5 sm:px-4 flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"><IDoc size={14} /> Import Center</Link>
+          <Link to="/admin/mfa" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3.5 sm:px-4 flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"><IShield size={14} /> MFA Management</Link>
+          <Link to="/admin/payouts" className="btn-ghost border border-navy-4 hover:border-gold-1/30 py-2 text-xs uppercase font-bold tracking-wider px-3.5 sm:px-4 flex items-center justify-center gap-1.5 w-full sm:w-auto"><ICash size={14} /> Payouts Engine</Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <Link to={c.link} className={`card p-5 relative overflow-hidden flex flex-col justify-between h-36 cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all block ${c.borderLeftClass}`}>
+            <Link to={c.link} className={`card p-4 sm:p-5 relative overflow-hidden flex flex-col justify-between min-h-[8.5rem] cursor-pointer hover:bg-navy-2/30 hover:border-gold-1/30 hover:scale-[1.01] transition-all block ${c.borderLeftClass}`}>
               <div>
                 <div className="flex items-center justify-between">
                   <span className={`flex h-9 w-9 items-center justify-center rounded-[8px] border ${c.iconBgClass}`}>{c.icon}</span>
@@ -211,7 +211,7 @@ function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5 md:grid-cols-4">
         {[
           { type: 'active-agents',      label: 'Active Agents',       value: stats.activeAgents,        color: 'border-l-gold-1', link: '/admin/members?status=active' },
           { type: 'active-policies',    label: 'Active Policies',     value: stats.activePlans,         color: 'border-l-ok', link: '/admin/policies?status=active' },
@@ -581,12 +581,12 @@ function AgentDashboard() {
     <div className="mx-auto max-w-6xl space-y-6">
 
       {/* ── Welcome Section ────────────────────────────────────────── */}
-      <div className="card p-6 bg-navy-3 border border-navy-4 relative overflow-hidden">
+      <div className="card p-4 sm:p-6 bg-navy-3 border border-navy-4 relative overflow-hidden">
         <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gold-1/5 blur-2xl" />
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative">
-          <div className="space-y-1.5">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 relative">
+          <div className="space-y-1.5 min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="font-serif text-2xl md:text-3xl font-extrabold text-ink-1 tracking-tight">
+              <h2 className="font-serif text-xl sm:text-2xl md:text-3xl font-extrabold text-ink-1 tracking-tight">
                 {getGreeting()}, {profile?.name || 'Agent'} 👋
               </h2>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
@@ -627,7 +627,7 @@ function AgentDashboard() {
       </div>
 
       {/* ── Today's Summary Row ────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
           { label: 'Personal Business', value: formatINR(metrics.personalBusiness), color: 'border-t-gold-1', link: '/reports/collections' },
           { label: 'Team Business', value: formatINR(profile?.teamBusiness || profile?.stats?.teamBusiness || 0), color: 'border-t-emerald-500', link: '/my-downline' },
@@ -637,9 +637,9 @@ function AgentDashboard() {
           { label: 'Active Team Members', value: totalTeam.data?.length || 0, color: 'border-t-rose-500', link: '/my-downline?status=active' }
         ].map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-            <Link to={c.link} className={`card p-4 border-t-4 ${c.color} bg-navy-3 flex flex-col justify-between h-24 hover:bg-navy-2/50 transition-all block`}>
+            <Link to={c.link} className={`card p-3.5 sm:p-4 border-t-4 ${c.color} bg-navy-3 flex flex-col justify-between min-h-[5.5rem] hover:bg-navy-2/50 transition-all block`}>
               <span className="text-[9px] font-bold uppercase tracking-wider text-ink-2 block leading-snug">{c.label}</span>
-              <span className="text-lg font-bold font-serif text-ink-1 block mt-2">{c.value}</span>
+              <span className="text-base sm:text-lg font-bold font-serif text-ink-1 block mt-2 truncate">{c.value}</span>
             </Link>
           </motion.div>
         ))}
@@ -816,9 +816,9 @@ function AgentDashboard() {
         {(recentActivity || []).length > 0 ? (
           <div className="divide-y divide-navy-4">
             {recentActivity.map((act) => (
-              <div key={act.id} className="py-3 flex items-center justify-between text-xs hover:bg-navy-2/20 px-2 rounded transition-all">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+              <div key={act.id} className="py-3 flex flex-wrap items-center justify-between gap-2 text-xs hover:bg-navy-2/20 px-2 rounded transition-all">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-ink-1">{act.title}</span>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-navy-2 border border-navy-4 text-ink-2">
                       {act.badge}
@@ -826,7 +826,7 @@ function AgentDashboard() {
                   </div>
                   <p className="text-ink-2">{act.desc}</p>
                 </div>
-                <span className="text-[10px] text-ink-3 font-mono">{getRelativeTime(act.date)}</span>
+                <span className="text-[10px] text-ink-3 font-mono shrink-0">{getRelativeTime(act.date)}</span>
               </div>
             ))}
           </div>

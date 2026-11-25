@@ -58,18 +58,18 @@ export default function ChangeEmailModal({ targetUser, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-md p-6 space-y-4 border border-navy-4 shadow-2xl relative bg-navy-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+      <div className="card w-full max-w-md p-4 sm:p-6 space-y-4 border border-navy-4 shadow-2xl relative bg-navy-3 max-h-[92dvh] overflow-y-auto">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-navy-4 pb-3">
+        <div className="flex items-center justify-between gap-2 border-b border-navy-4 pb-3">
           <h3 className="text-base font-bold text-ink-1 flex items-center gap-2 font-serif">
-            <IMail size={20} className="text-gold-1" /> Change Email Address
+            <IMail size={20} className="text-gold-1 shrink-0" /> Change Email Address
           </h3>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-ink-2 hover:text-ink-1 transition-colors"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-ink-2 hover:text-ink-1 transition-colors"
           >
             <IClose size={18} />
           </button>
@@ -77,11 +77,11 @@ export default function ChangeEmailModal({ targetUser, onClose, onSuccess }) {
 
         {/* User context badge */}
         <div className="bg-navy-2/60 p-3 rounded-card text-xs space-y-1 font-mono text-ink-2 border border-navy-4">
-          <div className="flex justify-between">
+          <div className="flex flex-wrap justify-between gap-2">
             <span>Account Name:</span>
             <strong className="text-ink-1 font-sans">{targetUser?.name || '—'}</strong>
           </div>
-          <div className="flex justify-between">
+          <div className="flex flex-wrap justify-between gap-2">
             <span>Agent Code:</span>
             <strong className="text-gold font-mono">{targetUser?.sponsorCode || '—'}</strong>
           </div>
@@ -148,19 +148,19 @@ export default function ChangeEmailModal({ targetUser, onClose, onSuccess }) {
           </p>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-navy-4/60">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-3 border-t border-navy-4/60">
             <button
               type="button"
               disabled={submitting}
               onClick={onClose}
-              className="btn-ghost py-2 px-4 text-xs font-bold uppercase"
+              className="btn-ghost py-2 px-4 text-xs font-bold uppercase w-full sm:w-auto justify-center"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="btn-gold py-2 px-4 text-xs font-bold uppercase flex items-center gap-1.5"
+              className="btn-gold py-2 px-4 text-xs font-bold uppercase flex items-center justify-center gap-1.5 w-full sm:w-auto"
             >
               {submitting ? (
                 <>

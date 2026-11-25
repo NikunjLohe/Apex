@@ -382,12 +382,12 @@ export default function GenealogyTree({ rootId = null, onSelectAgent = null }) {
   const isInitializing = !treeRootId || !nodeCache[treeRootId]
 
   return (
-    <div className="relative card overflow-hidden bg-navy-2 border border-navy-4 h-[700px] flex flex-col">
+    <div className="relative card overflow-hidden bg-navy-2 border border-navy-4 h-[68vh] min-h-[420px] max-h-[700px] flex flex-col">
       {/* Controls & Search header */}
-      <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2.5 items-center w-[calc(100%-2rem)]">
+      <div className="z-20 flex flex-wrap gap-2 items-center p-3 sm:p-4 border-b border-navy-4/60 bg-navy-3/70 shrink-0">
 
         {/* Search */}
-        <div className="relative w-72 shrink-0">
+        <div className="relative w-full sm:w-72 shrink-0">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-2">
             <ISearch size={16} />
           </span>

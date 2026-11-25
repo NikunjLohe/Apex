@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import ErrorBoundary from '../ErrorBoundary'
 import { useAuth } from '../../contexts/AuthContext'
 import AgentProfileCompletionModal from '../AgentProfileCompletionModal'
-import { IClose, IAlert } from '../ui/icons'
+import { IAlert } from '../ui/icons'
 
 // Map path prefixes → page title for the topbar.
 const TITLES = [
@@ -18,17 +18,22 @@ const TITLES = [
   ['/reports/collections', 'Collections Report'],
   ['/reports/defaulters', 'Defaulters'],
   ['/reports/maturities', 'Maturities'],
+  ['/my-profile', 'My Profile'],
   ['/my-earnings', 'My Earnings'],
+  ['/my-mfa', 'Monthly Field Allowance'],
   ['/my-downline', 'My Downline'],
   ['/cmd-awards', 'CMD Awards'],
   ['/admin/members', 'Members'],
   ['/admin/settings', 'Settings'],
   ['/admin/overview', 'Overview'],
   ['/admin/all-reports', 'All Reports'],
+  ['/admin/monthly-business', 'Monthly Business'],
   ['/admin/logs', 'System Logs'],
   ['/admin/policies', 'Policies'],
   ['/admin/payouts', 'Payout Engine'],
+  ['/admin/mfa', 'MFA Management'],
   ['/admin/promotions', 'Promotions'],
+  ['/admin/payment-import', 'Payment Engine'],
   ['/admin/import', 'Import Center'],
   ['/admin/customers', 'Customers'],
   ['/admin/commission-bill', 'Commission Bill'],
@@ -49,6 +54,23 @@ export default function Layout() {
   const title = titleFor(location.pathname)
 
   const closeDrawer = () => setDrawer(false)
+
+  useEffect(() => {
+    setDrawer(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!drawer) return undefined
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setDrawer(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [drawer])
 
   const handleExitView = async () => {
     await stopViewingAs()
@@ -80,72 +102,36 @@ export default function Layout() {
         Always mounted, controlled via CSS transforms.
       */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 lg:hidden print:hidden bg-navy-2 shadow-card transition-transform duration-300 transform ${
-          drawer ? 'translate-x-0' : '-translate-x-full'
+        aria-label="Mobile navigation"
+        aria-hidden={!drawer}
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] overflow-y-auto lg:hidden print:hidden bg-navy-2 shadow-card transition-transform duration-300 transform ${
+          drawer ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
       >
         <Sidebar onNavigate={closeDrawer} />
       </aside>
 
-      {/*
-        ── Mobile Close Button ──────────────────────────────────────────────
-        Controlled by the same 'drawer' state, styled as a premium gold pill.
-        Always in sync with backdrop/sidebar panel.
-      */}
-      <button
-        type="button"
-        onTouchEnd={(e) => { e.preventDefault(); closeDrawer() }}
-        onClick={closeDrawer}
-        style={{
-          position: 'fixed',
-          bottom: 36,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 9999,
-          touchAction: 'manipulation',
-          background: 'linear-gradient(135deg, #C9A84C, #E5C66A)',
-          color: '#1B1F3B',
-          border: 'none',
-          borderRadius: 9999,
-          padding: '13px 28px',
-          fontWeight: 700,
-          fontSize: 15,
-          letterSpacing: '0.02em',
-          fontFamily: 'Inter, sans-serif',
-          cursor: 'pointer',
-          userSelect: 'none',
-          WebkitTapHighlightColor: 'transparent',
-        }}
-        className={`lg:hidden print:hidden flex items-center gap-2 shadow-lg transition-all duration-300 ${
-          drawer ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'
-        }`}
-        aria-label="Close menu"
-      >
-        <IClose size={18} />
-        Close Menu
-      </button>
-
-      <div className="flex min-h-screen flex-1 flex-col print:block print:min-h-0">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col print:block print:min-h-0">
         <Topbar title={title} onMenu={() => setDrawer(d => !d)} />
 
         {isViewingAs && (
-          <div className="bg-red-500/10 border-b border-red-500/30 px-4 py-2 flex items-center justify-between shadow-sm backdrop-blur-sm z-30 sticky top-16 lg:top-0 print:hidden">
-            <div className="flex items-center gap-2 text-red-500 font-medium text-sm">
-              <IAlert size={18} />
-              <span>
+          <div className="bg-red-500/10 border-b border-red-500/30 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm backdrop-blur-sm z-30 sticky top-16 lg:top-0 print:hidden">
+            <div className="flex items-center gap-2 text-red-500 font-medium text-xs sm:text-sm min-w-0">
+              <IAlert size={18} className="shrink-0" />
+              <span className="truncate">
                 VIEWING AS AGENT: <span className="font-bold">{profile?.name}</span> • {profile?.sponsorCode || profile?.agentCode}
               </span>
             </div>
             <button
               onClick={handleExitView}
-              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-full transition-colors shadow-sm"
+              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full transition-colors shadow-sm shrink-0"
             >
               EXIT VIEW
             </button>
           </div>
         )}
 
-        <main className="flex-1 p-4 lg:p-6 print:p-0">
+        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-6 print:p-0">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

@@ -56,15 +56,15 @@ export default function Defaulters() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="card flex items-center justify-between p-4">
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-card border border-danger/30 bg-danger/10 text-danger"><IAlert size={20} /></span>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-danger/30 bg-danger/10 text-danger"><IAlert size={20} /></span>
           <div>
             <p className="text-sm text-ink-2">Total overdue installments</p>
             <p className="text-xl font-bold text-ink-1">{defaulters.length}</p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <p className="text-sm text-ink-2">Amount due</p>
           <p className="text-xl font-bold text-danger">{formatINR(defaulters.reduce((s, d) => s + d.amountDue, 0))}</p>
         </div>
@@ -75,8 +75,34 @@ export default function Defaulters() {
       ) : !defaulters.length ? (
         <EmptyState icon={<IAlert size={24} />} title="No defaulters" message="All active plans are up to date. 🎉" />
       ) : (
-        <div className="table-wrap">
-          <div className="overflow-x-auto">
+        <>
+          <div className="space-y-2.5 md:hidden">
+            {defaulters.map((d) => (
+              <div key={`mob-def-${d.id}`} className="card p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-ink-1 truncate">{d.customerName}</p>
+                    <p className="font-mono text-[11px] text-gold">{d.customerAccount}</p>
+                  </div>
+                  <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-bold text-danger shrink-0">{d.daysOverdue}d overdue</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-navy-4/40">
+                  <div><span className="text-[10px] uppercase text-ink-2 block">Due Date</span><span className="text-ink-1">{fmtDate(d.nextDueDate)}</span></div>
+                  <div><span className="text-[10px] uppercase text-ink-2 block">Amount Due</span><span className="font-bold text-danger">{formatINR(d.amountDue)}</span></div>
+                  <div><span className="text-[10px] uppercase text-ink-2 block">Plan</span><span className="text-ink-1 uppercase">{d.type || d.planCode}</span></div>
+                  <div><span className="text-[10px] uppercase text-ink-2 block">Agent</span><span className="text-ink-1 truncate block">{d.agentName || '—'}</span></div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => shareWhatsApp(reminderMessage({ name: d.customerName, amount: d.amountDue, planAccount: d.planAccountNumber || d.policyNumber, dueDate: d.nextDueDate, agentName: d.agentName }), null)}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-card border border-ok/30 px-3 py-2 text-xs font-semibold text-ok hover:bg-ok/10"
+                >
+                  <IWhatsapp size={15} /> Send WhatsApp Reminder
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block table-wrap overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Customer</th><th>Plan</th><th>Due Date</th><th>Days Overdue</th><th>Amount Due</th><th>Agent</th><th></th></tr></thead>
               <tbody>
@@ -102,7 +128,7 @@ export default function Defaulters() {
               </tbody>
             </table>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

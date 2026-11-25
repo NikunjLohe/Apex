@@ -81,8 +81,8 @@ function Item({ to, label, Icon, end, onNavigate }) {
         }`
       }
     >
-      <Icon size={19} />
-      {label}
+      <Icon size={19} className="shrink-0" />
+      <span className="min-w-0 leading-snug break-words">{label}</span>
     </NavLink>
   )
 }
@@ -105,13 +105,23 @@ export default function Sidebar({ onNavigate }) {
 
   return (
     <div className="flex h-full flex-col bg-navy-2 p-4">
-      <div className="mb-6 px-1">
+      <div className="mb-5 flex items-center justify-between gap-2 px-1">
         {onNavigate ? (
-          <Link to="/dashboard" onClick={onNavigate} className="block">
+          <Link to="/dashboard" onClick={onNavigate} className="block min-w-0">
             <Logo size={38} tagline />
           </Link>
         ) : (
           <Logo size={38} tagline />
+        )}
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            aria-label="Close navigation menu"
+            className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-navy-4 bg-navy-3 text-ink-2 hover:text-ink-1 hover:border-gold-1/40 transition-colors"
+          >
+            <IClose size={18} />
+          </button>
         )}
       </div>
       <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-none">

@@ -376,13 +376,13 @@ export default function Settings() {
           <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Master Configurations</h2>
           <p className="text-xs text-ink-2">Manage settings, rank compensations, products, commissions, and promotions.</p>
         </div>
-        <div className="flex flex-wrap gap-1 bg-navy-2 p-1.5 rounded-card border border-navy-4/50 text-xs">
-          <button type="button" onClick={() => setActiveTab('system')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'system' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>System Settings</button>
-          <button type="button" onClick={() => setActiveTab('ranks')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'ranks' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Rank Master</button>
-          <button type="button" onClick={() => setActiveTab('plans')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'plans' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Plan Master</button>
-          <button type="button" onClick={() => setActiveTab('commissions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'commissions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Commission Master</button>
-          <button type="button" onClick={() => setActiveTab('promotions')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'promotions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Promotion Master</button>
-          <button type="button" onClick={() => setActiveTab('mapping')} className={`px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'mapping' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Excel Mapping</button>
+        <div className="flex w-full lg:w-auto overflow-x-auto whitespace-nowrap gap-1 bg-navy-2 p-1.5 rounded-card border border-navy-4/50 text-xs scrollbar-none">
+          <button type="button" onClick={() => setActiveTab('system')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'system' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>System Settings</button>
+          <button type="button" onClick={() => setActiveTab('ranks')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'ranks' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Rank Master</button>
+          <button type="button" onClick={() => setActiveTab('plans')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'plans' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Plan Master</button>
+          <button type="button" onClick={() => setActiveTab('commissions')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'commissions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Commission Master</button>
+          <button type="button" onClick={() => setActiveTab('promotions')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'promotions' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Promotion Master</button>
+          <button type="button" onClick={() => setActiveTab('mapping')} className={`shrink-0 px-3 sm:px-3.5 py-2 font-bold uppercase rounded-md tracking-wider transition-all ${activeTab === 'mapping' ? 'bg-gold-1 text-white shadow-sm font-semibold' : 'text-ink-2 hover:text-ink-1'}`}>Excel Mapping</button>
         </div>
       </div>
 
@@ -516,7 +516,7 @@ export default function Settings() {
         {/* Tab 2: Rank Master */}
         {activeTab === 'ranks' && (
           <div className="card p-5 space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-navy-4/50">
+            <div className="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-navy-4/50">
               <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
                 <ITrophy size={16} /> Rank Master Configuration
               </h3>
@@ -605,7 +605,7 @@ export default function Settings() {
         {activeTab === 'plans' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="card p-5 space-y-4 lg:col-span-2">
-              <div className="flex justify-between items-center pb-2 border-b border-navy-4/50">
+              <div className="flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-navy-4/50">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
                   <IDoc size={16} /> Plan Configurations
                 </h3>
@@ -792,7 +792,7 @@ export default function Settings() {
                   </div>
 
                   {/* Commissions Grid */}
-                  <div className="border border-navy-4 rounded-card overflow-hidden">
+                  <div className="border border-navy-4 rounded-card table-wrap overflow-x-auto">
                     <table className="tbl text-xs">
                       <thead>
                         <tr>
@@ -1060,9 +1060,9 @@ export default function Settings() {
 
       {/* Ranks Add/Edit Modal */}
       {rankModalOpen && editingRank && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
           <div className="absolute inset-0 bg-navy-1/80 backdrop-blur-sm" onClick={() => setRankModalOpen(false)} />
-          <div className="card relative z-10 w-full max-w-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4">
+          <div className="card relative z-10 w-full max-w-2xl p-4 sm:p-6 overflow-y-auto max-h-[92dvh] space-y-4">
             <div className="flex items-center justify-between border-b border-navy-4 pb-3">
               <h3 className="text-lg font-bold text-ink-1 font-serif">
                 {ranksList.some(r => r.rank === editingRank.rank) ? `Edit Rank Level ${editingRank.rank}` : `Add New Rank Level ${editingRank.rank}`}
@@ -1172,9 +1172,9 @@ export default function Settings() {
 
       {/* Plan Add/Edit Modal */}
       {planModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-navy-1/80 backdrop-blur-sm" onClick={() => setPlanModalOpen(false)} />
-          <form className="card relative z-10 w-full max-w-md p-6 space-y-4" onSubmit={handleSavePlan}>
+          <form className="card relative z-10 w-full max-w-md p-4 sm:p-6 max-h-[92dvh] overflow-y-auto space-y-4" onSubmit={handleSavePlan}>
             <div className="flex items-center justify-between border-b border-navy-4 pb-3">
               <h3 className="text-lg font-bold text-ink-1 font-serif">
                 {editingPlanId ? 'Edit Financial Plan' : 'Add New Financial Plan'}
@@ -1193,7 +1193,7 @@ export default function Settings() {
                 <label className="label">Plan Code *</label>
                 <input className="field font-mono uppercase" placeholder="e.g. RD3Y" value={planForm.code} onChange={(e) => setPlanForm({ ...planForm, code: e.target.value.toUpperCase() })} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">Plan Type *</label>
                   <select className="field text-xs" value={planForm.type} onChange={(e) => setPlanForm({ ...planForm, type: e.target.value })}>

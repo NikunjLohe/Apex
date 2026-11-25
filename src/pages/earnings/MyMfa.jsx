@@ -183,7 +183,7 @@ export default function MyMfa() {
           {rec.applicable ? (
             <>
               {/* 4 KPI Tiles */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
                 <div className="p-3.5 rounded-card bg-navy-2/60 border border-navy-4">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-ink-2 block">Monthly Target</span>
                   <span className="text-lg font-extrabold text-ink-1 font-serif mt-1 block">{formatINR(rec.mfaTarget)}</span>

@@ -21,9 +21,9 @@ export default function ImportHistory() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
+      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-navy-4/50 pb-4">
         <div>
-          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Import History Logs</h2>
+          <h2 className="font-serif text-xl sm:text-2xl font-bold text-ink-1 tracking-tight">Import History Logs</h2>
           <p className="text-xs text-ink-2">Audit trail and validation records of past Excel upload sessions.</p>
         </div>
         <Link to="/admin/import" className="btn-gold py-2 text-xs uppercase tracking-wider font-bold">

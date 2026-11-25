@@ -431,10 +431,10 @@ export default function MyDownline() {
     <div className="mx-auto max-w-7xl space-y-6">
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-navy-4/50">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">
-              My Downline & Team Business
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h2 className="font-serif text-xl sm:text-2xl font-bold text-ink-1 tracking-tight">
+              My Downline &amp; Team Business
             </h2>
             <RankBadge rank={profile?.rank || 1} size="md" showName />
           </div>
@@ -443,12 +443,12 @@ export default function MyDownline() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {can(CAP.RECRUIT) && profile?.rank > 1 && !isViewingAs && (
             <button
               type="button"
               onClick={() => setShowRecruit(true)}
-              className="btn-gold py-2 text-xs px-4 flex items-center gap-1.5 uppercase font-bold tracking-wider"
+              className="btn-gold py-2 text-xs px-3.5 sm:px-4 flex items-center justify-center gap-1.5 uppercase font-bold tracking-wider flex-1 sm:flex-initial"
             >
               <IPlus size={14} /> Recruit Agent
             </button>
@@ -458,20 +458,20 @@ export default function MyDownline() {
             type="button"
             onClick={handleExportExcel}
             disabled={exporting || loading}
-            className="btn-dark py-2 px-4 text-xs font-bold flex items-center gap-2 border border-gold-1/30 hover:border-gold text-gold"
+            className="btn-dark py-2 px-3.5 sm:px-4 text-xs font-bold flex items-center justify-center gap-2 border border-gold-1/30 hover:border-gold text-gold flex-1 sm:flex-initial"
             title="Download full 5-sheet team business workbook"
           >
-            <IDownload size={14} />
-            {exporting ? 'Generating Excel...' : 'Download My Team Business Report (.xlsx)'}
+            <IDownload size={14} className="shrink-0" />
+            <span className="truncate">{exporting ? 'Generating Excel...' : 'Export Team Report (.xlsx)'}</span>
           </button>
         </div>
       </div>
 
       {/* ── Main Navigation Tabs ─────────────────────────────────────────── */}
-      <div className="flex gap-2 border-b border-navy-4">
+      <div className="flex gap-2 border-b border-navy-4 overflow-x-auto whitespace-nowrap scrollbar-none">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === 'dashboard'
               ? 'border-gold text-gold-1'
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -482,7 +482,7 @@ export default function MyDownline() {
 
         <button
           onClick={() => setActiveTab('list')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === 'list'
               ? 'border-gold text-gold-1'
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -493,7 +493,7 @@ export default function MyDownline() {
 
         <button
           onClick={() => setActiveTab('tree')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === 'tree'
               ? 'border-gold text-gold-1'
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -504,13 +504,13 @@ export default function MyDownline() {
 
         <button
           onClick={() => setActiveTab('reports')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
             activeTab === 'reports'
               ? 'border-gold text-gold-1'
               : 'border-transparent text-ink-2 hover:text-ink-1'
           }`}
         >
-          <IDoc size={14} /> Team Business & Excel Export
+          <IDoc size={14} /> Team Business &amp; Excel Export
         </button>
       </div>
 
@@ -885,7 +885,49 @@ export default function MyDownline() {
             />
           ) : (
             <div className="card overflow-hidden bg-navy-3 border border-navy-4">
-              <div className="table-wrap overflow-x-auto">
+              {/* Mobile Downline Cards */}
+              <div className="divide-y divide-navy-4 md:hidden">
+                {paginatedDownline.map((row) => (
+                  <div key={`mob-dl-${row.agentId}`} className="p-3.5 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-ink-1 truncate">{row.agentName}</p>
+                        <p className="text-[11px] font-mono text-ink-2">Code: {row.sponsorCode || '—'}</p>
+                      </div>
+                      <RankBadge rank={row.rank} size="sm" showName />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-navy-4/40">
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Personal Biz</span>
+                        <span className="font-mono font-semibold text-ink-1">{formatINR(row.personalBusiness)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Network Biz</span>
+                        <span className="font-mono font-bold text-gold-1">{formatINR(row.totalNetworkBusiness)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Team / Policies</span>
+                        <span className="font-mono text-ink-1">{row.directDownlineCount} direct · {row.totalPolicies} pol</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Joined</span>
+                        <span className="text-ink-2">{row.joiningDate ? fmtDate(row.joiningDate) : '—'}</span>
+                      </div>
+                    </div>
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openDrilldown(row.agentId)}
+                        className="btn-dark w-full justify-center py-1.5 px-3 text-[11px] font-bold text-gold border border-gold-1/30 rounded"
+                      >
+                        View Agent Details →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden md:block table-wrap overflow-x-auto">
                 <table className="tbl text-xs">
                   <thead>
                     <tr>
@@ -960,11 +1002,11 @@ export default function MyDownline() {
 
               {/* Pagination */}
               {totalDownlinePages > 1 && (
-                <div className="flex items-center justify-between p-3 border-t border-navy-4 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t border-navy-4 text-xs">
                   <span className="text-ink-2">
                     Page <strong>{listPage}</strong> of <strong>{totalDownlinePages}</strong>
                   </span>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       disabled={listPage <= 1}
                       onClick={() => setListPage(p => Math.max(1, p - 1))}
@@ -1158,7 +1200,49 @@ export default function MyDownline() {
             />
           ) : (
             <div className="card overflow-hidden bg-navy-3 border border-navy-4">
-              <div className="table-wrap overflow-x-auto">
+              {/* Mobile Downline Cards */}
+              <div className="divide-y divide-navy-4 md:hidden">
+                {paginatedDownline.map((row) => (
+                  <div key={`mob-dl-${row.agentId}`} className="p-3.5 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-ink-1 truncate">{row.agentName}</p>
+                        <p className="text-[11px] font-mono text-ink-2">Code: {row.sponsorCode || '—'}</p>
+                      </div>
+                      <RankBadge rank={row.rank} size="sm" showName />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-navy-4/40">
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Personal Biz</span>
+                        <span className="font-mono font-semibold text-ink-1">{formatINR(row.personalBusiness)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Network Biz</span>
+                        <span className="font-mono font-bold text-gold-1">{formatINR(row.totalNetworkBusiness)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Team / Policies</span>
+                        <span className="font-mono text-ink-1">{row.directDownlineCount} direct · {row.totalPolicies} pol</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-ink-2 block">Joined</span>
+                        <span className="text-ink-2">{row.joiningDate ? fmtDate(row.joiningDate) : '—'}</span>
+                      </div>
+                    </div>
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openDrilldown(row.agentId)}
+                        className="btn-dark w-full justify-center py-1.5 px-3 text-[11px] font-bold text-gold border border-gold-1/30 rounded"
+                      >
+                        View Agent Details →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden md:block table-wrap overflow-x-auto">
                 <table className="tbl text-xs">
                   <thead>
                     <tr>
@@ -1226,11 +1310,11 @@ export default function MyDownline() {
 
               {/* Pagination */}
               {totalBizPages > 1 && (
-                <div className="flex items-center justify-between p-3 border-t border-navy-4 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t border-navy-4 text-xs">
                   <span className="text-ink-2">
                     Page <strong>{bizPage}</strong> of <strong>{totalBizPages}</strong>
                   </span>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       disabled={bizPage <= 1}
                       onClick={() => setBizPage(p => Math.max(1, p - 1))}
@@ -1271,22 +1355,22 @@ export default function MyDownline() {
 
       {/* ── DRILLDOWN MODAL FOR DOWNLINE AGENT ────────────────────────────── */}
       {drilldownModalOpen && selectedAgentDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="card w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 bg-navy-3 border border-gold-1/40 space-y-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-2.5 sm:p-4 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="card w-full max-w-3xl my-auto max-h-[92dvh] overflow-y-auto p-4 sm:p-6 bg-navy-3 border border-gold-1/40 space-y-5 shadow-2xl">
             {/* Modal Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-navy-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-serif text-xl font-bold text-ink-1">
+            <div className="flex items-start justify-between gap-2 pb-3 border-b border-navy-4">
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <h3 className="font-serif text-lg sm:text-xl font-bold text-ink-1 truncate">
                     {selectedAgentDetails.agent.name}
                   </h3>
                   <RankBadge rank={selectedAgentDetails.agent.rank || 1} size="sm" showName />
                   <StatusBadge status={selectedAgentDetails.agent.status || 'active'} />
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-ink-2 font-mono">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2 font-mono">
                   <span>Code: <strong className="text-gold-1">{selectedAgentDetails.agent.sponsorCode || '—'}</strong></span>
                   <span>•</span>
-                  <span>ID: {selectedAgentDetails.agent.id}</span>
+                  <span className="break-all">ID: {selectedAgentDetails.agent.id}</span>
                   <span>•</span>
                   <span>Joined: {fmtDate(selectedAgentDetails.agent.createdAt)}</span>
                 </div>
@@ -1294,7 +1378,7 @@ export default function MyDownline() {
               <button
                 type="button"
                 onClick={() => setDrilldownModalOpen(false)}
-                className="text-ink-2 hover:text-ink-1 p-1 rounded hover:bg-navy-4 transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center text-ink-2 hover:text-ink-1 rounded hover:bg-navy-4 transition-colors"
               >
                 ✕
               </button>

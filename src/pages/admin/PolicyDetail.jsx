@@ -10,7 +10,7 @@ import {
 import { fmtDate, formatINR } from '../../utils/format'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonStats, SkeletonTable } from '../../components/ui/LoadingSkeleton'
-import { IDoc, IUsers, ICash, ISettings, IAlert } from '../../components/ui/icons'
+import { IDoc, IUsers, ICash, ISettings, IAlert, ISearch } from '../../components/ui/icons'
 import { addYears } from 'date-fns'
 import { isPension, getPensionPolicyYear, planYears, getActivePolicyYear, getPolicyTermYears } from '../../data/compensation'
 import { useRanks } from '../../contexts/RanksContext'
@@ -30,10 +30,14 @@ export default function PolicyDetail() {
   const [usersList, setUsersList] = useState([])
   const [branchesList, setBranchesList] = useState([])
   const [ledgerData, setLedgerData] = useState([])
-  const [commissionMaster, setCommissionMaster] = useState({})
-  const [selectedLedgerInst, setSelectedLedgerInst] = useState('latest')
+  const [selectedLedgerInst, setSelectedLedgerInst] = useState('all')
+  const [commViewMode, setCommViewMode] = useState('recipients') // 'recipients' | 'all_ranks'
+  const [commSearch, setCommSearch] = useState('')
+  const [commRankFilter, setCommRankFilter] = useState('all')
+  const [commStatusFilter, setCommStatusFilter] = useState('all')
+  const [commSort, setCommSort] = useState('rank_asc')
 
-  const { ranksList } = useRanks()
+  const { ranksList, getRank } = useRanks()
   const [explainOpen, setExplainOpen] = useState(false)
 
   // Edit / Correction State
@@ -58,11 +62,10 @@ export default function PolicyDetail() {
       setLoading(true)
 
       try {
-        const [policyObj, uList, bList, cmMap] = await Promise.all([
+        const [policyObj, uList, bList] = await Promise.all([
           policiesAPI.getPolicy(id).catch(() => null),
           profilesAPI.listProfiles().catch(() => []),
           masterDataAPI.listBranches().catch(() => []),
-          masterDataAPI.getCommissionMaster().catch(() => ({})),
         ])
 
         if (cancelled) return
@@ -76,7 +79,6 @@ export default function PolicyDetail() {
         setP(policyObj)
         setUsersList(uList || [])
         setBranchesList(bList || [])
-        setCommissionMaster(cmMap || {})
 
         // Fetch commissions from ledger
         const comms = await commissionsAPI.listCommissionLedger({ policyId: policyObj.id }).catch(() => [])
@@ -354,38 +356,22 @@ export default function PolicyDetail() {
     return chain
   }, [agent, usersMap])
 
-  // Expected MDA Commission Rate Master (Ranks 1-10 updated per Change 1, Ranks 11-18 preserved)
-  const MDA_COMMISSION_RATES = {
-    AO: { '1Y_RD_Y1': 4.00, '2Y_RD_Y1': 6.00, '2Y_RD_Y2': 4.00, '3Y_RD_Y1': 7.00, '3Y_RD_Y2_3': 4.00, '4Y_RD_Y1': 8.00, '4Y_RD_Y2_4': 4.00, '5Y_RD_Y1': 9.00, '5Y_RD_Y2_5': 5.00, 'FD_Y1': 5.00, 'FD_Y2': 5.50, 'FD_Y3': 6.00, 'FD_Y4': 6.50, 'FD_Y5': 7.00 },
-    AM: { '1Y_RD_Y1': 1.00, '2Y_RD_Y1': 1.25, '2Y_RD_Y2': 0.75, '3Y_RD_Y1': 2.00, '3Y_RD_Y2_3': 1.00, '4Y_RD_Y1': 3.00, '4Y_RD_Y2_4': 1.00, '5Y_RD_Y1': 3.00, '5Y_RD_Y2_5': 1.00, 'FD_Y1': 2.00, 'FD_Y2': 2.25, 'FD_Y3': 2.50, 'FD_Y4': 2.75, 'FD_Y5': 3.00 },
-    ADM: { '1Y_RD_Y1': 0.70, '2Y_RD_Y1': 0.75, '2Y_RD_Y2': 0.40, '3Y_RD_Y1': 1.00, '3Y_RD_Y2_3': 0.50, '4Y_RD_Y1': 1.00, '4Y_RD_Y2_4': 0.75, '5Y_RD_Y1': 1.00, '5Y_RD_Y2_5': 0.75, 'FD_Y1': 1.50, 'FD_Y2': 1.75, 'FD_Y3': 1.80, 'FD_Y4': 2.00, 'FD_Y5': 2.00 },
-    DM: { '1Y_RD_Y1': 0.55, '2Y_RD_Y1': 0.60, '2Y_RD_Y2': 0.30, '3Y_RD_Y1': 0.75, '3Y_RD_Y2_3': 0.40, '4Y_RD_Y1': 0.75, '4Y_RD_Y2_4': 0.65, '5Y_RD_Y1': 1.00, '5Y_RD_Y2_5': 0.50, 'FD_Y1': 0.90, 'FD_Y2': 0.90, 'FD_Y3': 1.00, 'FD_Y4': 1.00, 'FD_Y5': 1.00 },
-    SDM: { '1Y_RD_Y1': 0.40, '2Y_RD_Y1': 0.50, '2Y_RD_Y2': 0.25, '3Y_RD_Y1': 0.50, '3Y_RD_Y2_3': 0.35, '4Y_RD_Y1': 0.50, '4Y_RD_Y2_4': 0.50, '5Y_RD_Y1': 0.50, '5Y_RD_Y2_5': 0.40, 'FD_Y1': 0.75, 'FD_Y2': 0.75, 'FD_Y3': 0.80, 'FD_Y4': 0.80, 'FD_Y5': 0.90 },
-    CM: { '1Y_RD_Y1': 0.35, '2Y_RD_Y1': 0.40, '2Y_RD_Y2': 0.20, '3Y_RD_Y1': 0.40, '3Y_RD_Y2_3': 0.25, '4Y_RD_Y1': 0.40, '4Y_RD_Y2_4': 0.45, '5Y_RD_Y1': 0.40, '5Y_RD_Y2_5': 0.35, 'FD_Y1': 0.70, 'FD_Y2': 0.70, 'FD_Y3': 0.70, 'FD_Y4': 0.75, 'FD_Y5': 0.75 },
-    AGM: { '1Y_RD_Y1': 0.25, '2Y_RD_Y1': 0.30, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.30, '3Y_RD_Y2_3': 0.20, '4Y_RD_Y1': 0.30, '4Y_RD_Y2_4': 0.35, '5Y_RD_Y1': 0.30, '5Y_RD_Y2_5': 0.20, 'FD_Y1': 0.65, 'FD_Y2': 0.65, 'FD_Y3': 0.65, 'FD_Y4': 0.65, 'FD_Y5': 0.70 },
-    GM: { '1Y_RD_Y1': 0.20, '2Y_RD_Y1': 0.20, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.20, '3Y_RD_Y2_3': 0.15, '4Y_RD_Y1': 0.20, '4Y_RD_Y2_4': 0.15, '5Y_RD_Y1': 0.25, '5Y_RD_Y2_5': 0.15, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.55, 'FD_Y4': 0.55, 'FD_Y5': 0.65 },
-    ZM: { '1Y_RD_Y1': 0.20, '2Y_RD_Y1': 0.20, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.20, '3Y_RD_Y2_3': 0.15, '4Y_RD_Y1': 0.20, '4Y_RD_Y2_4': 0.15, '5Y_RD_Y1': 0.20, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.50, 'FD_Y4': 0.50, 'FD_Y5': 0.50 },
-    ED: { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.20, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.50, 'FD_Y2': 0.50, 'FD_Y3': 0.50, 'FD_Y4': 0.50, 'FD_Y5': 0.50 },
-    SED: { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.45, 'FD_Y2': 0.45, 'FD_Y3': 0.45, 'FD_Y4': 0.45, 'FD_Y5': 0.45 },
-    MD:  { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.40, 'FD_Y2': 0.40, 'FD_Y3': 0.40, 'FD_Y4': 0.40, 'FD_Y5': 0.40 },
-    CMD: { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.40, 'FD_Y2': 0.40, 'FD_Y3': 0.40, 'FD_Y4': 0.40, 'FD_Y5': 0.40 },
-    AVP: { '1Y_RD_Y1': 0.15, '2Y_RD_Y1': 0.15, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.35, 'FD_Y2': 0.35, 'FD_Y3': 0.35, 'FD_Y4': 0.35, 'FD_Y5': 0.35 },
-    VP:  { '1Y_RD_Y1': 0.10, '2Y_RD_Y1': 0.10, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.35, 'FD_Y2': 0.35, 'FD_Y3': 0.35, 'FD_Y4': 0.35, 'FD_Y5': 0.35 },
-    SVP: { '1Y_RD_Y1': 0.10, '2Y_RD_Y1': 0.10, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.30, 'FD_Y2': 0.30, 'FD_Y3': 0.30, 'FD_Y4': 0.30, 'FD_Y5': 0.30 },
-    EVP: { '1Y_RD_Y1': 0.10, '2Y_RD_Y1': 0.10, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.30, 'FD_Y2': 0.30, 'FD_Y3': 0.30, 'FD_Y4': 0.30, 'FD_Y5': 0.30 },
-    MGD: { '1Y_RD_Y1': 0.10, '2Y_RD_Y1': 0.10, '2Y_RD_Y2': 0.10, '3Y_RD_Y1': 0.15, '3Y_RD_Y2_3': 0.10, '4Y_RD_Y1': 0.15, '4Y_RD_Y2_4': 0.10, '5Y_RD_Y1': 0.15, '5Y_RD_Y2_5': 0.10, 'FD_Y1': 0.30, 'FD_Y2': 0.30, 'FD_Y3': 0.30, 'FD_Y4': 0.30, 'FD_Y5': 0.30 }
-  }
+  // Only active (non-reversed) real ledger entries are included in commission breakdown
+  const activeLedgerData = useMemo(() => {
+    return (ledgerData || []).filter((c) => String(c.status || 'unpaid').toLowerCase() !== 'reversed')
+  }, [ledgerData])
 
   const availableInstallments = useMemo(() => {
     const instSet = new Set(
-      (ledgerData || [])
+      activeLedgerData
         .map((c) => Number(c.installmentNumber || c.installment || 1))
         .filter((n) => !isNaN(n) && n > 0)
     )
     return Array.from(instSet).sort((a, b) => a - b)
-  }, [ledgerData])
+  }, [activeLedgerData])
 
   const activeLedgerInst = useMemo(() => {
+    if (selectedLedgerInst === 'all') return 'all'
     if (selectedLedgerInst !== 'latest') return Number(selectedLedgerInst) || 1
     if (availableInstallments.length > 0) return availableInstallments[availableInstallments.length - 1]
     return Math.max(1, Number(p?.paidInstallments) || 1)
@@ -393,125 +379,222 @@ export default function PolicyDetail() {
 
   const activeBreakdownYear = useMemo(() => {
     if (!p) return 1
+    if (activeLedgerInst === 'all') {
+      return getActivePolicyYear(p, availableInstallments[availableInstallments.length - 1] || Math.max(1, Number(p?.paidInstallments) || 1))
+    }
     return getActivePolicyYear(p, activeLedgerInst)
-  }, [p, activeLedgerInst])
+  }, [p, activeLedgerInst, availableInstallments])
 
   const scopedLedgerData = useMemo(() => {
-    if (!ledgerData || ledgerData.length === 0) return []
-    const exact = ledgerData.filter((c) => Number(c.installmentNumber || c.installment || 1) === activeLedgerInst)
-    return exact.length > 0 ? exact : ledgerData
-  }, [ledgerData, activeLedgerInst])
+    if (!activeLedgerData || activeLedgerData.length === 0) return []
+    if (activeLedgerInst === 'all') return activeLedgerData
+    const exact = activeLedgerData.filter((c) => Number(c.installmentNumber || c.installment || 1) === activeLedgerInst)
+    return exact
+  }, [activeLedgerData, activeLedgerInst])
 
-  const getExpectedMdaRate = (rankCode, planCode, policyYear = 1) => {
-    const code = String(rankCode || '').toUpperCase()
-    const rawPlan = String(planCode || 'RD1Y').toUpperCase().replace('-', '')
-    const yr = Number(policyYear) || 1
+  // Real per-agent commission recipient rows (aggregated per agent + rank when viewing 'all' installments, exact rows per installment otherwise)
+  const recipientRows = useMemo(() => {
+    if (!scopedLedgerData.length) return []
 
-    const familyCode = isPension(rawPlan, p?.planType) ? 'PENS' : rawPlan
-    const dynamicRate = commissionMaster?.[rawPlan]?.[yr]?.[code] ?? commissionMaster?.[familyCode]?.[yr]?.[code]
-    if (dynamicRate !== undefined) return Number(dynamicRate)
+    const sellerRankNum = Number(agent?.rank || 0)
+    const groups = new Map()
 
-    if (typeof MDA_COMMISSION_RATES[code] === 'number') {
-      return MDA_COMMISSION_RATES[code]
-    }
-    const table = MDA_COMMISSION_RATES[code]
-    if (!table) return 0
+    scopedLedgerData.forEach((entry) => {
+      const agObj = usersMap[entry.agentId] || null
+      const rankNum = Number(entry.receivingRank || agObj?.rank || 0)
+      const rankInfo = getRank(rankNum)
+      const rankCode = entry.receivingRankCode || rankInfo?.code || agObj?.rankCode || `R${rankNum || '?'}`
+      const rankName = rankInfo?.name || ''
+      const agentId = entry.agentId || agObj?.id || null
+      const agentName = entry.agentName || agObj?.name || 'Unknown Agent'
+      const agentCode = entry.sponsorCode || entry.agentCode || agObj?.sponsorCode || '—'
+      const isDirect =
+        String(entry.commissionType || '').toLowerCase() === 'direct' ||
+        String(entry.commissionType || '').toLowerCase() === 'direct_own' ||
+        (agentId && agent?.id && agentId === agent.id && (!entry.commissionType || String(entry.commissionType).toLowerCase().includes('direct')))
+      const roleLabel = isDirect ? 'Direct' : 'Upline Commission'
+      const rawStatus = String(entry.status || 'unpaid').toLowerCase()
+      const instNo = Number(entry.installmentNumber || entry.installment || 1)
+      const polYear = Number(entry.policyYear || 1)
+      const pct = Number(entry.percentage) || 0
+      const amt = Number(entry.amount) || 0
+      const compressedList = Array.isArray(entry.compressedFromRanks) ? entry.compressedFromRanks : []
 
-    const pCode = rawPlan
-    if (pCode === 'RD1Y') return table['1Y_RD_Y1'] || 0
-    if (pCode === 'RD2Y') return yr === 1 ? table['2Y_RD_Y1'] : table['2Y_RD_Y2']
-    if (pCode === 'RD3Y') return yr === 1 ? table['3Y_RD_Y1'] : table['3Y_RD_Y2_3']
-    if (pCode === 'RD4Y') return yr === 1 ? table['4Y_RD_Y1'] : table['4Y_RD_Y2_4']
-    if (pCode === 'RD5Y') return yr === 1 ? table['5Y_RD_Y1'] : table['5Y_RD_Y2_5']
-    if (pCode.startsWith('FD') || pCode.startsWith('PENS')) {
-      const yKey = `FD_Y${Math.min(Math.max(yr, 1), 5)}`
-      return table[yKey] || table['FD_Y1'] || 0
-    }
-    return table['1Y_RD_Y1'] || 0
-  }
+      const key =
+        activeLedgerInst === 'all'
+          ? `${agentId || agentCode}__R${rankNum}__${isDirect ? 'D' : 'U'}`
+          : `${entry.id || `${agentId}_${rankNum}_${instNo}`}`
 
-  // Map each rank (1 to 18) to the parsed record or skipped state
-  const breakdownRows = useMemo(() => {
-    if (!ranksList || ranksList.length === 0) return []
-
-    // Sort ranks ascending
-    const sortedRanks = [...ranksList].sort((a, b) => Number(a.rank) - Number(b.rank))
-
-    let runningTotalPct = 0
-
-    return sortedRanks.map(r => {
-      const rankNum = Number(r.rank)
-      // Find matching ledger entry for this rank (for selected installment)
-      const entry = (scopedLedgerData || []).find(c => {
-        if (Number(c.receivingRank) === rankNum) return true
-        const ag = usersMap[c.agentId]
-        return ag && Number(ag.rank) === rankNum
-      })
-
-      // Find matching agent in the traversed sponsor chain
-      const agentInChain = traversedChain.find(a => Number(a.rank) === rankNum)
-      const isSeller = agent && Number(agent.rank) === rankNum
-
-      let pct = 0
-      let amt = 0
-      let type = 'Upline Commission'
-      let skipped = false
-      let skipReason = ''
-      let agentName = '—'
-      let agentCode = '—'
-      let docId = null
-
-      if (entry) {
-        pct = Number(entry.percentage) || 0
-        amt = Number(entry.amount) || 0
-        type = (entry.commissionType === 'Direct' || entry.commissionType === 'direct') ? 'Direct' : 'Upline Commission'
-        agentName = entry.agentName || usersMap[entry.agentId]?.name || (agentInChain ? agentInChain.name : (isSeller ? agent.name : '—'))
-        agentCode = entry.sponsorCode || usersMap[entry.agentId]?.sponsorCode || (agentInChain ? agentInChain.sponsorCode : (isSeller ? agent.sponsorCode : '—'))
-        docId = entry.id
-        runningTotalPct += pct
-      } else if (agentInChain || isSeller) {
-        // Fallback when ledger rows are protected by database RLS: calculate exact MDA commission for agent in hierarchy
-        const ag = isSeller ? agent : agentInChain
-        const bAmt = Number(p?.monthlyAmount) || Number(p?.totalPaid) || Number(p?.fdAmount) || 0
-        const rate = getExpectedMdaRate(r.code, p?.planCode || p?.type, activeBreakdownYear)
-        pct = rate
-        amt = Number(((bAmt * rate) / 100).toFixed(2))
-        type = isSeller ? 'Direct' : 'Upline Commission'
-        agentName = ag.name
-        agentCode = ag.sponsorCode || '—'
-        runningTotalPct += pct
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          docId: entry.id,
+          agentId,
+          agentName,
+          agentCode,
+          rank: rankNum,
+          rankCode,
+          rankName,
+          isDirect,
+          type: roleLabel,
+          uplineLevel: sellerRankNum > 0 && rankNum > sellerRankNum ? rankNum - sellerRankNum : 0,
+          pctSum: pct,
+          pctList: [pct],
+          amount: amt,
+          businessAmount: Number(entry.businessAmount) || 0,
+          installments: new Set([instNo]),
+          years: new Set([polYear]),
+          statuses: new Set([rawStatus]),
+          compressedFromRanks: new Set(compressedList),
+          policyNumber: p?.policyNumber || '—',
+          latestDate: entry.calculationDate || entry.createdAt || null,
+        })
       } else {
-        skipped = true
-        if (agent && rankNum < Number(agent.rank)) {
-          skipReason = 'Skipped (Below Seller)'
-        } else {
-          skipReason = 'Skipped (No Agent at Rank)'
-        }
-      }
-
-      return {
-        rank: rankNum,
-        rankCode: r.code,
-        rankName: r.name,
-        agentName,
-        agentCode,
-        type,
-        percentage: pct,
-        amount: amt,
-        runningTotalPct,
-        skipped,
-        skipReason,
-        docId
+        const g = groups.get(key)
+        g.pctSum += pct
+        g.pctList.push(pct)
+        g.amount += amt
+        g.businessAmount += Number(entry.businessAmount) || 0
+        g.installments.add(instNo)
+        g.years.add(polYear)
+        g.statuses.add(rawStatus)
+        compressedList.forEach((cr) => g.compressedFromRanks.add(cr))
       }
     })
-  }, [ranksList, scopedLedgerData, usersMap, traversedChain, agent, p, commissionMaster, activeBreakdownYear])
 
-  // Summary card metrics
-  const paidRanks = useMemo(() => breakdownRows.filter(r => !r.skipped), [breakdownRows])
-  const totalDistributed = useMemo(() => paidRanks.reduce((sum, r) => sum + r.percentage, 0), [paidRanks])
-  const totalPaid = useMemo(() => paidRanks.reduce((sum, r) => sum + r.amount, 0), [paidRanks])
-  const highestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[paidRanks.length - 1] : null, [paidRanks])
-  const lowestRankObj = useMemo(() => paidRanks.length > 0 ? paidRanks[0] : null, [paidRanks])
+    const rows = Array.from(groups.values()).map((g) => {
+      const instArr = Array.from(g.installments).sort((a, b) => a - b)
+      const statusArr = Array.from(g.statuses)
+      const uniquePcts = Array.from(new Set(g.pctList.map((v) => Number(v.toFixed(4)))))
+      const status = statusArr.length === 1 ? statusArr[0] : (statusArr.includes('paid') && statusArr.includes('unpaid') ? 'partial' : statusArr[0])
+      const avgPct = g.pctList.length > 0 ? g.pctSum / g.pctList.length : 0
+
+      return {
+        ...g,
+        percentage: uniquePcts.length === 1 ? uniquePcts[0] : avgPct,
+        pctLabel: uniquePcts.length === 1 ? `${uniquePcts[0].toFixed(2)}%` : `${Math.min(...uniquePcts).toFixed(2)}%–${Math.max(...uniquePcts).toFixed(2)}%`,
+        amount: Number(g.amount.toFixed(2)),
+        installmentsList: instArr,
+        status,
+        compressedRanksList: Array.from(g.compressedFromRanks).filter(Boolean),
+        skipped: false,
+      }
+    })
+
+    return rows.sort((a, b) => Number(a.rank) - Number(b.rank) || a.agentName.localeCompare(b.agentName))
+  }, [scopedLedgerData, usersMap, getRank, agent, activeLedgerInst, p?.policyNumber])
+
+  // Filtered & sorted recipient rows for user controls
+  const filteredRecipientRows = useMemo(() => {
+    const q = commSearch.trim().toLowerCase()
+    const filtered = recipientRows.filter((r) => {
+      if (commRankFilter !== 'all' && String(r.rank) !== String(commRankFilter)) return false
+      if (commStatusFilter !== 'all' && r.status !== commStatusFilter) return false
+      if (q) {
+        return (
+          r.agentName.toLowerCase().includes(q) ||
+          r.agentCode.toLowerCase().includes(q) ||
+          r.rankCode.toLowerCase().includes(q) ||
+          r.type.toLowerCase().includes(q)
+        )
+      }
+      return true
+    })
+
+    const sorted = [...filtered]
+    if (commSort === 'amount_desc') {
+      sorted.sort((a, b) => b.amount - a.amount || a.rank - b.rank)
+    } else if (commSort === 'amount_asc') {
+      sorted.sort((a, b) => a.amount - b.amount || a.rank - b.rank)
+    } else if (commSort === 'pct_desc') {
+      sorted.sort((a, b) => b.percentage - a.percentage || b.amount - a.amount)
+    } else {
+      sorted.sort((a, b) => a.rank - b.rank || b.amount - a.amount)
+    }
+
+    let runPct = 0
+    return sorted.map((r) => {
+      runPct += Number(r.percentage) || 0
+      return { ...r, runningTotalPct: runPct }
+    })
+  }, [recipientRows, commSearch, commRankFilter, commStatusFilter, commSort])
+
+  // Strict 18-rank audit matrix (NO fabricated fallback rates)
+  const matrixRows = useMemo(() => {
+    if (!ranksList || ranksList.length === 0) return []
+    const sortedRanks = [...ranksList].sort((a, b) => Number(a.rank) - Number(b.rank))
+    let runningTotalPct = 0
+    const rows = []
+
+    sortedRanks.forEach((r) => {
+      const rankNum = Number(r.rank)
+      const matchingRecipients = recipientRows.filter((rec) => Number(rec.rank) === rankNum)
+
+      if (matchingRecipients.length > 0) {
+        matchingRecipients.forEach((rec, idx) => {
+          runningTotalPct += Number(rec.percentage) || 0
+          rows.push({
+            ...rec,
+            key: `${rankNum}_${rec.key}_${idx}`,
+            rank: rankNum,
+            rankCode: r.code,
+            rankName: r.name,
+            runningTotalPct,
+            skipped: false,
+            skipReason: '',
+          })
+        })
+      } else {
+        const agentInChain = traversedChain.find((a) => Number(a.rank) === rankNum)
+        let skipReason = 'No Ledger Entry'
+        if (agent && rankNum < Number(agent.rank)) {
+          skipReason = 'Skipped (Below Seller)'
+        } else if (!agentInChain) {
+          skipReason = 'Skipped (No Agent at Rank)'
+        }
+        rows.push({
+          key: `tier_${rankNum}`,
+          rank: rankNum,
+          rankCode: r.code,
+          rankName: r.name,
+          agentId: agentInChain?.id || null,
+          agentName: agentInChain ? `${agentInChain.name}` : '—',
+          agentCode: agentInChain?.sponsorCode || '—',
+          type: agentInChain ? 'Unpaid / Compressed' : '—',
+          percentage: 0,
+          pctLabel: '0.00%',
+          amount: 0,
+          runningTotalPct,
+          status: 'none',
+          installmentsList: [],
+          compressedRanksList: [],
+          skipped: true,
+          skipReason,
+        })
+      }
+    })
+
+    return rows
+  }, [ranksList, recipientRows, traversedChain, agent])
+
+  // Available rank options present in this policy's recipients
+  const availableRecipientRanks = useMemo(() => {
+    const map = new Map()
+    recipientRows.forEach((r) => {
+      if (!map.has(r.rank)) map.set(r.rank, `${r.rankCode}${r.rankName ? ` — ${r.rankName}` : ''}`)
+    })
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0])
+  }, [recipientRows])
+
+  // Summary card metrics (strictly reconciled with real recipientRows)
+  const paidRanks = recipientRows
+  const totalDistributed = useMemo(() => recipientRows.reduce((sum, r) => sum + (Number(r.percentage) || 0), 0), [recipientRows])
+  const totalPaid = useMemo(() => recipientRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0), [recipientRows])
+  const directCommissionTotal = useMemo(() => recipientRows.filter((r) => r.isDirect).reduce((sum, r) => sum + r.amount, 0), [recipientRows])
+  const uplineCommissionTotal = useMemo(() => recipientRows.filter((r) => !r.isDirect).reduce((sum, r) => sum + r.amount, 0), [recipientRows])
+  const uniqueAgentsCount = useMemo(() => new Set(recipientRows.map((r) => r.agentId || r.agentCode)).size, [recipientRows])
+  const highestRankObj = useMemo(() => recipientRows.length > 0 ? recipientRows[recipientRows.length - 1] : null, [recipientRows])
+  const lowestRankObj = useMemo(() => recipientRows.length > 0 ? recipientRows[0] : null, [recipientRows])
 
   if (loading) {
     return (
@@ -538,29 +621,29 @@ export default function PolicyDetail() {
       {/* Header Info */}
       <div className="card relative overflow-hidden p-6 border-l-4 border-gold-1 bg-navy-3">
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gold-1/5 blur-3xl" />
-        <div className="relative flex flex-wrap items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <span className="flex h-14 w-14 items-center justify-center rounded-card border border-gold-1/25 bg-gold-1/10 text-gold-1">
-              <IDoc size={28} />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <span className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-card border border-gold-1/25 bg-gold-1/10 text-gold-1">
+              <IDoc size={26} />
             </span>
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">Policy #{p.policyNumber || '—'}</h1>
+                <h1 className="font-serif text-xl sm:text-2xl font-bold text-ink-1 tracking-tight truncate">Policy #{p.policyNumber || '—'}</h1>
                 <StatusBadge status={p.status || 'active'} />
               </div>
               <p className="text-xs text-ink-2 mt-0.5 font-mono">Product: {p.type || p.planCode || '—'}</p>
             </div>
           </div>
-          <div className="flex gap-3 items-center">
+          <div className="flex flex-wrap gap-2.5 items-center">
             {canEdit && (
               <button
                 onClick={() => setEditOpen(true)}
-                className="btn-dark py-2 px-4 text-xs font-bold uppercase tracking-wider border border-gold/40 text-gold hover:border-gold flex items-center gap-1.5"
+                className="btn-dark py-2 px-3.5 text-xs font-bold uppercase tracking-wider border border-gold/40 text-gold hover:border-gold flex items-center gap-1.5"
               >
                 <ISettings size={14} /> Correct Credentials
               </button>
             )}
-            <Link to="/admin/policies" className="btn-ghost py-2 px-4 text-xs font-bold uppercase tracking-wider">
+            <Link to="/admin/policies" className="btn-ghost py-2 px-3.5 text-xs font-bold uppercase tracking-wider">
               Back to List
             </Link>
           </div>
@@ -638,7 +721,7 @@ export default function PolicyDetail() {
             </div>
 
             {/* Business value summary banner */}
-            <div className="bg-navy-2/30 border border-navy-4 rounded p-4 flex justify-between items-center text-xs mt-2">
+            <div className="bg-navy-2/30 border border-navy-4 rounded p-4 flex flex-wrap justify-between items-center gap-3 text-xs mt-2">
               <div>
                 <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Cumulative Business Value</span>
                 <span className="text-xl font-bold font-serif text-ink-1 mt-0.5 block">{formatINR(businessValue)}</span>
@@ -648,89 +731,320 @@ export default function PolicyDetail() {
           </div>
 
           {/* Commission Allocation Breakdown */}
-          <div className="card p-5 space-y-6">
-            <div className="border-b border-navy-4/50 pb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
+          <div id="commission-breakdown" className="card p-4 sm:p-5 space-y-5">
+            <div className="border-b border-navy-4/50 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gold-tan flex items-center gap-2">
-                  <ISettings size={16} /> Commission Allocation Breakdown
+                  <ISettings size={16} className="shrink-0" /> Commission Allocation Breakdown
                 </h3>
                 <p className="text-[11px] text-ink-2 mt-0.5">
-                  Showing Policy Year {activeBreakdownYear} (Installment #{activeLedgerInst}) calculations from the live ledger database.
+                  {activeLedgerInst === 'all'
+                    ? `Showing all active commission distributions (${availableInstallments.length || 1} installment${availableInstallments.length === 1 ? '' : 's'}) from live ledger records.`
+                    : `Showing Policy Year ${activeBreakdownYear} (Installment #${activeLedgerInst}) live ledger commission allocations.`}
                 </p>
               </div>
-              {availableInstallments.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {availableInstallments.length > 0 && (
+                  <select
+                    className="field text-xs w-full sm:w-52 py-1.5"
+                    value={selectedLedgerInst}
+                    onChange={(e) => setSelectedLedgerInst(e.target.value)}
+                    aria-label="Filter installment"
+                  >
+                    <option value="all">All Installments ({availableInstallments.length})</option>
+                    <option value="latest">Latest (Inst #{availableInstallments[availableInstallments.length - 1]})</option>
+                    {availableInstallments.map((instNo) => (
+                      <option key={instNo} value={instNo}>
+                        Inst #{instNo} (Year {getActivePolicyYear(p, instNo)})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div className="inline-flex rounded-card border border-navy-4 bg-navy-2 p-0.5 text-[11px] font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCommViewMode('recipients')}
+                    className={`px-2.5 py-1 rounded transition-colors ${commViewMode === 'recipients' ? 'bg-gold-1 text-navy-1 font-bold' : 'text-ink-2 hover:text-ink-1'}`}
+                  >
+                    Recipients ({recipientRows.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCommViewMode('all_ranks')}
+                    className={`px-2.5 py-1 rounded transition-colors ${commViewMode === 'all_ranks' ? 'bg-gold-1 text-navy-1 font-bold' : 'text-ink-2 hover:text-ink-1'}`}
+                  >
+                    All 18 Ranks
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary KPI Strip (Strictly Reconciled with Commission Ledger) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-navy-2/25 border border-navy-4 rounded-card p-3.5 sm:p-4">
+              <div>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Business Amount</span>
+                <span className="text-base sm:text-lg font-bold font-serif text-ink-1 mt-0.5 block">{formatINR(businessValue)}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Commission Paid</span>
+                <span className="text-base sm:text-lg font-bold font-serif text-gold mt-0.5 block">{formatINR(totalPaid)}</span>
+                <span className="text-[10px] font-mono text-ink-2">
+                  {activeLedgerInst === 'all' && availableInstallments.length > 1
+                    ? `${availableInstallments.length} inst. combined`
+                    : `${Number(totalDistributed).toFixed(2)}% rate sum`}
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Eligible Agents Paid</span>
+                <span className="text-base sm:text-lg font-bold font-serif text-ink-1 mt-0.5 block">{uniqueAgentsCount}</span>
+                <span className="text-[10px] text-ink-2">{paidRanks.length} ledger share{paidRanks.length === 1 ? '' : 's'}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Direct vs Upline</span>
+                <span className="text-xs font-bold text-gold-1 block mt-1">Direct: {formatINR(directCommissionTotal)}</span>
+                <span className="text-xs font-semibold text-emerald-400 block">Upline: {formatINR(uplineCommissionTotal)}</span>
+              </div>
+            </div>
+
+            {/* Search, Filter & Sort Controls (Recipients View) */}
+            {commViewMode === 'recipients' && recipientRows.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="relative">
+                  <ISearch size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
+                  <input
+                    type="text"
+                    value={commSearch}
+                    onChange={(e) => setCommSearch(e.target.value)}
+                    placeholder="Search agent name or code..."
+                    className="field pl-8 py-1.5 text-xs"
+                  />
+                </div>
                 <select
-                  className="field text-xs w-48 py-1"
-                  value={selectedLedgerInst}
-                  onChange={(e) => setSelectedLedgerInst(e.target.value)}
+                  value={commRankFilter}
+                  onChange={(e) => setCommRankFilter(e.target.value)}
+                  className="field py-1.5 text-xs"
+                  aria-label="Filter by rank"
                 >
-                  <option value="latest">Latest (Inst #{availableInstallments[availableInstallments.length - 1]})</option>
-                  {availableInstallments.map((instNo) => (
-                    <option key={instNo} value={instNo}>
-                      Inst #{instNo} (Year {getActivePolicyYear(p, instNo)})
-                    </option>
+                  <option value="all">All Ranks ({availableRecipientRanks.length})</option>
+                  {availableRecipientRanks.map(([rNum, label]) => (
+                    <option key={rNum} value={rNum}>Rank {rNum} ({label})</option>
                   ))}
                 </select>
-              )}
-            </div>
+                <select
+                  value={commStatusFilter}
+                  onChange={(e) => setCommStatusFilter(e.target.value)}
+                  className="field py-1.5 text-xs"
+                  aria-label="Filter by commission status"
+                >
+                  <option value="all">All Commission Statuses</option>
+                  <option value="paid">Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                  <option value="allocated">Allocated</option>
+                  <option value="approved">Approved</option>
+                  <option value="partial">Partial (Mixed)</option>
+                </select>
+                <select
+                  value={commSort}
+                  onChange={(e) => setCommSort(e.target.value)}
+                  className="field py-1.5 text-xs"
+                  aria-label="Sort commission recipients"
+                >
+                  <option value="rank_asc">Sort: Rank Level (Lowest → Highest)</option>
+                  <option value="amount_desc">Sort: Commission (Highest → Lowest)</option>
+                  <option value="amount_asc">Sort: Commission (Lowest → Highest)</option>
+                  <option value="pct_desc">Sort: Rate % (Highest → Lowest)</option>
+                </select>
+              </div>
+            )}
 
-            {/* Matrix table */}
-            <div className="border border-navy-4 rounded-card overflow-hidden">
-              <table className="tbl text-xs">
-                <thead>
-                  <tr className="bg-navy-2/40">
-                    <th className="py-2.5 px-3">Rank</th>
-                    <th className="py-2.5 px-3">Rank Tier</th>
-                    <th className="py-2.5 px-3">Agent Name</th>
-                    <th className="py-2.5 px-3">Agent Code</th>
-                    <th className="py-2.5 px-3">Status / Role</th>
-                    <th className="py-2.5 px-3 text-right">Commission %</th>
-                    <th className="py-2.5 px-3 text-right">Amount (₹)</th>
-                    <th className="py-2.5 px-3 text-right">Running Total %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-navy-4">
-                  {breakdownRows.map((row) => (
-                    <tr key={row.rank} className={`hover:bg-navy-2/30 transition-colors ${row.skipped ? 'text-ink-2/60 bg-navy-2/5' : 'text-ink-1 font-medium'}`}>
-                      <td className="py-3 px-3 font-mono">{row.rank}</td>
-                      <td className="py-3 px-3 uppercase text-[10.5px] font-semibold text-gold-tan">{row.rankCode} - {row.rankName}</td>
-                      <td className="py-3 px-3">{row.agentName}</td>
-                      <td className="py-3 px-3 font-mono">{row.agentCode}</td>
-                      <td className="py-3 px-3">
-                        {row.skipped ? (
-                          <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-navy-2 text-ink-2/70 border border-navy-4">
-                            {row.skipReason}
+            {/* Empty State when no ledger rows exist */}
+            {commViewMode === 'recipients' && filteredRecipientRows.length === 0 ? (
+              <div className="p-6 text-center rounded-card border border-dashed border-navy-4 bg-navy-2/20 space-y-2">
+                <p className="text-xs font-semibold text-ink-1">
+                  {recipientRows.length === 0
+                    ? 'No commission ledger entries have been generated for this policy yet.'
+                    : 'No commission recipients match your active filters.'}
+                </p>
+                {recipientRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommSearch('')
+                      setCommRankFilter('all')
+                      setCommStatusFilter('all')
+                    }}
+                    className="text-xs font-bold text-gold hover:underline"
+                  >
+                    Clear Commission Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Mobile Card Breakdown (320px–767px) */}
+                <div className="space-y-2.5 md:hidden">
+                  {(commViewMode === 'recipients' ? filteredRecipientRows : matrixRows).map((row) => (
+                    <div
+                      key={`mob-${row.key || row.rank}`}
+                      className={`rounded-card border p-3.5 space-y-2 ${
+                        row.skipped
+                          ? 'border-navy-4/60 bg-navy-2/15 text-ink-2/75'
+                          : 'border-navy-4 bg-navy-2/35 text-ink-1'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded bg-navy-4/70 font-mono text-[10px] font-bold text-gold-tan">
+                              R{row.rank} · {row.rankCode}
+                            </span>
+                            {row.skipped ? (
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-navy-2 text-ink-2/80 border border-navy-4">
+                                {row.skipReason}
+                              </span>
+                            ) : (
+                              <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${row.isDirect ? 'bg-gold-1/10 text-gold-1 border border-gold-1/25' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                {row.type}{row.uplineLevel > 0 ? ` (Lvl +${row.uplineLevel})` : ''}
+                              </span>
+                            )}
+                          </div>
+                          {row.agentId ? (
+                            <Link to={`/admin/members/${row.agentId}`} className="mt-1 block font-semibold text-sm text-ink-1 hover:text-gold truncate">
+                              {row.agentName}
+                            </Link>
+                          ) : (
+                            <p className="mt-1 font-semibold text-sm truncate">{row.agentName}</p>
+                          )}
+                          <p className="text-[11px] font-mono text-ink-2">{row.agentCode}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono font-bold text-base text-gold">
+                            {row.amount > 0 ? formatINR(row.amount) : '₹0'}
+                          </p>
+                          <p className="font-mono text-[11px] text-ink-2">{row.pctLabel || `${Number(row.percentage).toFixed(2)}%`}</p>
+                          {!row.skipped && row.status !== 'none' && (
+                            <div className="mt-1 flex justify-end">
+                              <StatusBadge status={row.status === 'partial' ? 'pending' : row.status} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {!row.skipped && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-navy-4/40 text-[10px] text-ink-2">
+                          <span className="font-mono">
+                            Policy: {p.policyNumber || '—'} · {row.installmentsList?.length > 1 ? `${row.installmentsList.length} Inst.` : `Inst #${row.installmentsList?.[0] || activeLedgerInst}`}
                           </span>
-                        ) : (
-                          <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${row.type === 'Direct' ? 'bg-gold-1/10 text-gold-1 border border-gold-1/25' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
-                            {row.type}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono">{Number(row.percentage).toFixed(2)}%</td>
-                      <td className="py-3 px-3 text-right font-mono font-semibold text-gold">{row.amount > 0 ? formatINR(row.amount) : '₹0'}</td>
-                      <td className="py-3 px-3 text-right font-mono">{Number(row.runningTotalPct).toFixed(2)}%</td>
-                    </tr>
+                          {row.compressedRanksList?.length > 0 && (
+                            <span className="text-gold-tan font-semibold">
+                              Compressed: {row.compressedRanksList.join(', ')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
 
-            {/* Summary Card */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-navy-2/25 border border-navy-4 rounded-card p-5">
+                {/* Desktop Table Breakdown */}
+                <div className="hidden md:block border border-navy-4 rounded-card table-wrap overflow-x-auto">
+                  <table className="tbl text-xs">
+                    <thead>
+                      <tr className="bg-navy-2/40">
+                        <th className="py-2.5 px-3">Rank</th>
+                        <th className="py-2.5 px-3">Agent Name</th>
+                        <th className="py-2.5 px-3">Agent Code</th>
+                        <th className="py-2.5 px-3">Level / Role</th>
+                        <th className="py-2.5 px-3">Policy Ref</th>
+                        <th className="py-2.5 px-3 text-right">Rate %</th>
+                        <th className="py-2.5 px-3 text-right">Commission Earned</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                        {commViewMode === 'all_ranks' && (
+                          <th className="py-2.5 px-3 text-right">Running Total %</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-navy-4">
+                      {(commViewMode === 'recipients' ? filteredRecipientRows : matrixRows).map((row) => (
+                        <tr key={row.key || row.rank} className={`hover:bg-navy-2/30 transition-colors ${row.skipped ? 'text-ink-2/60 bg-navy-2/5' : 'text-ink-1 font-medium'}`}>
+                          <td className="py-3 px-3 uppercase text-[10.5px] font-semibold text-gold-tan whitespace-nowrap">
+                            R{row.rank} · {row.rankCode}
+                            {row.rankName && <span className="block text-[9.5px] font-normal text-ink-2 capitalize">{row.rankName}</span>}
+                          </td>
+                          <td className="py-3 px-3">
+                            {row.agentId && !row.skipped ? (
+                              <Link to={`/admin/members/${row.agentId}`} className="font-semibold text-ink-1 hover:text-gold hover:underline">
+                                {row.agentName}
+                              </Link>
+                            ) : (
+                              <span>{row.agentName}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-mono whitespace-nowrap">{row.agentCode}</td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {row.skipped ? (
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-navy-2 text-ink-2/70 border border-navy-4">
+                                {row.skipReason}
+                              </span>
+                            ) : (
+                              <div>
+                                <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${row.isDirect ? 'bg-gold-1/10 text-gold-1 border border-gold-1/25' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                  {row.type}{row.uplineLevel > 0 ? ` · Lvl +${row.uplineLevel}` : ''}
+                                </span>
+                                {row.compressedRanksList?.length > 0 && (
+                                  <span className="block text-[9.5px] text-gold-tan mt-0.5">
+                                    Includes compressed: {row.compressedRanksList.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-ink-2 whitespace-nowrap">
+                            {row.skipped ? '—' : (
+                              <>
+                                <span className="block text-ink-1">{p.policyNumber || '—'}</span>
+                                <span className="text-[9.5px]">
+                                  {row.installmentsList?.length > 1
+                                    ? `${row.installmentsList.length} inst. (#${row.installmentsList[0]}–#${row.installmentsList[row.installmentsList.length - 1]})`
+                                    : `Inst #${row.installmentsList?.[0] || activeLedgerInst}`}
+                                </span>
+                              </>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap">{row.pctLabel || `${Number(row.percentage).toFixed(2)}%`}</td>
+                          <td className="py-3 px-3 text-right font-mono font-bold text-gold tabular-nums whitespace-nowrap">{row.amount > 0 ? formatINR(row.amount) : '₹0'}</td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            {row.skipped ? (
+                              <span className="text-[10px] text-ink-2/60">—</span>
+                            ) : (
+                              <StatusBadge status={row.status === 'partial' ? 'pending' : row.status} />
+                            )}
+                          </td>
+                          {commViewMode === 'all_ranks' && (
+                            <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap">{Number(row.runningTotalPct).toFixed(2)}%</td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {/* Reconciled Summary Footer */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-navy-2/25 border border-navy-4 rounded-card p-4 sm:p-5">
               <div className="col-span-full border-b border-navy-4/50 pb-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">Commission Summary</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-tan">Commission Summary &amp; Reconciliation</h4>
               </div>
               <div className="space-y-1.5">
-                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Records</span>
-                <span className="text-xl font-bold font-serif text-ink-1 block">{paidRanks.length}</span>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Eligible Commission Entries</span>
+                <span className="text-xl font-bold font-serif text-ink-1 block">{paidRanks.length} ({uniqueAgentsCount} Agent{uniqueAgentsCount === 1 ? '' : 's'})</span>
               </div>
               <div className="space-y-1.5">
-                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Distributed</span>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Rate Sum</span>
                 <span className="text-xl font-bold font-serif text-gold block">{Number(totalDistributed).toFixed(2)}%</span>
               </div>
               <div className="space-y-1.5">
-                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Commission Paid</span>
+                <span className="block text-[10px] text-ink-2 uppercase tracking-wide">Total Commission Distributed</span>
                 <span className="text-xl font-bold font-serif text-ink-1 block">{formatINR(totalPaid)}</span>
               </div>
               <div className="space-y-1.5 border-t border-navy-4/50 pt-2 sm:border-0 sm:pt-0">
@@ -752,14 +1066,14 @@ export default function PolicyDetail() {
               <button
                 type="button"
                 onClick={() => setExplainOpen(!explainOpen)}
-                className="w-full flex items-center justify-between bg-navy-2/30 p-4 hover:bg-navy-2/50 transition-colors text-left"
+                className="w-full flex items-center justify-between gap-2 bg-navy-2/30 p-4 hover:bg-navy-2/50 transition-colors text-left"
               >
                 <span className="text-xs font-bold uppercase tracking-wider text-ink-1">How was this commission calculated?</span>
-                <span className="text-xs text-gold-1 font-bold">{explainOpen ? 'Hide' : 'Show Details'}</span>
+                <span className="text-xs text-gold-1 font-bold shrink-0">{explainOpen ? 'Hide' : 'Show Details'}</span>
               </button>
               {explainOpen && (
                 <div className="p-4 bg-navy-3 border-t border-navy-4 space-y-3.5 text-xs text-ink-2">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <span className="block text-[10px] uppercase text-ink-2">Business Volume</span>
                       <span className="font-semibold text-ink-1 font-mono">{formatINR(businessValue)}</span>
@@ -770,16 +1084,16 @@ export default function PolicyDetail() {
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase text-ink-2">Calculation Method</span>
-                      <span className="font-semibold text-ink-1">Flat Per-Rank Commission</span>
+                      <span className="font-semibold text-ink-1">Flat Per-Rank Ledger Allocation</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] uppercase text-ink-2">Maximum Configured Commission</span>
+                      <span className="block text-[10px] uppercase text-ink-2">Highest Eligible Rate Paid</span>
                       <span className="font-semibold text-ink-1 font-mono">{highestRankObj ? `${Number(highestRankObj.percentage).toFixed(2)}%` : '—'}</span>
                     </div>
-                    <div className="col-span-2 border-t border-navy-4/50 pt-2.5">
+                    <div className="sm:col-span-2 border-t border-navy-4/50 pt-2.5">
                       <span className="block text-[10px] uppercase text-ink-2">Formula Explanation</span>
                       <p className="mt-1 leading-relaxed text-[11px]">
-                        The commission engine traverses the upline hierarchy starting from the seller. For each level, it determines the commission rate configured in the Commission Master for that rank and pays out exactly that percentage. No deductions are made, and no ranks are skipped due to equal rate percentages, assuring full transparency.
+                        Every row above reflects verified entries recorded in the backend commission ledger for this policy. When downline ranks are skipped or compressed, those ranks earn ₹0 unless explicitly compressed into an eligible sponsor tier according to plan rules.
                       </p>
                     </div>
                   </div>
@@ -971,7 +1285,7 @@ export default function PolicyDetail() {
               </div>
               <div className="space-y-1">
                 {diffs.map((d, i) => (
-                  <div key={i} className="flex justify-between items-center text-[11px] border-b border-navy-4/50 pb-1">
+                  <div key={i} className="flex flex-wrap justify-between items-center gap-2 text-[11px] border-b border-navy-4/50 pb-1">
                     <span className="text-ink-2 font-medium">{d.field}:</span>
                     <span className="font-mono text-ink-1">
                       <span className="text-red-400 line-through mr-1">{d.oldVal}</span> → <span className="text-ok font-bold">{d.newVal}</span>

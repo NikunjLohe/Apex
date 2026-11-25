@@ -64,17 +64,17 @@ export default function CustomerList() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[220px]">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
           <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
           <input
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setLimitCount(PAGE_SIZE) }}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone, account number…"
             className="field pl-10"
           />
         </div>
-        <select value={kyc} onChange={(e) => { setKyc(e.target.value); setLimitCount(PAGE_SIZE) }} className="field w-auto">
+        <select value={kyc} onChange={(e) => setKyc(e.target.value)} className="field w-full sm:w-auto">
           <option value="all">All KYC</option>
           <option value="pending">Pending</option>
           <option value="verified">Verified</option>
@@ -101,7 +101,33 @@ export default function CustomerList() {
       ) : (
         <>
           <p className="text-xs text-ink-2">{filtered.length} customer{filtered.length === 1 ? '' : 's'}</p>
-          <div className="table-wrap">
+
+          {/* Mobile Card List */}
+          <div className="space-y-2.5 md:hidden">
+            {filtered.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => navigate(`/customers/${c.id}`)}
+                className="card p-3.5 cursor-pointer hover:border-gold-1/40 transition-colors space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-ink-1 truncate">{c.name}</p>
+                    <p className="font-mono text-xs text-gold">{c.accountNumber}</p>
+                  </div>
+                  <StatusBadge status={c.kycStatus || 'pending'} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-ink-2 pt-1 border-t border-navy-4/40">
+                  <div><span className="text-[10px] uppercase block text-ink-2/70">Phone</span><span className="text-ink-1 font-mono">{c.phone || '—'}</span></div>
+                  <div><span className="text-[10px] uppercase block text-ink-2/70">Plans</span><span className="text-ink-1 font-semibold">{c.plansCount || 0}</span></div>
+                  <div><span className="text-[10px] uppercase block text-ink-2/70">Enrolled By</span><span className="text-ink-1 truncate block">{c.enrolledByName || '—'}</span></div>
+                  <div><span className="text-[10px] uppercase block text-ink-2/70">Date</span><span className="text-ink-1">{fmtDate(c.createdAt)}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block table-wrap">
             <div className="overflow-x-auto">
               <table className="tbl">
                 <thead>

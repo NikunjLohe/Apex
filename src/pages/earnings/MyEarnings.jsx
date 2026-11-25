@@ -486,14 +486,14 @@ export default function MyEarnings() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Payout Statements List & Excel Export */}
         <div className="card p-5 space-y-4 md:col-span-1">
-          <div className="flex items-center justify-between border-b border-navy-4/50 pb-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-4/50 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-gold-tan">
               Monthly Payout History
             </h3>
             <button
               onClick={handleExportAgentPayoutExcel}
               disabled={exportingExcel || !stats.sortedPayouts?.length}
-              className="btn-gold px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 disabled:opacity-50"
+              className="btn-gold px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold flex items-center gap-1 disabled:opacity-50"
             >
               <IDoc size={12} />
               {exportingExcel ? 'Exporting...' : 'Export Payout Excel'}
@@ -790,53 +790,86 @@ export default function MyEarnings() {
         </div>
 
         {commissions.length ? (
-          <div className="table-wrap">
-            <table className="tbl text-xs">
-              <thead>
-                <tr>
-                  <th>Credit Date</th>
-                  <th>Policy No.</th>
-                  <th>Customer</th>
-                  <th>Plan Product</th>
-                  <th>Payout Type</th>
-                  <th>Percentage</th>
-                  <th className="text-right">Credit Amount</th>
-                  <th className="text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {commissions.map(log => (
-                  <tr key={log.id}>
-                    <td className="font-mono text-ink-2">{log.calculationDate ? fmtDate(log.calculationDate) : log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
-                    <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || log.policyId || '—'}</td>
-                    <td className="font-semibold text-ink-1">{log.customerName || '—'}</td>
-                    <td className="text-ink-2 font-semibold uppercase">
-                      <span>{log.planCode || log.planType || '—'}</span>
-                      <span className="block text-[10px] font-mono text-gold-tan font-normal">
-                        Y{log.policyYear || 1} &middot; Inst #{log.installmentNumber || 1}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block text-center">
-                        {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}
-                      </span>
-                    </td>
-                    <td className="text-ink-2 font-mono">{log.percentage ? `${Number(log.percentage).toFixed(2)}%` : '—'}</td>
-                    <td className="text-right font-bold text-gold">{formatINR(log.amount)}</td>
-                    <td className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedComm(log)}
-                        className="text-gold font-bold hover:underline text-[10px] uppercase tracking-wide"
-                      >
-                        View Details
-                      </button>
-                    </td>
+          <>
+            <div className="space-y-2.5 md:hidden">
+              {commissions.map((log) => (
+                <div key={`mob-comm-${log.id}`} className="rounded-card border border-navy-4 bg-navy-2/35 p-3.5 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-bold text-ink-1 truncate">{log.policyNumber || log.policyId || '—'}</p>
+                      <p className="text-xs font-semibold text-ink-1 truncate">{log.customerName || '—'}</p>
+                      <p className="text-[10px] font-mono text-gold-tan">
+                        {(log.planCode || log.planType || '—').toUpperCase()} · Y{log.policyYear || 1} · Inst #{log.installmentNumber || 1}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-mono text-base font-bold text-gold">{formatINR(log.amount)}</p>
+                      <p className="font-mono text-[10px] text-ink-2">{log.percentage ? `${Number(log.percentage).toFixed(2)}%` : '—'}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-navy-4/40 text-[10px]">
+                    <span className="font-semibold text-ink-2 uppercase bg-navy-2 px-2 py-0.5 rounded border border-navy-4">
+                      {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedComm(log)}
+                      className="text-gold font-bold hover:underline text-[11px] uppercase tracking-wide"
+                    >
+                      View Details →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block table-wrap overflow-x-auto">
+              <table className="tbl text-xs">
+                <thead>
+                  <tr>
+                    <th>Credit Date</th>
+                    <th>Policy No.</th>
+                    <th>Customer</th>
+                    <th>Plan Product</th>
+                    <th>Payout Type</th>
+                    <th>Percentage</th>
+                    <th className="text-right">Credit Amount</th>
+                    <th className="text-center">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {commissions.map(log => (
+                    <tr key={log.id}>
+                      <td className="font-mono text-ink-2">{log.calculationDate ? fmtDate(log.calculationDate) : log.createdAt ? fmtDate(log.createdAt) : '—'}</td>
+                      <td className="font-mono text-ink-1 font-semibold">{log.policyNumber || log.policyId || '—'}</td>
+                      <td className="font-semibold text-ink-1">{log.customerName || '—'}</td>
+                      <td className="text-ink-2 font-semibold uppercase">
+                        <span>{log.planCode || log.planType || '—'}</span>
+                        <span className="block text-[10px] font-mono text-gold-tan font-normal">
+                          Y{log.policyYear || 1} &middot; Inst #{log.installmentNumber || 1}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-semibold text-ink-2 uppercase text-[10px] bg-navy-2 px-2 py-0.5 rounded border border-navy-4 whitespace-nowrap block text-center">
+                          {log.commissionType === 'Direct' || log.commissionType === 'direct' || log.commissionType === 'direct_own' || (!log.commissionType && !log.compression) ? 'Direct' : 'Upline Commission'}
+                        </span>
+                      </td>
+                      <td className="text-ink-2 font-mono">{log.percentage ? `${Number(log.percentage).toFixed(2)}%` : '—'}</td>
+                      <td className="text-right font-bold text-gold">{formatINR(log.amount)}</td>
+                      <td className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedComm(log)}
+                          className="text-gold font-bold hover:underline text-[10px] uppercase tracking-wide"
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <p className="text-xs text-ink-2 italic py-4 text-center">No personal commission ledger logs recorded under your account yet.</p>
         )}
@@ -844,38 +877,38 @@ export default function MyEarnings() {
 
       {/* Commission View Details Modal */}
       {selectedComm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 backdrop-blur-sm p-4 print:hidden">
-          <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[90vh] flex flex-col modal-print-container">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 backdrop-blur-sm p-2.5 sm:p-4 print:hidden">
+          <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[92dvh] flex flex-col modal-print-container">
             
             {/* Modal Header */}
-            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 print:hidden">
-              <div>
-                <h3 className="text-lg font-serif font-black text-gray-900">Commission Detail Statement</h3>
-                <p className="text-xs text-gray-500">Audit Trail: <span className="font-mono font-bold text-gray-700">{selectedComm.policyNumber || selectedComm.policyId}</span></p>
+            <div className="flex justify-between items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 print:hidden">
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-serif font-black text-gray-900 truncate">Commission Detail Statement</h3>
+                <p className="text-xs text-gray-500 truncate">Audit Trail: <span className="font-mono font-bold text-gray-700">{selectedComm.policyNumber || selectedComm.policyId}</span></p>
               </div>
               <button 
                 onClick={() => setSelectedComm(null)}
-                className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1"
+                className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1.5 shrink-0"
               >
                 ✕
               </button>
             </div>
 
             {/* Modal Scrollable Content */}
-            <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+            <div className="p-3 sm:p-6 overflow-y-auto space-y-5 flex-1 text-xs">
               {/* Printable Container */}
-              <div id="commission-statement-pdf" className="bg-white text-black p-8 font-sans space-y-6">
+              <div id="commission-statement-pdf" className="bg-white text-black p-4 sm:p-8 font-sans space-y-6">
                 
                 {/* Header */}
-                <div className="flex justify-between items-start border-b-2 border-gray-200 pb-6 gap-4">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-gray-200 pb-6 gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
                     <Logo size={46} showText={false} />
                     <div>
-                      <h1 className="text-2xl font-serif font-black tracking-tight">{companyName}</h1>
+                      <h1 className="text-xl sm:text-2xl font-serif font-black tracking-tight">{companyName}</h1>
                       <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Apex Multisolutions Branch Operations Portal</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right">
                     <h2 className="text-xl font-black text-gray-800 uppercase tracking-widest">Commission Statement</h2>
                     <p className="text-xs text-gray-500 mt-1">Policy No: <span className="font-mono font-bold">{selectedComm.policyNumber || selectedComm.policyId}</span></p>
                     <p className="text-xs text-gray-500 mt-0.5">Cycle: <span className="font-semibold">{selectedComm.month}/{selectedComm.year}</span></p>
@@ -984,20 +1017,20 @@ export default function MyEarnings() {
             </div>
 
             {/* Modal Action Footer */}
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl print:hidden">
-              <button 
-                type="button"
-                onClick={() => window.print()}
-                className="btn-dark px-4 py-2 text-xs uppercase font-bold tracking-wide flex items-center gap-1.5"
-              >
-                <IPrint size={14} /> Print Statement
-              </button>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl print:hidden">
               <button 
                 type="button" 
                 onClick={() => setSelectedComm(null)}
-                className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 text-xs uppercase font-bold tracking-wide rounded-card"
+                className="border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 px-4 py-2 text-xs uppercase font-bold tracking-wide rounded-card w-full sm:w-auto justify-center"
               >
                 Close
+              </button>
+              <button 
+                type="button"
+                onClick={() => window.print()}
+                className="btn-dark px-4 py-2 text-xs uppercase font-bold tracking-wide flex items-center justify-center gap-1.5 w-full sm:w-auto"
+              >
+                <IPrint size={14} /> Print Statement
               </button>
             </div>
 

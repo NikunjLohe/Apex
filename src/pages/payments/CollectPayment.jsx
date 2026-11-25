@@ -391,7 +391,7 @@ export default function CollectPayment() {
               { num: 4, label: '4. Installment Details' },
               { num: 5, label: '5. Confirm Payment' }
             ].map((s, idx) => (
-              <div key={s.num} className="flex items-center gap-2 flex-1 min-w-[140px]">
+              <div key={s.num} className="flex items-center gap-2 shrink-0 sm:flex-1 sm:min-w-[140px]">
                 <button
                   type="button"
                   disabled={step < s.num}
@@ -1047,7 +1047,7 @@ export default function CollectPayment() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-3 border-t border-navy-4">
+          <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-navy-4">
             <button
               type="button"
               onClick={() => setStep(3)}
@@ -1076,7 +1076,7 @@ export default function CollectPayment() {
           </div>
 
           {/* Structured Confirmation Table */}
-          <div className="card overflow-hidden bg-navy-2 border border-navy-4">
+          <div className="card bg-navy-2 border border-navy-4 table-wrap overflow-x-auto">
             <table className="tbl text-xs">
               <tbody>
                 <tr className="border-b border-navy-4/50">

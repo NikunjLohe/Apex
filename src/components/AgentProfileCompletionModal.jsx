@@ -22,8 +22,6 @@ export default function AgentProfileCompletionModal() {
   const { user, logout, isViewingAs } = useAuth()
   const [submitting, setSubmitting] = useState(false)
 
-  if (isViewingAs) return null
-
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(profileCompletionSchema),
     defaultValues: {
@@ -36,6 +34,8 @@ export default function AgentProfileCompletionModal() {
       branch: '',
     },
   })
+
+  if (isViewingAs) return null
 
   const onSubmit = async (data) => {
     if (!user?.uid) return
@@ -73,8 +73,8 @@ export default function AgentProfileCompletionModal() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-xl rounded-card border border-navy-4 bg-navy-3 p-6 shadow-xl space-y-5 my-8">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-navy-1/80 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-xl rounded-card border border-navy-4 bg-navy-3 p-4 sm:p-6 shadow-xl space-y-5 my-auto max-h-[94dvh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-navy-4 pb-3">
           <Logo size={32} tagline={false} />
           <button 

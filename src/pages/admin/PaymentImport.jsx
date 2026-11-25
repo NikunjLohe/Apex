@@ -185,8 +185,8 @@ export default function PaymentImport() {
             </span>
           </div>
           
-          <div className="max-h-96 overflow-auto mb-6 border border-navy-4 rounded-lg bg-navy-4/20">
-            <table className="w-full text-left text-sm">
+          <div className="table-wrap max-h-96 overflow-auto mb-6 border border-navy-4 rounded-lg bg-navy-4/20">
+            <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="sticky top-0 bg-navy-3 text-xs font-semibold uppercase tracking-wider text-ink-2">
                 <tr>
                   <th className="px-4 py-3">Row</th>
@@ -230,7 +230,7 @@ export default function PaymentImport() {
             <h3 className="font-semibold text-white">Import Summary</h3>
             <button onClick={() => setImportSummary(null)} className="btn-secondary">New Import</button>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-navy-4/30 p-4 rounded-lg border border-navy-4">
               <p className="text-xs text-ink-2 uppercase tracking-wider">Total Attempted</p>
               <p className="mt-1 text-2xl font-semibold text-white">{importSummary.total}</p>

@@ -128,3 +128,32 @@
 .animate-particle-2 { animation: float-particle-2 20s infinite ease-in-out reverse; }
 .animate-particle-3 { animation: float-particle-3 18s infinite ease-in-out; }
 
+
+/* ── Global Mobile Responsiveness Enhancements ──────────────────────────────── */
+@layer base {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+}
+
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.recharts-wrapper,
+.recharts-responsive-container {
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .btn-gold,
+  .btn-ghost,
+  .btn-danger,
+  .btn-primary {
+    min-height: 40px;
+  }
+}

@@ -545,9 +545,9 @@ export default function ImportData() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Title */}
-      <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
+      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-navy-4/50 pb-4">
         <div>
-          <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">New Business Onboarding</h2>
+          <h2 className="font-serif text-xl sm:text-2xl font-bold text-ink-1 tracking-tight">New Business Onboarding</h2>
           <p className="text-xs text-ink-2">Onboard new customer policies manually or bulk import via bank Excel sheet.</p>
         </div>
         <Link to="/admin/import/history" className="btn-gold py-2 text-xs uppercase tracking-wider font-bold flex items-center gap-1.5">
@@ -556,11 +556,11 @@ export default function ImportData() {
       </div>
 
       {/* Mode Switcher Tabs */}
-      <div className="flex border-b border-navy-4/50 gap-6">
+      <div className="flex border-b border-navy-4/50 gap-4 sm:gap-6 overflow-x-auto whitespace-nowrap scrollbar-none">
         <button
           type="button"
           onClick={() => { setActiveTab('excel'); setSearchParams({ tab: 'excel' }) }}
-          className={`pb-3 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+          className={`shrink-0 pb-3 text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'excel'
               ? 'border-gold-1 text-gold-1 font-bold'
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -572,7 +572,7 @@ export default function ImportData() {
         <button
           type="button"
           onClick={() => { setActiveTab('manual'); setSearchParams({ tab: 'manual' }) }}
-          className={`pb-3 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+          className={`shrink-0 pb-3 text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
             activeTab === 'manual'
               ? 'border-gold-1 text-gold-1 font-bold'
               : 'border-transparent text-ink-2 hover:text-ink-1'

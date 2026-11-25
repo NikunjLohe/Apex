@@ -386,7 +386,7 @@ export default function CommissionBill() {
         }
       `}</style>
 
-      <div className="flex justify-between items-center print:hidden">
+      <div className="flex flex-wrap justify-between items-center gap-2 print:hidden">
         <Link to="/admin/payouts" className="text-gold flex items-center gap-1 text-sm font-semibold hover:underline">
           &larr; Back to Payouts
         </Link>
@@ -395,15 +395,15 @@ export default function CommissionBill() {
         </button>
       </div>
 
-      <div className="card p-6 sm:p-8 bg-white text-gray-900 border border-gray-200 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
+      <div className="card p-4 sm:p-8 bg-white text-gray-900 border border-gray-200 print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0">
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row print:flex-row justify-between items-start border-b-2 border-slate-800 pb-5 mb-5 print:pb-3 print:mb-4 gap-4 print-avoid-break">
-          <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-3.5 min-w-0">
             <Logo size={46} showText={false} />
-            <div>
-              <h1 className="text-2xl print:text-xl font-serif font-black tracking-tight text-slate-900">{companyName}</h1>
-              <p className="text-[10px] text-amber-800 uppercase tracking-[0.12em] font-bold whitespace-nowrap">Apex Multisolutions Performance Portal</p>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl print:text-xl font-serif font-black tracking-tight text-slate-900">{companyName}</h1>
+              <p className="text-[10px] text-amber-800 uppercase tracking-[0.12em] font-bold">Apex Multisolutions Performance Portal</p>
               {headOffice && <p className="text-xs text-slate-500 mt-1 max-w-xs">{headOffice}</p>}
             </div>
           </div>
@@ -727,19 +727,19 @@ export default function CommissionBill() {
 
       {allocationPolicy && (() => {
         const modalPolicyKey = allocationPolicy.policyNumber || allocationPolicy.policyId
-        const modalComms = policyCommissionsMap[modalPolicyKey] || []
-        const totalModalComm = modalComms.reduce((sum, x) => sum + (x.amount || 0), 0)
+        const modalComms = (policyCommissionsMap[modalPolicyKey] || []).filter(x => String(x.status || '').toLowerCase() !== 'reversed')
+        const totalModalComm = modalComms.reduce((sum, x) => sum + (Number(x.amount) || 0), 0)
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden">
-            <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[85vh] flex flex-col">
-              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
-                <div>
-                  <h3 className="text-lg font-serif font-black text-gray-900">Commission Allocation Audit</h3>
-                  <p className="text-xs text-gray-500">Policy No: <span className="font-mono font-bold text-gray-700">{allocationPolicy.policyNumber || '—'}</span></p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-2.5 sm:p-4 print:hidden">
+            <div className="bg-white text-black rounded-xl shadow-2xl border border-gray-100 max-w-3xl w-full max-h-[90dvh] flex flex-col">
+              <div className="flex justify-between items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100">
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-serif font-black text-gray-900 truncate">Commission Allocation Audit</h3>
+                  <p className="text-xs text-gray-500 truncate">Policy No: <span className="font-mono font-bold text-gray-700">{allocationPolicy.policyNumber || '—'}</span></p>
                 </div>
-                <button aria-label="Close Modal" onClick={() => setAllocationPolicy(null)} className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1">✕</button>
+                <button aria-label="Close Modal" onClick={() => setAllocationPolicy(null)} className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1.5 shrink-0">✕</button>
               </div>
-              <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs">
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-100">
                   <div><span className="text-gray-500 block">Policy Number</span><span className="font-bold text-gray-800 text-sm font-mono">{allocationPolicy.policyNumber || '—'}</span></div>
                   <div><span className="text-gray-500 block">Customer</span><span className="font-bold text-gray-800 text-sm">{allocationPolicy.customerName || '—'}</span></div>

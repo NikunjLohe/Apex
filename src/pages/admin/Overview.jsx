@@ -88,7 +88,7 @@ export default function Overview() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 lg:grid-cols-3">
         {cards.map((c) => (
           <div key={c.label} className="card p-5">
             <span className={`flex h-10 w-10 items-center justify-center rounded-card border ${c.danger ? 'border-danger/30 bg-danger/10 text-danger' : 'border-gold-1/20 bg-gold-1/10 text-gold'}`}>{c.icon}</span>

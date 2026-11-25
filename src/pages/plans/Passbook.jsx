@@ -114,7 +114,7 @@ export default function Passbook() {
                 <p className="font-mono text-xs text-gold">{plan.planAccountNumber || plan.policyNumber}</p>
               </div>
             </div>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm w-full sm:w-auto">
               <Row k="Plan" v={planTypeCode} />
               <Row k="Status" v={plan.status} />
               <Row k="Installment" v={isRD(planTypeCode) ? `${(plan.monthlyAmount || plan.installmentAmount) ? formatINR(plan.monthlyAmount || plan.installmentAmount) : '—'}/mo` : formatINR(plan.fdAmount)} />

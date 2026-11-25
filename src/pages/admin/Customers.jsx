@@ -77,16 +77,16 @@ const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 return (
   <div className="mx-auto max-w-6xl space-y-4">
     {/* Header */}
-    <div className="flex justify-between items-center border-b border-navy-4/50 pb-4">
+    <div className="flex flex-wrap justify-between items-center gap-3 border-b border-navy-4/50 pb-4">
       <div>
-        <h2 className="font-serif text-2xl font-bold text-ink-1 tracking-tight">System Customers</h2>
+        <h2 className="font-serif text-xl sm:text-2xl font-bold text-ink-1 tracking-tight">System Customers</h2>
         <p className="text-xs text-ink-2">CIF account records uploaded from bank approved daily logs.</p>
       </div>
     </div>
 
     {/* Filters bar */}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="relative flex-1 min-w-[280px]">
+      <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
         <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
         <input
           value={search}
@@ -104,14 +104,39 @@ return (
       <EmptyState
         icon={<IUsers size={24} />}
         title="No customers found"
-        message={search || branchFilter !== 'all' ? "Try adjusting your search criteria or branch filters." : "Bank Excel uploads will automatically create customer records."}
+        message={search ? "Try adjusting your search criteria." : "Bank Excel uploads will automatically create customer records."}
       />
     ) : (
       <>
         <p className="text-xs text-ink-2 font-mono">{filtered.length} customer record{filtered.length === 1 ? '' : 's'} registered</p>
-        <div className="table-wrap">
-          <div className="overflow-x-auto">
-            <table className="tbl text-xs sm:text-sm">
+
+        {/* Mobile Customer Cards */}
+        <div className="space-y-2.5 md:hidden">
+          {pageItems.map((c) => (
+            <div
+              key={`mob-cust-${c.id}`}
+              onClick={() => navigate(`/admin/customers/${c.id}`)}
+              className="card p-3.5 cursor-pointer hover:border-gold-1/40 transition-colors space-y-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-ink-1 truncate">{c.name}</p>
+                  <p className="font-mono text-xs font-semibold text-gold">{c.customerId || '—'}</p>
+                </div>
+                <span className="font-bold text-xs text-ink-1 bg-navy-2 px-2 py-0.5 rounded border border-navy-4 font-mono shrink-0">
+                  {c.plansCount || 0} {c.plansCount === 1 ? 'Plan' : 'Plans'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-ink-2 pt-1.5 border-t border-navy-4/40">
+                <div><span className="text-[10px] uppercase block">Mobile</span><span className="font-mono text-ink-1">{c.phone || '—'}</span></div>
+                <div><span className="text-[10px] uppercase block">Agent</span><span className="text-ink-1 truncate block">{agentMap[c.enrolledBy] || '—'}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:block table-wrap overflow-x-auto">
+          <table className="tbl text-xs sm:text-sm">
               <thead>
                 <tr>
                   <th>Customer CIF ID</th>
@@ -146,13 +171,12 @@ return (
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+          </table>
         </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             <button
               type="button"
               disabled={page === 1}

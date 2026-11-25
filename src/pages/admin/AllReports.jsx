@@ -270,7 +270,7 @@ export default function AllReports() {
       </div>
 
       {/* Filter panel */}
-      <div className="card p-5 bg-navy-3 border border-navy-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="card p-4 sm:p-5 bg-navy-3 border border-navy-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <div>
           <label className="label">Rank Tier</label>
           <select className="field text-xs" value={filterRank} onChange={e => setFilterRank(e.target.value)}>
@@ -307,23 +307,23 @@ export default function AllReports() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-navy-4">
-        <button onClick={() => setActiveTab('agents')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'agents' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+      <div className="flex gap-2 border-b border-navy-4 overflow-x-auto whitespace-nowrap scrollbar-none">
+        <button onClick={() => setActiveTab('agents')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'agents' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Agents ({agentsData.length})
         </button>
-        <button onClick={() => setActiveTab('business')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'business' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+        <button onClick={() => setActiveTab('business')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'business' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Sales Business
         </button>
-        <button onClick={() => setActiveTab('policies')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'policies' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+        <button onClick={() => setActiveTab('policies')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'policies' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Policies ({policiesData.length})
         </button>
-        <button onClick={() => setActiveTab('commissions')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'commissions' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+        <button onClick={() => setActiveTab('commissions')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'commissions' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Commissions ({commissionsData.length})
         </button>
-        <button onClick={() => setActiveTab('payouts')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'payouts' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+        <button onClick={() => setActiveTab('payouts')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'payouts' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Payouts ({payoutsData.length})
         </button>
-        <button onClick={() => setActiveTab('promotions')} className={`pb-2.5 px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'promotions' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
+        <button onClick={() => setActiveTab('promotions')} className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase border-b-2 transition-all ${activeTab === 'promotions' ? 'border-gold text-gold-1' : 'border-transparent text-ink-2 hover:text-ink-1'}`}>
           Promotions ({promotionsData.length})
         </button>
       </div>

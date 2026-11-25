@@ -80,6 +80,11 @@ export function RanksProvider({ children }) {
   }, [refreshPromotionRules])
 
   useEffect(() => {
+    if (!db) {
+      setRanksList([])
+      setLoading(false)
+      return undefined
+    }
     const ref = doc(db, 'config', 'ranks')
     return onSnapshot(
       ref,

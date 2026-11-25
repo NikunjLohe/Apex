@@ -54,10 +54,10 @@ export default function Maturities() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1 rounded-card border border-navy-4 bg-navy-2 p-1">
           {[30, 60, 90].map((d) => (
-            <button key={d} type="button" onClick={() => setWindow(d)} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${window === d ? 'bg-gold-1 text-navy-1' : 'text-ink-2 hover:text-ink-1'}`}>
+            <button key={d} type="button" onClick={() => setWindow(d)} className={`rounded-md px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors ${window === d ? 'bg-gold-1 text-navy-1' : 'text-ink-2 hover:text-ink-1'}`}>
               {d} days
             </button>
           ))}
@@ -70,8 +70,25 @@ export default function Maturities() {
       ) : !maturing.length ? (
         <EmptyState icon={<ICalendar size={24} />} title={`No plans maturing in ${window} days`} />
       ) : (
-        <div className="table-wrap">
-          <div className="overflow-x-auto">
+        <>
+          <div className="space-y-2.5 md:hidden">
+            {maturing.map((p) => (
+              <div key={`mob-mat-${p.id}`} className="card p-3.5 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-ink-1 truncate">{p.customerName}</p>
+                    <p className="font-mono text-[11px] text-gold">{p.planAccountNumber || p.policyNumber}</p>
+                  </div>
+                  <StatusBadge status={p.status} />
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-navy-4/40">
+                  <span className="text-ink-2">{p.type || p.planCode} · {fmtDate(p.maturityDate)}</span>
+                  <span className="font-bold text-ink-1">{formatINR(p.maturityAmount || 0)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block table-wrap overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Customer</th><th>Plan</th><th>Maturity Date</th><th>Maturity Amount</th><th>Status</th></tr></thead>
               <tbody>
@@ -87,7 +104,7 @@ export default function Maturities() {
               </tbody>
             </table>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

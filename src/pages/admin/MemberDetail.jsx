@@ -464,7 +464,7 @@ export default function MemberDetail() {
       </div>
 
       {/* ── Navigation Tabs ──────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 border-b border-navy-4/50 pb-2">
+      <div className="flex gap-2 border-b border-navy-4/50 pb-2 overflow-x-auto whitespace-nowrap scrollbar-none">
         {[
           { key: 'overview', label: 'Overview', icon: IDoc },
           { key: 'business', label: `Business History (${filteredBusinessHistory.length})`, icon: ICash },
@@ -478,7 +478,7 @@ export default function MemberDetail() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
+              className={`shrink-0 flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
                 isActive
                   ? 'bg-gold text-navy-1 shadow-sm'
                   : 'bg-navy-3 text-ink-2 hover:text-ink-1 hover:bg-navy-2 border border-navy-4/60'
@@ -508,7 +508,7 @@ export default function MemberDetail() {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-4 lg:grid-cols-5">
               {/* Personal Business */}
               <div className="card p-4 bg-navy-3 border-l-2 border-gold flex flex-col justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-ink-2">Personal Business</span>

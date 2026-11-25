@@ -480,17 +480,17 @@ export default function Payouts() {
       </div>
 
       {/* Control bar */}
-      <div className="card p-5 bg-navy-3 border border-navy-4 flex flex-wrap items-end gap-4 justify-between">
-        <div className="flex gap-4">
-          <div className="w-44">
+      <div className="card p-4 sm:p-5 bg-navy-3 border border-navy-4 flex flex-col lg:flex-row lg:items-end gap-4 justify-between">
+        <div className="grid grid-cols-1 sm:flex gap-3 sm:gap-4 w-full lg:w-auto">
+          <div className="w-full sm:w-44">
             <label className="label">Select Target Month</label>
-            <select className="field text-xs font-semibold" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
+            <select className="field text-xs font-semibold w-full" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
               {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
           </div>
-          <div className="w-32">
+          <div className="w-full sm:w-32">
             <label className="label">Select Year</label>
-            <select className="field text-xs font-semibold" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+            <select className="field text-xs font-semibold w-full" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
               {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
                 <option key={y} value={y}>{y}</option>
               ))}
@@ -498,11 +498,11 @@ export default function Payouts() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-2.5 sm:gap-3 items-center w-full lg:w-auto">
           <button 
             onClick={handleGeneratePayouts} 
             disabled={generating} 
-            className="btn-gold px-6 py-2.5 text-xs uppercase tracking-wider font-bold"
+            className="btn-gold px-4 sm:px-6 py-2.5 text-xs uppercase tracking-wider font-bold flex-1 sm:flex-initial justify-center"
           >
             {generating ? 'Calculating...' : 'Generate Commission Bills'}
           </button>
@@ -511,7 +511,7 @@ export default function Payouts() {
             <button
               onClick={handleExportExcel}
               disabled={exporting}
-              className="btn-dark px-6 py-2.5 text-xs uppercase tracking-wider font-bold border border-gold/40 hover:border-gold text-gold flex items-center gap-2"
+              className="btn-dark px-4 sm:px-6 py-2.5 text-xs uppercase tracking-wider font-bold border border-gold/40 hover:border-gold text-gold flex items-center justify-center gap-2 flex-1 sm:flex-initial"
             >
               <IDoc size={16} />
               {exporting ? 'Exporting...' : 'Export Payout Excel'}

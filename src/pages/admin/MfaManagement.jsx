@@ -218,15 +218,15 @@ export default function MfaManagement() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-ink-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-ink-2">
             <ICalendar size={14} className="text-gold-tan" />
           </div>
           <select
             aria-label="Month Filter"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="field py-1.5 text-xs w-36"
+            className="field py-1.5 text-xs flex-1 sm:flex-initial sm:w-36"
           >
             {MONTH_NAMES.map((name, idx) => (
               <option key={name} value={idx + 1}>{name}</option>
@@ -246,7 +246,7 @@ export default function MfaManagement() {
             type="button"
             onClick={handleRecalculate}
             disabled={syncing}
-            className="btn-ghost border border-navy-4 py-1.5 px-3 text-xs"
+            className="btn-ghost border border-navy-4 py-1.5 px-3 text-xs flex-1 sm:flex-initial justify-center"
           >
             {syncing ? 'Syncing...' : 'Sync Month'}
           </button>
@@ -254,7 +254,7 @@ export default function MfaManagement() {
             type="button"
             onClick={handleExportExcel}
             disabled={loading || !filteredRecords.length}
-            className="btn-gold py-1.5 px-3 text-xs flex items-center gap-1.5"
+            className="btn-gold py-1.5 px-3 text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
           >
             <IDownload size={14} /> Export Excel
           </button>
@@ -317,8 +317,8 @@ export default function MfaManagement() {
       )}
 
       {/* Filters & Search */}
-      <div className="card p-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
+      <div className="card p-4 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
           <ISearch size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
           <input
             type="text"
@@ -328,31 +328,33 @@ export default function MfaManagement() {
             className="field pl-9 py-1.5 text-xs w-full"
           />
         </div>
-        <select
-          aria-label="Filter Rank"
-          value={rankFilter}
-          onChange={(e) => setRankFilter(e.target.value)}
-          className="field py-1.5 text-xs w-40"
-        >
-          <option value="all">All Ranks (1&ndash;10)</option>
-          {Object.values(MFA_SLABS).map((s) => (
-            <option key={s.rank} value={s.rank}>
-              {s.rank}. {s.code} ({formatINR(s.mfaTarget)})
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Filter Status"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="field py-1.5 text-xs w-44"
-        >
-          <option value="all">All Statuses</option>
-          <option value="achieved">Achieved Only</option>
-          <option value="not_achieved">Not Achieved (&lt;100%)</option>
-          <option value="in_progress">In Progress</option>
-          <option value="missed">Missed (Past Month)</option>
-        </select>
+        <div className="grid grid-cols-2 sm:flex gap-2.5">
+          <select
+            aria-label="Filter Rank"
+            value={rankFilter}
+            onChange={(e) => setRankFilter(e.target.value)}
+            className="field py-1.5 text-xs w-full sm:w-40"
+          >
+            <option value="all">All Ranks (1&ndash;10)</option>
+            {Object.values(MFA_SLABS).map((s) => (
+              <option key={s.rank} value={s.rank}>
+                {s.rank}. {s.code} ({formatINR(s.mfaTarget)})
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter Status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="field py-1.5 text-xs w-full sm:w-44"
+          >
+            <option value="all">All Statuses</option>
+            <option value="achieved">Achieved Only</option>
+            <option value="not_achieved">Not Achieved (&lt;100%)</option>
+            <option value="in_progress">In Progress</option>
+            <option value="missed">Missed (Past Month)</option>
+          </select>
+        </div>
       </div>
 
       {/* Main Agent MFA Tracking Table */}
@@ -479,8 +481,8 @@ export default function MfaManagement() {
 
       {/* Agent Breakdown & Historical Modal */}
       {selectedAgentRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
-          <div className="card max-w-4xl w-full p-6 space-y-5 border border-gold-1/30 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-2.5 sm:p-4 overflow-y-auto">
+          <div className="card max-w-4xl w-full p-4 sm:p-6 space-y-5 border border-gold-1/30 my-auto max-h-[92dvh] overflow-y-auto">
             <div className="flex items-start justify-between gap-4 border-b border-navy-4/50 pb-3">
               <div>
                 <h3 className="font-serif text-lg font-bold text-ink-1">

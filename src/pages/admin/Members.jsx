@@ -141,24 +141,26 @@ Please log in to manage your performance, customer onboarding, and commissions.`
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-[220px]">
-          <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
             <ISearch size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search members by code, name, phone…" className="field pl-10 w-full" />
           </div>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="field w-32">
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <select value={filterProfile} onChange={(e) => setFilterProfile(e.target.value)} className="field w-36">
-            <option value="">All Profiles</option>
-            <option value="completed">Completed</option>
-            <option value="pending">Pending</option>
-          </select>
+          <div className="grid grid-cols-2 sm:flex gap-2.5">
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="field w-full sm:w-32">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <select value={filterProfile} onChange={(e) => setFilterProfile(e.target.value)} className="field w-full sm:w-36">
+              <option value="">All Profiles</option>
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
         </div>
-        <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm"><IPlus size={16} /> Add Member</button>
+        <button type="button" onClick={() => setModal({ mode: 'new' })} className="btn-gold py-2.5 text-sm w-full sm:w-auto justify-center shrink-0"><IPlus size={16} /> Add Member</button>
       </div>
 
       {loading ? (
@@ -166,8 +168,50 @@ Please log in to manage your performance, customer onboarding, and commissions.`
       ) : !filtered.length ? (
         <EmptyState icon={<IUsers size={24} />} title="No members" message="Add your first team member." />
       ) : (
-        <div className="table-wrap">
-          <div className="overflow-x-auto">
+        <>
+          <div className="space-y-2.5 md:hidden">
+            {filtered.map((m) => (
+              <div key={`mob-mem-${m.id}`} className="card p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link to={`/admin/members/${m.id}`} className="font-semibold text-sm text-ink-1 hover:text-gold-1 block truncate">
+                      {m.name}
+                    </Link>
+                    <p className="text-[11px] text-ink-2 font-mono truncate">{m.email}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold text-gold">{m.sponsorCode || '—'}</span>
+                      <RankBadge rank={m.rank} size="sm" />
+                      {m.isSuperAdmin && <span className="rounded-full bg-gold-1/15 px-2 py-0.5 text-[10px] font-bold text-gold">SUPER</span>}
+                    </div>
+                  </div>
+                  <StatusBadge status={m.status || 'active'} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-navy-4/40">
+                  <div>
+                    <span className="text-[10px] uppercase text-ink-2 block">Sponsor</span>
+                    <span className="text-ink-1 truncate block">{m.referredBy ? memberName(m.referredBy) : '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-ink-2 block">Profile / Security</span>
+                    <span className={isProfileComplete(m) ? 'text-ok font-semibold' : 'text-gold font-semibold'}>
+                      {isProfileComplete(m) ? '✓ Complete' : '⚠ Pending'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-navy-4/40 text-xs">
+                  <button type="button" onClick={() => handleWhatsApp(m)} className="px-2.5 py-1 rounded border border-emerald-500/30 text-emerald-400 font-semibold">WhatsApp</button>
+                  <Link to={`/admin/members/${m.id}`} className="px-2.5 py-1 rounded border border-gold-1/30 text-gold font-semibold">Profile</Link>
+                  {isSuperAdmin && (
+                    <button type="button" onClick={() => setChangeEmailTarget(m)} className="px-2.5 py-1 rounded border border-sky-400/30 text-sky-400 font-semibold">Email</button>
+                  )}
+                  <button type="button" onClick={() => setResetTarget(m)} className="px-2.5 py-1 rounded border border-amber-400/30 text-amber-400 font-semibold">Reset PW</button>
+                  <button type="button" onClick={() => setModal({ mode: 'edit', member: m })} className="px-2.5 py-1 rounded border border-navy-4 text-ink-1 font-semibold">Edit</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block table-wrap overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -216,7 +260,7 @@ Please log in to manage your performance, customer onboarding, and commissions.`
                         </span>
                       )}
                     </td>
-                    <td className="text-right space-x-2">
+                    <td className="text-right space-x-2 whitespace-nowrap">
                       <button type="button" onClick={() => handleWhatsApp(m)} className="text-xs font-semibold text-emerald-400 hover:underline">WhatsApp</button>
                       <Link to={`/admin/members/${m.id}`} className="text-xs font-semibold text-gold hover:underline">View Profile</Link>
                       {isSuperAdmin && (
@@ -230,7 +274,7 @@ Please log in to manage your performance, customer onboarding, and commissions.`
               </tbody>
             </table>
           </div>
-        </div>
+        </>
       )}
 
       {/* Change Email Modal */}
@@ -243,8 +287,8 @@ Please log in to manage your performance, customer onboarding, and commissions.`
 
       {/* Reset Password Confirmation Modal */}
       {resetTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-4">
-          <div className="card w-full max-w-md p-6 space-y-4 border border-navy-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-1/80 backdrop-blur-sm p-3 sm:p-4">
+          <div className="card w-full max-w-md p-4 sm:p-6 space-y-4 border border-navy-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold text-ink-1 flex items-center gap-2">
               <IShield size={20} className="text-amber-400" /> Reset Agent Password
             </h3>
@@ -252,19 +296,19 @@ Please log in to manage your performance, customer onboarding, and commissions.`
               Are you sure you want to initiate a password reset for <strong className="text-ink-1">{resetTarget.name}</strong> (<span className="font-mono text-gold-1">{resetTarget.sponsorCode}</span>)?
             </p>
             <div className="bg-navy-3/60 p-3 rounded text-xs space-y-1 font-mono text-ink-2 border border-navy-4">
-              <div>Email: {resetTarget.email}</div>
+              <div className="truncate">Email: {resetTarget.email}</div>
               <div>Agent Code: {resetTarget.sponsorCode || '—'}</div>
               <div>Password Status: {resetTarget.mustChangePassword ? 'Force Change Active' : 'Normal'}</div>
             </div>
             <p className="text-[11px] text-ink-2 italic">
               This action dispatches a reset authorization email and flags the user account to require a password change on next login. No plaintext passwords are displayed or stored.
             </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-3 pt-2">
               <button
                 type="button"
                 disabled={resetting}
                 onClick={() => setResetTarget(null)}
-                className="btn-ghost py-2 px-4 text-xs font-bold uppercase"
+                className="btn-ghost py-2 px-4 text-xs font-bold uppercase w-full sm:w-auto justify-center"
               >
                 Cancel
               </button>
@@ -272,7 +316,7 @@ Please log in to manage your performance, customer onboarding, and commissions.`
                 type="button"
                 disabled={resetting}
                 onClick={handleResetPassword}
-                className="btn-gold py-2 px-4 text-xs font-bold uppercase bg-amber-500 text-navy-1 hover:bg-amber-400"
+                className="btn-gold py-2 px-4 text-xs font-bold uppercase bg-amber-500 text-navy-1 hover:bg-amber-400 w-full sm:w-auto justify-center"
               >
                 {resetting ? 'Initiating...' : 'Confirm Reset Password'}
               </button>

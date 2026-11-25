@@ -996,44 +996,69 @@ export default function CustomerDetail() {
               <IDoc size={16} /> All Linked Customer Policies
             </h3>
             {plansData?.length ? (
-              <div className="table-wrap">
-                <table className="tbl text-xs">
-                  <thead>
-                    <tr>
-                      <th>Policy No.</th>
-                      <th>Plan Product</th>
-                      <th>Amount</th>
-                      <th>Duration</th>
-                      <th>Start Date</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {plansData.map((p) => (
-                      <tr key={p.id}>
-                        <td className="font-mono text-[10px] font-semibold text-gold">
-                          <Link to={`/admin/policies/${p.id}`} className="hover:underline">
-                            {p.policyNumber || '—'}
-                          </Link>
-                        </td>
-                        <td className="font-semibold uppercase text-ink-1">{p.type}</td>
-                        <td className="font-semibold text-ink-1">
-                          {p.monthlyAmount > 0 ? (
-                            <span>{formatINR(p.monthlyAmount)} <span className="text-[9px] text-ink-2 font-normal">/mo</span></span>
-                          ) : (
-                            <span>{formatINR(p.fdAmount)} <span className="text-[9px] text-ink-2 font-normal">Total</span></span>
-                          )}
-                        </td>
-                        <td className="text-ink-2">{p.duration} {p.duration === 1 ? 'Year' : 'Years'}</td>
-                        <td className="text-ink-2 font-mono">{p.startDate ? fmtDate(p.startDate) : '—'}</td>
-                        <td>
-                          <StatusBadge status={p.status || 'active'} />
-                        </td>
+              <>
+                <div className="space-y-2.5 md:hidden">
+                  {plansData.map((p) => (
+                    <Link
+                      key={`mob-pol-${p.id}`}
+                      to={`/admin/policies/${p.id}`}
+                      className="block rounded-card border border-navy-4 bg-navy-2/30 p-3.5 hover:border-gold-1/40 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="font-mono text-xs font-semibold text-gold block truncate">{p.policyNumber || '—'}</span>
+                          <span className="font-semibold uppercase text-xs text-ink-1">{p.type} · {p.duration} {p.duration === 1 ? 'Year' : 'Years'}</span>
+                        </div>
+                        <StatusBadge status={p.status || 'active'} />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-ink-2 pt-1 border-t border-navy-4/40">
+                        <span className="font-semibold text-ink-1">
+                          {p.monthlyAmount > 0 ? `${formatINR(p.monthlyAmount)}/mo` : `${formatINR(p.fdAmount)} Total`}
+                        </span>
+                        <span className="font-mono">{p.startDate ? fmtDate(p.startDate) : '—'}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                <div className="hidden md:block table-wrap overflow-x-auto">
+                  <table className="tbl text-xs">
+                    <thead>
+                      <tr>
+                        <th>Policy No.</th>
+                        <th>Plan Product</th>
+                        <th>Amount</th>
+                        <th>Duration</th>
+                        <th>Start Date</th>
+                        <th>Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {plansData.map((p) => (
+                        <tr key={p.id}>
+                          <td className="font-mono text-[10px] font-semibold text-gold">
+                            <Link to={`/admin/policies/${p.id}`} className="hover:underline">
+                              {p.policyNumber || '—'}
+                            </Link>
+                          </td>
+                          <td className="font-semibold uppercase text-ink-1">{p.type}</td>
+                          <td className="font-semibold text-ink-1">
+                            {p.monthlyAmount > 0 ? (
+                              <span>{formatINR(p.monthlyAmount)} <span className="text-[9px] text-ink-2 font-normal">/mo</span></span>
+                            ) : (
+                              <span>{formatINR(p.fdAmount)} <span className="text-[9px] text-ink-2 font-normal">Total</span></span>
+                            )}
+                          </td>
+                          <td className="text-ink-2">{p.duration} {p.duration === 1 ? 'Year' : 'Years'}</td>
+                          <td className="text-ink-2 font-mono">{p.startDate ? fmtDate(p.startDate) : '—'}</td>
+                          <td>
+                            <StatusBadge status={p.status || 'active'} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <p className="text-xs text-ink-2 italic py-4 text-center">No active policies found for this customer.</p>
             )}

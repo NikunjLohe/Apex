@@ -46,15 +46,15 @@ const Landing = () => {
       
       {/* FLOATING GLASS NAVBAR */}
       <nav 
-        className={`fixed top-0 w-full z-50 transition-all duration-700 ease-in-out px-4 sm:px-6 lg:px-8 ${
-          isScrolled ? 'py-4' : 'py-8'
+        className={`fixed top-0 w-full z-50 transition-all duration-700 ease-in-out px-3 sm:px-6 lg:px-8 ${
+          isScrolled ? 'py-3 sm:py-4' : 'py-5 sm:py-8'
         }`}
       >
         <div 
           className={`max-w-7xl mx-auto rounded-full transition-all duration-700 ${
             isScrolled 
-              ? 'bg-[#081C16]/80 backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] px-8' 
-              : 'bg-transparent px-4'
+              ? 'bg-[#081C16]/80 backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] px-4 sm:px-8' 
+              : 'bg-transparent px-2 sm:px-4'
           }`}
         >
           <div className="flex justify-between items-center h-16">
@@ -104,7 +104,7 @@ const Landing = () => {
       </nav>
 
       {/* CINEMATIC HERO SECTION */}
-      <section id="home" className="relative pt-48 pb-40 lg:pt-64 lg:pb-56 overflow-hidden min-h-screen flex items-center">
+      <section id="home" className="relative pt-28 pb-20 sm:pt-40 sm:pb-32 lg:pt-64 lg:pb-56 overflow-hidden min-h-screen flex items-center">
         
         {/* Background Textures & Lighting */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
@@ -141,21 +141,21 @@ const Landing = () => {
                 Trusted Performance Management Platform
               </div>
               
-              <h1 className="text-6xl sm:text-7xl lg:text-[5rem] font-bold tracking-[-0.03em] text-white mb-8 leading-[1.05]">
+              <h1 className="text-4xl sm:text-6xl lg:text-[5rem] font-bold tracking-[-0.03em] text-white mb-6 sm:mb-8 leading-[1.08] sm:leading-[1.05]">
                 Elevating Performance. <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E6C97A] via-[#BFA256] to-[#8C7335]">
                   Expanding Horizons.
                 </span>
               </h1>
               
-              <p className="text-xl text-[#9AA8A2] mb-12 leading-[1.8] font-medium max-w-lg tracking-wide">
+              <p className="text-base sm:text-xl text-[#9AA8A2] mb-8 sm:mb-12 leading-[1.7] sm:leading-[1.8] font-medium max-w-lg tracking-wide">
                 Partner with Apex Multisolutions for transparent commission management, actionable analytics, and the institutional infrastructure required to scale your business network.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-5 mb-16">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mb-10 sm:mb-16">
                 <Link 
                   to="/login" 
-                  className="group relative inline-flex justify-center items-center gap-3 bg-gradient-to-r from-[#E6C97A] to-[#BFA256] text-[#04120E] px-10 py-4.5 rounded-2xl font-bold text-lg transition-all duration-500 hover:-translate-y-1 shadow-[0_10px_30px_rgba(191,162,86,0.15)]"
+                  className="group relative inline-flex justify-center items-center gap-3 bg-gradient-to-r from-[#E6C97A] to-[#BFA256] text-[#04120E] px-8 sm:px-10 py-3.5 sm:py-4.5 rounded-2xl font-bold text-base sm:text-lg transition-all duration-500 hover:-translate-y-1 shadow-[0_10px_30px_rgba(191,162,86,0.15)]"
                 >
                   <span className="relative z-10">Access Portal</span>
                   <IChevron size={20} className="relative z-10 ml-1 transition-transform duration-300 group-hover:translate-x-1" />
@@ -163,27 +163,27 @@ const Landing = () => {
                 </Link>
                 <button 
                   onClick={() => scrollTo('contact')}
-                  className="inline-flex justify-center items-center gap-2 bg-white/[0.02] backdrop-blur-md border border-white/10 text-white px-10 py-4.5 rounded-2xl font-bold text-lg transition-all duration-500 hover:bg-white/[0.05] hover:border-white/20"
+                  className="inline-flex justify-center items-center gap-2 bg-white/[0.02] backdrop-blur-md border border-white/10 text-white px-8 sm:px-10 py-3.5 sm:py-4.5 rounded-2xl font-bold text-base sm:text-lg transition-all duration-500 hover:bg-white/[0.05] hover:border-white/20"
                 >
                   Contact Sales
                 </button>
               </div>
 
               {/* Minimal Trust Indicators */}
-              <div className="flex items-center gap-8 border-t border-white/5 pt-8">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-8 border-t border-white/5 pt-6 sm:pt-8">
                 <div className="flex flex-col">
-                  <span className="text-white font-bold text-2xl">99.9%</span>
-                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Uptime SLA</span>
+                  <span className="text-white font-bold text-xl sm:text-2xl">99.9%</span>
+                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Uptime SLA</span>
                 </div>
-                <div className="w-px h-10 bg-white/5" />
+                <div className="hidden sm:block w-px h-10 bg-white/5" />
                 <div className="flex flex-col">
-                  <span className="text-white font-bold text-2xl">SOC 2</span>
-                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Certified</span>
+                  <span className="text-white font-bold text-xl sm:text-2xl">SOC 2</span>
+                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Certified</span>
                 </div>
-                <div className="w-px h-10 bg-white/5" />
+                <div className="hidden sm:block w-px h-10 bg-white/5" />
                 <div className="flex flex-col">
-                  <span className="text-white font-bold text-2xl">256-bit</span>
-                  <span className="text-[#9AA8A2] text-xs font-semibold uppercase tracking-wider">Encryption</span>
+                  <span className="text-white font-bold text-xl sm:text-2xl">256-bit</span>
+                  <span className="text-[#9AA8A2] text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Encryption</span>
                 </div>
               </div>
             </motion.div>
@@ -377,22 +377,22 @@ const Landing = () => {
       </div>
 
       {/* SECOND SECTION: The "White" Section */}
-      <section id="why-us" className="relative bg-white pt-10 pb-40">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16">
+      <section id="why-us" className="relative bg-white pt-10 pb-20 sm:pb-40">
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16">
           <motion.div 
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-24 md:mb-32 max-w-4xl"
+            className="mb-14 sm:mb-24 md:mb-32 max-w-4xl"
           >
-            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-6">Why Choose Apex</h2>
-            <h3 className="text-5xl md:text-6xl font-bold text-[#04120E] leading-[1.1] tracking-tight">
+            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-4 sm:mb-6">Why Choose Apex</h2>
+            <h3 className="text-3xl sm:text-5xl md:text-6xl font-bold text-[#04120E] leading-[1.15] sm:leading-[1.1] tracking-tight">
               A transparent ecosystem designed for <span className="text-[#8C7335]">sustainable</span> network growth.
             </h3>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10 lg:gap-12">
             {[
               { title: 'Secure & Reliable', icon: IShield, desc: 'Bank-level encryption protecting your personal data, network hierarchy, and financial earnings with zero compromise.' },
               { title: 'Transparent Operations', icon: IReport, desc: 'Every policy, commission, and payout is completely traceable and clearly reported in real-time.' },
@@ -424,21 +424,21 @@ const Landing = () => {
       <div className="w-full h-40 bg-gradient-to-b from-white to-[#04120E]" />
 
       {/* SERVICES SECTION */}
-      <section id="services" className="py-32 bg-[#04120E] relative overflow-hidden">
+      <section id="services" className="py-16 sm:py-32 bg-[#04120E] relative overflow-hidden">
         
         {/* Subtle background glow */}
         <div className="absolute top-0 right-0 w-[50%] h-[50%] bg-[#BFA256]/5 blur-[200px] pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-16 relative z-10">
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 lg:px-16 relative z-10">
           <motion.div 
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-24"
+            className="mb-12 sm:mb-24"
           >
-            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-6">Infrastructure</h2>
-            <h3 className="text-5xl md:text-6xl font-bold text-white tracking-tight leading-tight max-w-2xl">
+            <h2 className="text-[#BFA256] font-bold tracking-[0.2em] uppercase text-[0.65rem] mb-4 sm:mb-6">Infrastructure</h2>
+            <h3 className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-tight max-w-2xl">
               Professional tools designed for network leaders.
             </h3>
           </motion.div>

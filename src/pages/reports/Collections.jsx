@@ -74,11 +74,11 @@ export default function Collections() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       {/* Filters */}
-      <div className="card flex flex-wrap items-end gap-3 p-4">
-        <div><label className="label">From</label><input type="date" className="field" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-        <div><label className="label">To</label><input type="date" className="field" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+      <div className="card grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
+        <div><label className="label">From</label><input type="date" className="field w-full" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+        <div><label className="label">To</label><input type="date" className="field w-full" value={to} onChange={(e) => setTo(e.target.value)} /></div>
         <div><label className="label">Mode</label>
-          <select className="field" value={mode} onChange={(e) => setMode(e.target.value)}>
+          <select className="field w-full" value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="all">All modes</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option>
           </select>
         </div>
@@ -88,7 +88,7 @@ export default function Collections() {
         <SkeletonStats count={4} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <Stat label="Total Collected" value={formatINR(summary.total)} highlight />
             <Stat label="Payments" value={summary.count} />
             <Stat label="Cash" value={formatCompactINR(summary.byMode.cash || 0)} />
@@ -96,14 +96,14 @@ export default function Collections() {
           </div>
 
           {summary.chart.length > 0 && (
-            <div className="card p-5">
+            <div className="card p-4 sm:p-5">
               <h3 className="mb-3 font-semibold text-ink-1">Daily collection</h3>
-              <div className="h-64">
+              <div className="h-56 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={summary.chart} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#232D42" />
                     <XAxis dataKey="day" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} tickFormatter={formatCompactINR} width={60} />
+                    <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} tickFormatter={formatCompactINR} width={52} />
                     <Tooltip content={<TT />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
                     <Bar dataKey="amount" fill="#C9980A" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -113,8 +113,25 @@ export default function Collections() {
           )}
 
           {filtered.length ? (
-            <div className="table-wrap">
-              <div className="overflow-x-auto">
+            <>
+              <div className="space-y-2.5 md:hidden">
+                {filtered.map((p) => (
+                  <div key={`mob-col-${p.id}`} className="card p-3.5 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-ink-1 truncate">{p.customerName}</p>
+                        <p className="font-mono text-[11px] text-ink-2 truncate">{p.receiptNumber}</p>
+                      </div>
+                      <p className="font-mono font-bold text-gold shrink-0">{formatINR(p.amount)}</p>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-ink-2 pt-1.5 border-t border-navy-4/40">
+                      <span className="uppercase">{p.paymentMode} · {p.agentName || '—'}</span>
+                      <span className="font-mono">{fmtDate(p.paidDate)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block table-wrap overflow-x-auto">
                 <table className="tbl">
                   <thead><tr><th>Receipt</th><th>Customer</th><th>Amount</th><th>Mode</th><th>Agent</th><th>Date</th></tr></thead>
                   <tbody>
@@ -131,7 +148,7 @@ export default function Collections() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </>
           ) : (
             <EmptyState icon={<IReport size={24} />} title="No collections in this range" />
           )}

@@ -7,7 +7,7 @@ import { db } from '../firebase'
 export function useDoc(path) {
   const [state, setState] = useState({ data: null, loading: true, error: null, exists: false })
   useEffect(() => {
-    if (!path) {
+    if (!path || !db) {
       setState({ data: null, loading: false, error: null, exists: false })
       return undefined
     }
@@ -36,7 +36,7 @@ export function useDoc(path) {
 export function useCollection(path, constraints = [], depKey = '') {
   const [state, setState] = useState({ data: [], loading: true, error: null })
   useEffect(() => {
-    if (!path) {
+    if (!path || !db) {
       setState({ data: [], loading: false, error: null })
       return undefined
     }
@@ -54,6 +54,7 @@ export function useCollection(path, constraints = [], depKey = '') {
 
 /** One-shot fetch for reports. */
 export async function fetchCollection(path, constraints = []) {
+  if (!db) return []
   const ref = collection(db, ...path.split('/'))
   const q = constraints.length ? fsQuery(ref, ...constraints) : ref
   const snap = await getDocs(q)

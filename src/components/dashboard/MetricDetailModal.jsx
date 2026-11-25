@@ -470,7 +470,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4"
         >
           {/* Blur Backdrop */}
           <div
@@ -483,7 +483,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
             initial={{ opacity: 0, scale: 0.97, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 15 }}
-            className="card relative z-10 w-full max-w-5xl p-6 max-h-[92vh] flex flex-col overflow-hidden bg-navy-3 border border-navy-4"
+            className="card relative z-10 w-full max-w-5xl p-4 sm:p-6 max-h-[92dvh] flex flex-col overflow-hidden bg-navy-3 border border-navy-4"
           >
             {/* Header */}
             <div className="mb-4 flex items-center justify-between border-b border-navy-4/50 pb-3 shrink-0">
@@ -531,8 +531,8 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* Search Filters */}
             {!loading && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-                <div className="relative flex-1 max-w-sm">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 shrink-0">
+                <div className="relative w-full sm:flex-1 sm:max-w-sm">
                   <ISearch size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-2" />
                   <input
                     value={search}
@@ -771,7 +771,7 @@ export default function MetricDetailModal({ open, metricType, onClose }) {
 
             {/* Metric Footer Summary Panel */}
             {!loading && footerSummary && (
-              <div className="mt-4 grid grid-cols-3 gap-4 border-t border-navy-4/70 bg-navy-2/30 p-3.5 rounded-card text-xs shrink-0">
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 border-t border-navy-4/70 bg-navy-2/30 p-3.5 rounded-card text-xs shrink-0">
                 <div>
                   <span className="text-ink-2 font-semibold block uppercase text-[10px] tracking-wider">Total Records</span>
                   <span className="text-sm font-bold font-serif text-ink-1 mt-0.5 block">{footerSummary.totalRecords}</span>

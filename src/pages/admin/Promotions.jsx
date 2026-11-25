@@ -237,10 +237,10 @@ export default function Promotions() {
       </div>
 
       {/* Control Configuration Bar */}
-      <div className="card p-5 bg-navy-3 border border-navy-4 flex flex-wrap items-end gap-4 justify-between">
-        <div className="w-56">
+      <div className="card p-4 sm:p-5 bg-navy-3 border border-navy-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3 sm:gap-4 justify-between">
+        <div className="w-full sm:w-56">
           <label className="label">Active Promotion Cycle Year</label>
-          <select className="field text-xs font-semibold" value={selectedCycle} onChange={e => setSelectedCycle(e.target.value)}>
+          <select className="field text-xs font-semibold w-full" value={selectedCycle} onChange={e => setSelectedCycle(e.target.value)}>
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(yr => (
               <option key={yr} value={`Year ${yr}`}>Year {yr}</option>
             ))}
@@ -250,17 +250,17 @@ export default function Promotions() {
         <button 
           onClick={handleRunEvaluation} 
           disabled={evaluating}
-          className="btn-gold px-6 py-2.5 text-xs uppercase tracking-wider font-bold"
+          className="btn-gold px-4 sm:px-6 py-2.5 text-xs uppercase tracking-wider font-bold w-full sm:w-auto justify-center"
         >
           {evaluating ? 'Running Evaluations...' : 'Run Yearly Evaluation Process'}
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-navy-4">
+      <div className="flex gap-2 border-b border-navy-4 overflow-x-auto whitespace-nowrap scrollbar-none">
         <button 
           onClick={() => setActiveTab('dashboard')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
             activeTab === 'dashboard' 
               ? 'border-gold text-gold-1' 
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -270,7 +270,7 @@ export default function Promotions() {
         </button>
         <button 
           onClick={() => setActiveTab('history')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
             activeTab === 'history' 
               ? 'border-gold text-gold-1' 
               : 'border-transparent text-ink-2 hover:text-ink-1'
@@ -280,7 +280,7 @@ export default function Promotions() {
         </button>
         <button 
           onClick={() => setActiveTab('reports')}
-          className={`pb-2.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+          className={`shrink-0 pb-2.5 px-3 sm:px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
             activeTab === 'reports' 
               ? 'border-gold text-gold-1' 
               : 'border-transparent text-ink-2 hover:text-ink-1'
