@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { IDashboard, INetwork, ICash, IShield, IDoc } from '../ui/icons';
+import Logo from '../ui/Logo';
 
 const PREVIEW_VIEWS = {
   operations: {
@@ -116,9 +117,7 @@ export default function HeroPlatformPreview() {
           <div className="hidden border-r border-white/10 bg-black/20 p-4 lg:col-span-3 lg:flex lg:flex-col lg:justify-between">
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#BFA256]/15 text-[#E6C97A]">
-                  <IDashboard size={15} />
-                </span>
+                <Logo size={28} showText={false} />
                 <div className="min-w-0">
                   <p className="truncate text-[11px] font-bold text-white">Apex Portal</p>
                   <p className="truncate text-[9px] uppercase tracking-wider text-[#BFA256]">

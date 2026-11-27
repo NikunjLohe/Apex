@@ -119,7 +119,7 @@ export default function Landing() {
               className="flex min-w-0 items-center gap-3 text-left"
               aria-label="Apex Multisolutions Home"
             >
-              <Logo size={38} showText={false} />
+              <Logo size={42} showText={false} />
               <div className="min-w-0">
                 <span className="block truncate font-serif text-lg font-bold tracking-tight text-white sm:text-xl">
                   Apex Multisolutions
@@ -486,7 +486,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 gap-8 md:grid-cols-12">
             <div className="md:col-span-5">
               <div className="flex items-center gap-3">
-                <Logo size={36} showText={false} />
+                <Logo size={42} showText={false} />
                 <div>
                   <span className="block font-serif text-lg font-bold text-white">
                     Apex Multisolutions

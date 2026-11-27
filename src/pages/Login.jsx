@@ -166,13 +166,13 @@ export default function Login() {
             <div className="relative">
               {/* Backglow element */}
               <div className="absolute inset-0 rounded-full bg-emerald-500/10 blur-xl scale-125" />
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.8, rotate: -3 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="relative flex items-center justify-center p-4 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-lg"
+                className="relative flex items-center justify-center p-1.5 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-md shadow-xl"
               >
-                <Logo size={46} showText={false} />
+                <Logo size={78} showText={false} />
               </motion.div>
             </div>
             <h1 className="mt-4 text-2xl font-semibold tracking-wide text-white font-serif">

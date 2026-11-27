@@ -1,12 +1,10 @@
-import React from 'react';
-
 export default function Logo({ size = 38, showText = true, tagline = false, className = '' }) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
-      <img 
-        src="/logo.png" 
-        alt="Apex Multisolutions" 
-        className="rounded-full bg-white p-0.5 object-contain" 
+      <img
+        src="/logo.png?v=2"
+        alt="Apex Multi Solutions Business Group"
+        className="shrink-0 rounded-xl bg-white p-0.5 object-contain shadow-sm ring-1 ring-black/10"
         style={{ width: size, height: size }}
       />
       {showText && (
