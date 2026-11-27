@@ -8,12 +8,9 @@ export async function getAdminSession(adminId) {
     .from('admin_sessions')
     .select('*')
     .eq('admin_id', adminId)
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return null
-    throw error
-  }
+  if (error) throw error
   return data
 }
 

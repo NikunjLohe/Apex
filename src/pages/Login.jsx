@@ -24,6 +24,7 @@ const friendly = (e) => {
   if (code === 'auth/user-not-found') return 'No account found.'
   if (code === 'auth/wrong-password') return 'Incorrect password.'
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again later.'
+  if (e.customMessage) return e.customMessage
   if (
     code === 'auth/network-request-failed' ||
     message.toLowerCase().includes('fetch failed') ||
@@ -31,7 +32,7 @@ const friendly = (e) => {
   ) {
     return 'Network error. Unable to reach server.'
   }
-  return e.customMessage || e.message || `Login failed (${code || 'unknown error'})`
+  return e.message || `Login failed (${code || 'unknown error'})`
 }
 
 const ROUTE_CAPS = [
@@ -64,20 +65,49 @@ export default function Login() {
     setIsSubmitting(true)
     const toastId = toast.loading('Authenticating security credentials...')
     try {
-      let loginEmail = email.trim()
+      let loginEmail = String(email || '').trim()
 
       if (!loginEmail.includes('@')) {
-        // Query profile by sponsor_code in Supabase
-        const { data: profData, error: profErr } = await supabase
-          .from('profiles')
-          .select('email')
-          .ilike('sponsor_code', loginEmail.toUpperCase())
-          .maybeSingle()
-
-        if (profErr || !profData?.email) {
-          throw { code: 'auth/user-not-found', customMessage: 'Invalid Agent Code. Please check your Agent Code or contact your administrator.' }
+        const normalizedCode = loginEmail.replace(/\s+/g, '').toUpperCase()
+        if (!normalizedCode) {
+          throw {
+            code: 'auth/invalid-agent-code',
+            customMessage: 'Please enter a valid Agent Code or Email.',
+          }
         }
-        loginEmail = profData.email
+
+        let resolvedEmail = null
+        const { data: rpcEmail, error: rpcErr } = await supabase.rpc('resolve_agent_login_email', {
+          p_agent_code: normalizedCode,
+        })
+
+        if (!rpcErr && typeof rpcEmail === 'string' && rpcEmail.trim()) {
+          resolvedEmail = rpcEmail.trim()
+        } else {
+          // Fallback for environments where profiles SELECT is open or RPC is not yet deployed
+          const { data: profData, error: profErr } = await supabase
+            .from('profiles')
+            .select('email')
+            .ilike('sponsor_code', normalizedCode)
+            .maybeSingle()
+
+          if (!profErr && profData?.email) {
+            resolvedEmail = profData.email.trim()
+          } else if (
+            rpcErr &&
+            !String(rpcErr.message || '').toLowerCase().includes('resolve_agent_login_email')
+          ) {
+            throw rpcErr
+          }
+        }
+
+        if (!resolvedEmail) {
+          throw {
+            code: 'auth/agent-code-not-found',
+            customMessage: 'Invalid Agent Code or Email not found. Please check your Agent ID or log in with your registered email.',
+          }
+        }
+        loginEmail = resolvedEmail
       }
 
       await loginWithEmail(loginEmail, password)
@@ -169,7 +199,7 @@ export default function Login() {
               <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
                 {/* Email Field */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Agent Code or Admin Email</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Agent Code or Email</label>
                   <div className="relative flex items-center bg-[#FAF8F5] border border-gray-200 rounded-lg transition-all duration-200 focus-within:border-[#8D7952] focus-within:ring-2 focus-within:ring-[#8D7952]/15">
                     <span className="pl-3 text-gray-400">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="w-5 h-5">
@@ -180,8 +210,8 @@ export default function Login() {
                       type="text"
                       autoComplete="username"
                       className="w-full px-3 py-2.5 text-sm bg-transparent text-gray-900 border-none outline-none focus:ring-0 placeholder-gray-400"
-                      placeholder="KB000001 or admin@apex.com"
-                      {...register('email', { required: 'Agent Code or Admin Email is required' })}
+                      placeholder="KB00001 or agent@apex.com"
+                      {...register('email', { required: 'Agent Code or Email is required' })}
                     />
                   </div>
                   {errors.email && <p className="text-xs text-red-600 font-semibold">{errors.email.message}</p>}

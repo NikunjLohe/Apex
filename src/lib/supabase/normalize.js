@@ -165,14 +165,33 @@ export function normalizeCommissionLedger(c) {
 
 export function normalizeMfaRecord(r) {
   if (!r) return null
+  const ownBusinessTotal = Number(r.own_business_total ?? r.raw_business_total ?? 0)
+  const ownMfaCreditGenerated = Number(r.own_mfa_credit_generated ?? r.total_mfa_credit ?? 0)
+  const cascadingMfaCreditReceived = Number(r.cascading_mfa_credit_received ?? 0)
+  const totalMfaCredit = Number(r.total_mfa_credit ?? 0)
+  const ownMfaCreditApplied = Number(
+    r.own_mfa_credit_applied ?? Math.max(0, totalMfaCredit - cascadingMfaCreditReceived)
+  )
+
   return {
     id: r.id,
     agentId: r.agent_id,
     agentName: r.profiles?.name || r.agentName || null,
     sponsorCode: r.profiles?.sponsor_code || r.sponsorCode || null,
+    sponsorId: r.profiles?.sponsor_id ?? r.sponsor_id_snapshot ?? r.sponsorId ?? null,
+    sponsorIdSnapshot: r.sponsor_id_snapshot ?? r.sponsorIdSnapshot ?? null,
+    isLocked: Boolean(r.is_locked ?? r.isLocked ?? false),
     email: r.profiles?.email || r.email || null,
     phone: r.profiles?.phone || r.phone || null,
     currentRank: r.profiles?.rank ?? r.rank_snapshot,
+    agentStatusSnapshot: r.agent_status_snapshot ?? r.agentStatusSnapshot ?? null,
+    statusSnapshotUncertain: Boolean(r.status_snapshot_uncertain ?? r.statusSnapshotUncertain ?? false),
+    agentStatus: (
+      Boolean(r.is_locked ?? r.isLocked) && (r.agent_status_snapshot ?? r.agentStatusSnapshot)
+        ? (r.agent_status_snapshot ?? r.agentStatusSnapshot)
+        : (r.agent_status_snapshot ?? r.agentStatusSnapshot ?? r.profiles?.status ?? r.agentStatus ?? 'active')
+    ),
+    currentAgentStatus: r.profiles?.status || r.agentStatus || 'active',
     month: Number(r.month),
     year: Number(r.year),
     rankSnapshot: Number(r.rank_snapshot),
@@ -180,14 +199,21 @@ export function normalizeMfaRecord(r) {
     mfaTarget: Number(r.mfa_target_snapshot || 0),
     mfaReward: Number(r.mfa_reward_snapshot || 0),
     applicable: Number(r.mfa_target_snapshot || 0) > 0 && Number(r.mfa_reward_snapshot || 0) > 0,
-    rawBusinessTotal: Number(r.raw_business_total || 0),
-    totalMfaCredit: Number(r.total_mfa_credit || 0),
+    rawBusinessTotal: ownBusinessTotal,
+    ownBusinessTotal,
+    ownMfaCreditGenerated,
+    ownMfaCreditApplied,
+    cascadingMfaCreditReceived,
+    totalMfaCredit,
+    excessCreditPassedUp: Number(r.excess_credit_passed_up ?? 0),
+    excessUnallocatedCredit: Number(r.excess_unallocated_credit ?? 0),
     remainingAmount: Number(r.remaining_amount || 0),
     achievementPct: Number(r.achievement_pct || 0),
     isQualified: Boolean(r.is_qualified),
     rewardEarned: Number(r.reward_earned || 0),
     status: r.status || 'in_progress',
     contributionsCount: Number(r.contributions_count || 0),
+    cascadingInCount: Number(r.cascading_in_count || 0),
     lastCalculatedAt: r.last_calculated_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -214,5 +240,67 @@ export function normalizeMfaContribution(c) {
     mfaPercentage: Number(c.mfa_percentage || 0),
     mfaCredit: Number(c.mfa_credit || 0),
     createdAt: c.created_at,
+  }
+}
+
+export function normalizeMfaCascadingAllocation(a) {
+  if (!a) return null
+  return {
+    id: a.id,
+    month: Number(a.month),
+    year: Number(a.year),
+    policyId: a.policy_id,
+    sourceContributionId: a.source_contribution_id,
+    policyNumber: a.policy_number,
+    businessDate: a.business_date,
+    planCode: a.plan_code,
+    planType: a.plan_type,
+    durationYears: Number(a.duration_years || 1),
+    originalBusinessAmount: Number(a.original_business_amount || 0),
+    mfaPercentage: Number(a.mfa_percentage || 0),
+    originatingMfaCredit: Number(a.originating_mfa_credit || 0),
+    originatingAgentId: a.originating_agent_id,
+    originatingAgentName: a.originating_agent_name || '—',
+    originatingAgentCode: a.originating_agent_code || '—',
+    sourceAgentId: a.source_agent_id,
+    sourceAgentName: a.source_agent_name || '—',
+    sourceAgentCode: a.source_agent_code || '—',
+    recipientAgentId: a.recipient_agent_id || null,
+    recipientAgentName: a.recipient_agent_name || null,
+    recipientAgentCode: a.recipient_agent_code || null,
+    recipientMfaRecordId: a.recipient_mfa_record_id || null,
+    allocationSequence: Number(a.allocation_sequence || 1),
+    allocationType: a.allocation_type,
+    incomingCredit: Number(a.incoming_credit || 0),
+    appliedAmount: Number(a.applied_amount || 0),
+    excessPassedUp: Number(a.excess_passed_up || 0),
+    unallocatedAmount: Number(a.unallocated_amount || 0),
+    unallocatedReason: a.unallocated_reason || null,
+    recipientRankSnapshot: a.recipient_rank_snapshot != null ? Number(a.recipient_rank_snapshot) : null,
+    recipientRankCodeSnapshot: a.recipient_rank_code_snapshot || null,
+    recipientTargetSnapshot: Number(a.recipient_target_snapshot || 0),
+    recipientRewardSnapshot: Number(a.recipient_reward_snapshot || 0),
+    reportingSponsorIdSnapshot: a.reporting_sponsor_id_snapshot || null,
+    hierarchyPath: Array.isArray(a.hierarchy_path) ? a.hierarchy_path : [],
+    batchRunId: a.batch_run_id || null,
+    allocatedAt: a.allocated_at || a.created_at,
+  }
+}
+
+export function normalizeMfaHierarchyIssue(i) {
+  if (!i) return null
+  return {
+    id: i.id,
+    month: Number(i.month),
+    year: Number(i.year),
+    policyId: i.policy_id,
+    policyNumber: i.policy_number || '—',
+    originatingAgentId: i.originating_agent_id,
+    agentId: i.agent_id,
+    sponsorId: i.sponsor_id,
+    issueType: i.issue_type,
+    affectedCredit: Number(i.affected_credit || 0),
+    details: i.details || {},
+    detectedAt: i.detected_at,
   }
 }

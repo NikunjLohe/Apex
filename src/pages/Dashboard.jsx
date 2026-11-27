@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { useRanks } from '../contexts/RanksContext'
 import { policiesAPI, paymentsAPI, commissionsAPI, profilesAPI, masterDataAPI, customersAPI, payoutsAPI, mfaAPI } from '../lib/supabase'
-import { evaluatePromotionEligibility, getMfaStatusMessage, calculateMonthlyMfaForAgent } from '../lib/mfa'
+import { evaluatePromotionEligibility, getMfaStatusMessage, calculateMonthlyMfaForAgent, getCurrentIstPeriod } from '../lib/mfa'
 import { getPayoutNet } from '../utils/payoutHelpers'
 
 // ─── Super Admin Dashboard ───────────────────────────────────────────────────
@@ -307,7 +307,7 @@ function AgentDashboard() {
   useEffect(() => {
     if (!myId) return
     let active = true
-    const curDate = new Date()
+    const istNow = getCurrentIstPeriod()
     Promise.all([
       policiesAPI.listPolicies({ agentId: myId }).catch(() => []),
       customersAPI.listCustomers({ enrolledBy: myId }).catch(() => []),
@@ -317,8 +317,8 @@ function AgentDashboard() {
       masterDataAPI.getPromotionRules().catch(() => null),
       mfaAPI.getAgentMfaDashboardData({
         agentProfile: profile,
-        month: curDate.getMonth() + 1,
-        year: curDate.getFullYear(),
+        month: istNow.month,
+        year: istNow.year,
         autoSync: true,
       }).catch(() => null),
     ]).then(([policies, customers, commissions, profiles, payouts, promotionRules, mfaRes]) => {
@@ -711,6 +711,34 @@ function AgentDashboard() {
             current={mfaProgress.totalMfaCredit}
             target={mfaProgress.mfaTarget}
           />
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-[11px]">
+            <div className="p-2.5 rounded-card bg-navy-2/50 border border-navy-4">
+              <span className="text-ink-2 block uppercase text-[9px] font-bold tracking-wider">Own MFA Credit</span>
+              <span className="font-mono font-bold text-ink-1 mt-0.5 block">
+                {formatINR(mfaProgress.ownMfaCreditApplied ?? mfaProgress.totalMfaCredit)}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-card bg-navy-2/50 border border-navy-4">
+              <span className="text-ink-2 block uppercase text-[9px] font-bold tracking-wider">Cascading Received</span>
+              <span className="font-mono font-bold text-sky-700 mt-0.5 block">
+                {formatINR(mfaProgress.cascadingMfaCreditReceived ?? 0)}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-card bg-navy-2/50 border border-navy-4">
+              <span className="text-ink-2 block uppercase text-[9px] font-bold tracking-wider">Total Achieved</span>
+              <span className="font-mono font-bold text-gold mt-0.5 block">
+                {formatINR(mfaProgress.totalMfaCredit)}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-card bg-navy-2/50 border border-navy-4">
+              <span className="text-ink-2 block uppercase text-[9px] font-bold tracking-wider">Excess Passed Up</span>
+              <span className="font-mono font-bold text-gold-tan mt-0.5 block">
+                {formatINR(mfaProgress.excessCreditPassedUp ?? 0)}
+              </span>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
             <span>{getMfaStatusMessage({
               status: mfaProgress.status,
